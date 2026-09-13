@@ -1,0 +1,395 @@
+/*
+ * Green Horizon — Organic Material System
+ *
+ * Goal: remove the generic "smooth plastic / AI UI" look without turning the
+ * interface into a noisy theme park. The treatment is deliberately restrained:
+ * muted material response, fine grain, uneven edge-light, recessed controls and
+ * short physical motion. Existing raster UI stays in charge where it already
+ * carries the art direction.
+ *
+ * Escape hatches:
+ *   data-ui-raw="true"       -> do not skin an interactive hotspot
+ *   data-ui-material="flat"  -> keep a surface intentionally flat
+ */
+
+#root {
+  --gh-noise-fine: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiB2aWV3Qm94PSIwIDAgMTI4IDEyOCI+PGZpbHRlciBpZD0ibiI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuNzIiIG51bU9jdGF2ZXM9IjQiIHNlZWQ9IjE3IiBzdGl0Y2hUaWxlcz0ic3RpdGNoIi8+PGZlQ29sb3JNYXRyaXggdHlwZT0ic2F0dXJhdGUiIHZhbHVlcz0iMCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNuKSIgb3BhY2l0eT0iMC42MiIvPjwvc3ZnPg==");
+  --gh-noise-coarse: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5NiIgaGVpZ2h0PSI5NiIgdmlld0JveD0iMCAwIDk2IDk2Ij48ZmlsdGVyIGlkPSJuIj48ZmVUdXJidWxlbmNlIHR5cGU9ImZyYWN0YWxOb2lzZSIgYmFzZUZyZXF1ZW5jeT0iMC4yOCIgbnVtT2N0YXZlcz0iMyIgc2VlZD0iMzEiIHN0aXRjaFRpbGVzPSJzdGl0Y2giLz48ZmVDb2xvck1hdHJpeCB0eXBlPSJzYXR1cmF0ZSIgdmFsdWVzPSIwIi8+PC9maWx0ZXI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsdGVyPSJ1cmwoI24pIiBvcGFjaXR5PSIwLjQ1Ii8+PC9zdmc+");
+
+  --gh-ink: #e8dfce;
+  --gh-ink-muted: #a99e8c;
+  --gh-edge: rgba(116, 105, 73, .40);
+  --gh-edge-cool: rgba(74, 112, 91, .34);
+  --gh-edge-warm: rgba(150, 117, 64, .34);
+  --gh-recess: rgba(1, 13, 13, .46);
+  --gh-shadow: rgba(0, 0, 0, .56);
+  --gh-green-glow: rgba(69, 151, 96, .10);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Interactive material                                                        */
+/* -------------------------------------------------------------------------- */
+
+#root button:not([data-ui-raw="true"]):not(.organic-button):not([aria-label="Fullscreen"]):not([aria-label="Game Menu"]),
+#root label[class*="cursor-pointer"]:not([data-ui-raw="true"]) {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 7px 5px 8px 6px / 6px 8px 5px 7px !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .040),
+    inset 0 -3px 7px rgba(0, 0, 0, .30),
+    inset 1px 0 0 rgba(170, 151, 94, .020),
+    0 1px 0 rgba(255, 255, 255, .012),
+    0 2px 5px rgba(0, 0, 0, .23) !important;
+  transition:
+    filter 95ms ease,
+    border-color 95ms ease,
+    box-shadow 95ms ease,
+    transform 70ms ease !important;
+}
+
+/* Fine grain plus deliberately uneven illumination. It is quiet enough that
+   text remains crisp; the texture should be felt before it is noticed. */
+#root button:not([data-ui-raw="true"]):not(.organic-button):not([aria-label="Fullscreen"]):not([aria-label="Game Menu"])::before,
+#root label[class*="cursor-pointer"]:not([data-ui-raw="true"])::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image:
+    var(--gh-noise-fine),
+    radial-gradient(ellipse at 19% 4%, rgba(255,255,255,.085), transparent 37%),
+    radial-gradient(ellipse at 84% 93%, rgba(0,0,0,.26), transparent 47%),
+    linear-gradient(104deg, rgba(177,154,92,.030), transparent 24% 73%, rgba(0,0,0,.07));
+  background-size: 128px 128px, 100% 100%, 100% 100%, 100% 100%;
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat;
+  background-blend-mode: soft-light, screen, multiply, soft-light;
+  mix-blend-mode: soft-light;
+  opacity: .17;
+}
+
+#root button:not([data-ui-raw="true"]):not(.organic-button):not([aria-label="Fullscreen"]):not([aria-label="Game Menu"])::after,
+#root label[class*="cursor-pointer"]:not([data-ui-raw="true"])::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  border: 1px solid rgba(238, 218, 170, .018);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.018),
+    inset 1px 0 0 rgba(183,156,96,.014),
+    inset 0 -1px 0 rgba(0,0,0,.34);
+  opacity: .88;
+}
+
+#root button:not([data-ui-raw="true"]):not(.organic-button):not(:disabled):hover,
+#root label[class*="cursor-pointer"]:not([data-ui-raw="true"]):hover {
+  filter: brightness(1.045) saturate(.96) contrast(1.01);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .052),
+    inset 0 -3px 7px rgba(0, 0, 0, .27),
+    inset 0 0 0 1px rgba(92, 143, 107, .075),
+    0 2px 6px rgba(0, 0, 0, .28),
+    0 0 8px var(--gh-green-glow) !important;
+}
+
+/* Kill the generic AI-site "card pops toward you" microinteraction. */
+#root button[class*="hover:scale"]:not([data-ui-raw="true"]):not(.rounded-full):hover,
+#root label[class*="hover:scale"]:not([data-ui-raw="true"]):hover {
+  transform: translateY(-1px) !important;
+}
+
+#root button[class*="active:scale"]:not([data-ui-raw="true"]):not(.rounded-full):active,
+#root button:not([data-ui-raw="true"]):not(.organic-button):active {
+  transform: translateY(1px) !important;
+  filter: brightness(.96) saturate(.92);
+  box-shadow:
+    inset 0 3px 7px rgba(0, 0, 0, .38),
+    inset 0 -1px 0 rgba(255,255,255,.018),
+    0 1px 2px rgba(0,0,0,.22) !important;
+}
+
+#root button:disabled:not([data-ui-raw="true"]):not(.organic-button) {
+  filter: saturate(.48) brightness(.72);
+  cursor: not-allowed;
+  box-shadow: inset 0 3px 7px rgba(0,0,0,.42) !important;
+}
+
+/* Circular map / icon controls stay circular but use the same material response. */
+#root button.rounded-full:not([data-ui-raw="true"]) {
+  border-radius: 50% !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.045),
+    inset 0 -4px 8px rgba(0,0,0,.35),
+    0 3px 8px rgba(0,0,0,.40) !important;
+}
+#root button.rounded-full:not([data-ui-raw="true"]):hover {
+  transform: scale(1.035) !important;
+}
+#root button.rounded-full:not([data-ui-raw="true"]):active {
+  transform: scale(.985) translateY(1px) !important;
+}
+
+/* Focus is visible but not a neon SaaS halo. */
+#root :where(button, input, select, textarea, label[class*="cursor-pointer"]):focus-visible {
+  outline: 1px solid rgba(174, 151, 87, .72) !important;
+  outline-offset: 2px;
+  box-shadow:
+    inset 0 0 0 1px rgba(65, 126, 91, .22),
+    0 0 0 2px rgba(7, 19, 14, .85),
+    0 0 0 3px rgba(151, 128, 75, .28) !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Panels / cards                                                              */
+/* -------------------------------------------------------------------------- */
+
+#root :where(div, section, article, aside)[class*="border"][class*="bg-"]:not([data-ui-material="flat"]):not([role="img"]):not(.organic-card):not(.organic-preview):not(.organic-recessed):not(.organic-inset):not(.organic-inset-soft):not(.organic-chip):not(.organic-badge):not(.organic-queue-card):not(.organic-dock),
+#root :where(div, section, article, aside)[style*="linear-gradient"]:not([data-ui-material="flat"]) {
+  position: relative;
+  isolation: isolate;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.018),
+    inset 0 -1px 0 rgba(0,0,0,.30),
+    inset 1px 0 0 rgba(145,128,81,.012),
+    0 2px 7px rgba(0,0,0,.15);
+}
+
+#root :where(div, section, article, aside)[class*="border"][class*="bg-"]:not([data-ui-material="flat"]):not([role="img"]):not(.organic-card):not(.organic-preview):not(.organic-recessed):not(.organic-inset):not(.organic-inset-soft):not(.organic-chip):not(.organic-badge):not(.organic-queue-card):not(.organic-dock)::before,
+#root :where(div, section, article, aside)[style*="linear-gradient"]:not([data-ui-material="flat"])::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image:
+    var(--gh-noise-fine),
+    var(--gh-noise-coarse),
+    radial-gradient(ellipse at 14% 0%, rgba(103,139,106,.040), transparent 43%),
+    radial-gradient(ellipse at 88% 100%, rgba(0,0,0,.16), transparent 52%);
+  background-size: 128px 128px, 96px 96px, 100% 100%, 100% 100%;
+  background-blend-mode: soft-light, overlay, screen, multiply;
+  mix-blend-mode: soft-light;
+  opacity: .065;
+}
+
+/* Large modal/card shells should feel built, not injection-moulded. */
+#root :where(div, section, article, aside)[class*="rounded-2xl"][class*="border"]:not([data-ui-material="flat"]),
+#root :where(div, section, article, aside)[class*="rounded-xl"][class*="border"]:not([data-ui-material="flat"]) {
+  border-radius: 11px 8px 12px 9px / 9px 12px 8px 11px !important;
+}
+
+/* Smaller bordered cards keep a little asymmetry rather than identical pills. */
+#root :where(div, section, article, aside)[class~="rounded"][class*="border"]:not([data-ui-material="flat"]),
+#root :where(div, section, article, aside)[class*="rounded-lg"][class*="border"]:not([data-ui-material="flat"]) {
+  border-radius: 7px 5px 8px 6px / 6px 8px 5px 7px !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Badges and chips                                                            */
+/* -------------------------------------------------------------------------- */
+
+#root span[class*="bg-"][class*="border"][class*="rounded"]:not([data-ui-material="flat"]),
+#root div[class*="bg-"][class*="border"][class*="rounded-full"]:not([data-ui-material="flat"]) {
+  box-shadow:
+    inset 0 2px 4px rgba(0,0,0,.24),
+    inset 0 -1px 0 rgba(255,255,255,.018),
+    0 1px 2px rgba(0,0,0,.16) !important;
+  text-shadow: 0 1px 1px rgba(0,0,0,.70);
+}
+
+#root span.rounded-full,
+#root div.rounded-full {
+  border-radius: 999px !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Recessed form controls                                                      */
+/* -------------------------------------------------------------------------- */
+
+#root :where(input:not([type="file"]):not([type="range"]), select, textarea) {
+  color: var(--gh-ink);
+  background-color: rgba(3, 21, 19, .90) !important;
+  background-image:
+    var(--gh-noise-fine),
+    radial-gradient(ellipse at 22% 0%, rgba(78,119,91,.070), transparent 44%),
+    linear-gradient(180deg, rgba(0,0,0,.10), rgba(255,255,255,.008)) !important;
+  background-size: 128px 128px, 100% 100%, 100% 100%;
+  background-blend-mode: soft-light, screen, normal;
+  border: 1px solid rgba(90, 103, 72, .36) !important;
+  border-radius: 6px 4px 7px 5px / 5px 7px 4px 6px !important;
+  box-shadow:
+    inset 0 4px 8px rgba(0,0,0,.43),
+    inset 0 -1px 0 rgba(151,135,83,.026),
+    inset 1px 0 0 rgba(93,126,99,.025),
+    0 1px 0 rgba(255,255,255,.010) !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,.72);
+}
+
+#root :where(input, textarea)::placeholder {
+  color: rgba(162, 153, 135, .52);
+}
+
+#root select option {
+  background: #071a17;
+  color: #ded5c5;
+}
+
+/* Range controls are treated as carved tracks rather than browser sliders. */
+#root input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 5px;
+  border-radius: 4px 3px 5px 3px;
+  background:
+    var(--gh-noise-fine),
+    linear-gradient(180deg, rgba(0,0,0,.75), rgba(29,48,38,.65));
+  background-size: 128px 128px, 100% 100%;
+  border: 1px solid rgba(78,81,58,.38);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.65), 0 1px 0 rgba(255,255,255,.018);
+}
+#root input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 15px;
+  border-radius: 5px 4px 6px 4px;
+  border: 1px solid rgba(162,132,72,.66);
+  background:
+    var(--gh-noise-fine),
+    linear-gradient(180deg, #455b43, #263729);
+  background-size: 128px 128px, 100% 100%;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 2px 4px rgba(0,0,0,.48);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Existing wood utility upgrade                                               */
+/* -------------------------------------------------------------------------- */
+
+#root .wood-border-outer {
+  background-color: rgba(13, 19, 14, .54);
+  background-image:
+    var(--gh-noise-fine),
+    radial-gradient(ellipse at 14% 0%, rgba(139,111,63,.070), transparent 44%),
+    radial-gradient(ellipse at 90% 100%, rgba(0,0,0,.24), transparent 52%) !important;
+  background-size: 128px 128px, 100% 100%, 100% 100%;
+  background-blend-mode: soft-light, screen, multiply;
+  border-color: rgba(104, 78, 45, .62) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(210,176,111,.045),
+    inset 0 -2px 0 rgba(0,0,0,.42),
+    inset 3px 0 11px rgba(0,0,0,.12),
+    0 4px 14px rgba(0,0,0,.48) !important;
+  backdrop-filter: blur(2px) saturate(.88);
+}
+
+#root .wood-panel-container {
+  background-color: rgba(12, 24, 18, .58);
+  background-image:
+    var(--gh-noise-fine),
+    radial-gradient(ellipse at 20% 0%, rgba(77,117,87,.060), transparent 45%) !important;
+  background-size: 128px 128px, 100% 100%;
+  background-blend-mode: soft-light, screen;
+  border-color: rgba(59, 73, 55, .58) !important;
+  box-shadow:
+    inset 0 5px 11px rgba(0,0,0,.42),
+    inset 0 -1px 0 rgba(157,132,78,.020),
+    0 2px 7px rgba(0,0,0,.32) !important;
+  backdrop-filter: blur(2px) saturate(.90);
+}
+
+#root .wood-slot {
+  background-color: rgba(13, 11, 8, .76);
+  background-image:
+    var(--gh-noise-fine),
+    radial-gradient(ellipse at 32% 8%, rgba(127,91,54,.060), transparent 45%) !important;
+  background-size: 128px 128px, 100% 100%;
+  background-blend-mode: soft-light, screen;
+  border-color: rgba(74, 52, 31, .86) !important;
+  border-radius: 5px 4px 6px 4px / 4px 6px 4px 5px;
+  box-shadow:
+    inset 0 4px 7px rgba(0,0,0,.78),
+    inset 0 -1px 0 rgba(183,145,83,.024),
+    0 1px 1px rgba(255,255,255,.012) !important;
+}
+#root .wood-slot:hover {
+  border-color: rgba(119, 84, 47, .90) !important;
+  box-shadow:
+    inset 0 4px 7px rgba(0,0,0,.71),
+    inset 0 0 0 1px rgba(124,95,56,.10),
+    0 0 7px rgba(150,109,57,.08) !important;
+}
+
+#root .btn-wood-green,
+#root .btn-wood-dark {
+  border-radius: 7px 5px 8px 6px / 6px 8px 5px 7px !important;
+  background-size: 128px 128px, 100% 100%, 100% 100% !important;
+  background-blend-mode: soft-light, screen, normal !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.050),
+    inset 0 -4px 8px rgba(0,0,0,.32),
+    0 2px 5px rgba(0,0,0,.34) !important;
+}
+#root .btn-wood-green {
+  background-image:
+    var(--gh-noise-fine),
+    radial-gradient(ellipse at 24% 0%, rgba(112,166,110,.12), transparent 48%),
+    linear-gradient(180deg, #294f3c, #173529) !important;
+  border-color: rgba(83, 139, 99, .64) !important;
+}
+#root .btn-wood-dark {
+  background-image:
+    var(--gh-noise-fine),
+    radial-gradient(ellipse at 24% 0%, rgba(118,126,104,.075), transparent 48%),
+    linear-gradient(180deg, #1d2921, #111914) !important;
+  border-color: rgba(56, 75, 61, .64) !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Tone down glass / oversized generic shadows                                 */
+/* -------------------------------------------------------------------------- */
+
+#root [class*="backdrop-blur"]:not([data-ui-material="flat"]) {
+  backdrop-filter: blur(2.5px) saturate(.88) !important;
+  -webkit-backdrop-filter: blur(2.5px) saturate(.88) !important;
+}
+
+#root :where(div, section, article, aside)[class*="shadow-2xl"][class*="border"]:not([data-ui-material="flat"]) {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.018),
+    inset 0 -1px 0 rgba(0,0,0,.32),
+    0 7px 18px rgba(0,0,0,.44) !important;
+}
+
+/* Scrollbars: narrow, worn wood/bronze instead of polished UI chrome. */
+#root ::-webkit-scrollbar { width: 6px; height: 6px; }
+#root ::-webkit-scrollbar-track {
+  background: rgba(5, 14, 11, .76);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.55);
+}
+#root ::-webkit-scrollbar-thumb {
+  border-radius: 5px 3px 6px 4px;
+  border: 1px solid rgba(48, 35, 22, .82);
+  background:
+    var(--gh-noise-fine),
+    linear-gradient(90deg, #332719, #4a3823 52%, #2f2418);
+  background-size: 128px 128px, 100% 100%;
+  background-blend-mode: soft-light, normal;
+}
+#root ::-webkit-scrollbar-thumb:hover {
+  background:
+    var(--gh-noise-fine),
+    linear-gradient(90deg, #3b2c1b, #594329 52%, #352819);
+  background-size: 128px 128px, 100% 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #root button,
+  #root label[class*="cursor-pointer"] {
+    transition: none !important;
+  }
+}
