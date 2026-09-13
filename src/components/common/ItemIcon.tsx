@@ -5,6 +5,7 @@ import {
   Package, 
   Leaf, 
   Utensils, 
+  UtensilsCrossed,
   Droplet, 
   Sparkles, 
   Hammer, 
@@ -16,6 +17,12 @@ import {
   Heart,
   Plus,
   HelpCircle,
+  Apple,
+  Flower2,
+  HeartPulse,
+  Trash2,
+  CheckCircle2,
+  GlassWater,
   LucideIcon
 } from 'lucide-react';
 
@@ -27,8 +34,10 @@ const ICON_NAME_MAP: Record<string, LucideIcon> = {
   Knife: Scissors,
   Fish,
   Utensils,
+  UtensilsCrossed,
   Droplet,
   Droplets: Droplet,
+  GlassWater,
   Heart,
   Plus,
   Leaf,
@@ -36,6 +45,11 @@ const ICON_NAME_MAP: Record<string, LucideIcon> = {
   CircleDot,
   Package,
   Sparkles,
+  Apple,
+  Flower2,
+  HeartPulse,
+  Trash2,
+  CheckCircle2,
 };
 
 interface ItemIconProps {
@@ -128,22 +142,24 @@ export const ItemIcon: React.FC<ItemIconProps> = ({
     bgClass = 'bg-[#1a0e12]/80';
   }
 
-  const iconPixel = Math.round(size * 0.44);
+  const iconPixel = Math.round(size * 0.48);
 
   return (
     <div 
-      className={`relative flex items-center justify-center rounded-lg border ${borderClass} ${bgClass} shadow-inner transition-all select-none ${className}`}
-      style={{ width: `${size}px`, height: `${size}px`, maxWidth: '100%', maxHeight: '100%' }}
-      title={name || itemId ? `${name || itemId} (Đang dùng icon placeholder)` : 'Placeholder'}
+      className={`relative flex items-center justify-center rounded border ${borderClass} ${bgClass} shadow-inner transition-all select-none overflow-hidden ${className}`}
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        maxWidth: '100%',
+        maxHeight: '100%',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -2px 4px rgba(0,0,0,0.5)',
+      }}
+      title={name || itemId ? `${name || itemId}` : 'Vật phẩm'}
     >
       <IconComponent 
         style={{ width: `${iconPixel}px`, height: `${iconPixel}px` }}
-        className={`${colorClass} drop-shadow-sm`}
+        className={`${colorClass} drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]`}
       />
-      {/* Ký hiệu placeholder nhẹ ở góc khi hiển thị dạng lớn */}
-      {size >= 48 && (
-        <span className="absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full bg-[#526356]/60" />
-      )}
     </div>
   );
 };

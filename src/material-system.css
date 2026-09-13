@@ -36,13 +36,14 @@
   isolation: isolate;
   overflow: hidden;
   border-radius: 7px 5px 8px 6px / 6px 8px 5px 7px !important;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, .82);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .85);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .040),
-    inset 0 -3px 7px rgba(0, 0, 0, .30),
-    inset 1px 0 0 rgba(170, 151, 94, .020),
-    0 1px 0 rgba(255, 255, 255, .012),
-    0 2px 5px rgba(0, 0, 0, .23) !important;
+    inset 0 1px 0 rgba(255, 238, 195, .16),
+    inset 1px 0 0 rgba(220, 185, 125, .06),
+    inset 0 -2.5px 0 rgba(0, 0, 0, .45),
+    inset 0 -5px 9px rgba(0, 0, 0, .28),
+    0 1px 0 rgba(255, 255, 255, .02),
+    0 2.5px 6px rgba(0, 0, 0, .35) !important;
   transition:
     filter 95ms ease,
     border-color 95ms ease,
@@ -267,87 +268,271 @@
 }
 
 /* -------------------------------------------------------------------------- */
-/* Existing wood utility upgrade                                               */
+/* Existing wood utility upgrade & Organic Chiseled Classes                    */
 /* -------------------------------------------------------------------------- */
 
-#root .wood-border-outer {
-  background-color: rgba(13, 19, 14, .54);
+#root .wood-border-outer,
+#root .organic-chiseled-frame {
+  position: relative;
+  isolation: isolate;
+  background-color: rgba(13, 19, 14, .88);
   background-image:
     var(--gh-noise-fine),
-    radial-gradient(ellipse at 14% 0%, rgba(139,111,63,.070), transparent 44%),
-    radial-gradient(ellipse at 90% 100%, rgba(0,0,0,.24), transparent 52%) !important;
-  background-size: 128px 128px, 100% 100%, 100% 100%;
-  background-blend-mode: soft-light, screen, multiply;
-  border-color: rgba(104, 78, 45, .62) !important;
+    radial-gradient(ellipse at 14% 0%, rgba(148,118,72,.14), transparent 44%),
+    radial-gradient(ellipse at 90% 100%, rgba(0,0,0,.45), transparent 52%),
+    linear-gradient(180deg, rgba(255,255,255,.015), rgba(0,0,0,.22)) !important;
+  background-size: 128px 128px, 100% 100%, 100% 100%, 100% 100%;
+  background-blend-mode: soft-light, screen, multiply, normal;
+  /* Dual-layer chiseled wood relief border: thick outer bevel + engraved inner groove */
+  border: 2px solid rgba(132, 98, 58, .88) !important;
+  outline: 1px solid rgba(34, 22, 12, .90);
+  outline-offset: -3px;
+  border-radius: 9px 7px 10px 8px / 8px 10px 7px 9px !important;
   box-shadow:
-    inset 0 1px 0 rgba(210,176,111,.045),
-    inset 0 -2px 0 rgba(0,0,0,.42),
-    inset 3px 0 11px rgba(0,0,0,.12),
-    0 4px 14px rgba(0,0,0,.48) !important;
+    inset 0 1px 0 rgba(245, 215, 155, .28),
+    inset 1px 0 0 rgba(215, 180, 120, .14),
+    inset 0 -3px 0 rgba(0,0,0,.75),
+    inset 0 -6px 14px rgba(0,0,0,.55),
+    0 6px 20px rgba(0,0,0,.65) !important;
   backdrop-filter: blur(2px) saturate(.88);
+  filter: url(#gh-rough-border);
 }
 
-#root .wood-panel-container {
-  background-color: rgba(12, 24, 18, .58);
+#root .wood-panel-container,
+#root .organic-chiseled-panel {
+  position: relative;
+  isolation: isolate;
+  background-color: rgba(11, 23, 19, .88);
   background-image:
     var(--gh-noise-fine),
-    radial-gradient(ellipse at 20% 0%, rgba(77,117,87,.060), transparent 45%) !important;
-  background-size: 128px 128px, 100% 100%;
-  background-blend-mode: soft-light, screen;
-  border-color: rgba(59, 73, 55, .58) !important;
+    radial-gradient(ellipse at 20% 0%, rgba(85,128,96,.10), transparent 45%),
+    linear-gradient(180deg, rgba(24,44,35,.40), rgba(6,16,13,.65)) !important;
+  background-size: 128px 128px, 100% 100%, 100% 100%;
+  background-blend-mode: soft-light, screen, normal;
+  /* Dual groove carving for inner panels */
+  border: 1.5px solid rgba(82, 102, 75, .80) !important;
+  outline: 1px solid rgba(14, 28, 22, .85);
+  outline-offset: -2px;
+  border-radius: 8px 6px 9px 7px / 7px 9px 6px 8px !important;
   box-shadow:
-    inset 0 5px 11px rgba(0,0,0,.42),
-    inset 0 -1px 0 rgba(157,132,78,.020),
-    0 2px 7px rgba(0,0,0,.32) !important;
+    inset 0 1px 0 rgba(225, 245, 225, .12),
+    inset 0 4px 10px rgba(0,0,0,.55),
+    inset 0 -1px 0 rgba(175,148,92,.08),
+    0 2px 8px rgba(0,0,0,.45) !important;
   backdrop-filter: blur(2px) saturate(.90);
+  filter: url(#gh-rough-border);
 }
 
-#root .wood-slot {
-  background-color: rgba(13, 11, 8, .76);
+#root .wood-slot,
+#root .organic-carved-slot {
+  position: relative;
+  isolation: isolate;
+  background-color: rgba(6, 11, 9, .95) !important;
   background-image:
     var(--gh-noise-fine),
-    radial-gradient(ellipse at 32% 8%, rgba(127,91,54,.060), transparent 45%) !important;
-  background-size: 128px 128px, 100% 100%;
-  background-blend-mode: soft-light, screen;
-  border-color: rgba(74, 52, 31, .86) !important;
-  border-radius: 5px 4px 6px 4px / 4px 6px 4px 5px;
+    radial-gradient(ellipse at 32% 8%, rgba(145,108,68,.10), transparent 45%),
+    linear-gradient(180deg, rgba(0,0,0,.50), rgba(0,0,0,.20)) !important;
+  background-size: 128px 128px, 100% 100%, 100% 100%;
+  background-blend-mode: soft-light, screen, normal;
+  border: 1.5px solid rgba(94, 69, 42, .95) !important;
+  border-radius: 6px 4px 7px 5px / 5px 7px 4px 6px !important;
   box-shadow:
-    inset 0 4px 7px rgba(0,0,0,.78),
-    inset 0 -1px 0 rgba(183,145,83,.024),
-    0 1px 1px rgba(255,255,255,.012) !important;
-}
-#root .wood-slot:hover {
-  border-color: rgba(119, 84, 47, .90) !important;
-  box-shadow:
-    inset 0 4px 7px rgba(0,0,0,.71),
-    inset 0 0 0 1px rgba(124,95,56,.10),
-    0 0 7px rgba(150,109,57,.08) !important;
+    inset 0 4px 9px rgba(0,0,0,.92),
+    inset 0 1px 3px rgba(0,0,0,.95),
+    inset 0 -1px 0 rgba(225,188,125,.10),
+    0 1px 1px rgba(255,255,255,.025) !important;
 }
 
-#root .btn-wood-green,
-#root .btn-wood-dark {
+#root .wood-slot:hover,
+#root .organic-carved-slot:hover {
+  border-color: rgba(142, 103, 60, .95) !important;
+  box-shadow:
+    inset 0 3px 6px rgba(0,0,0,.75),
+    inset 0 0 0 1px rgba(152,118,72,.15),
+    0 0 8px rgba(175,129,71,.12) !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Tactical Hand-Carved Organic Buttons                                        */
+/* -------------------------------------------------------------------------- */
+
+#root .btn-organic-action,
+#root .btn-wood-green {
+  position: relative;
+  isolation: isolate;
   border-radius: 7px 5px 8px 6px / 6px 8px 5px 7px !important;
   background-size: 128px 128px, 100% 100%, 100% 100% !important;
   background-blend-mode: soft-light, screen, normal !important;
+  background-image:
+    var(--gh-noise-fine),
+    radial-gradient(ellipse at 24% 0%, rgba(135,198,132,.18), transparent 48%),
+    linear-gradient(180deg, #2b5440, #153427 92%) !important;
+  border: 1.5px solid rgba(94, 158, 114, .78) !important;
+  color: #f1ebd9 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .85);
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.050),
-    inset 0 -4px 8px rgba(0,0,0,.32),
-    0 2px 5px rgba(0,0,0,.34) !important;
+    inset 0 1px 0 rgba(255,255,255,.14),
+    inset 1px 0 0 rgba(255,255,255,.05),
+    inset 0 -3px 0 rgba(0,0,0,.45),
+    inset 0 -5px 10px rgba(0,0,0,.35),
+    0 2px 5px rgba(0,0,0,.42) !important;
+  transition: all 85ms ease !important;
 }
-#root .btn-wood-green {
-  background-image:
-    var(--gh-noise-fine),
-    radial-gradient(ellipse at 24% 0%, rgba(112,166,110,.12), transparent 48%),
-    linear-gradient(180deg, #294f3c, #173529) !important;
-  border-color: rgba(83, 139, 99, .64) !important;
+#root .btn-organic-action:hover,
+#root .btn-wood-green:hover {
+  filter: brightness(1.08) contrast(1.02);
+  border-color: rgba(120, 185, 140, .92) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.20),
+    inset 0 -3px 0 rgba(0,0,0,.42),
+    0 3px 8px rgba(0,0,0,.48),
+    0 0 10px rgba(84, 172, 116, .20) !important;
 }
+#root .btn-organic-action:active,
+#root .btn-wood-green:active {
+  transform: translateY(1px) !important;
+  filter: brightness(.94);
+  box-shadow:
+    inset 0 3px 7px rgba(0,0,0,.55),
+    inset 0 -1px 0 rgba(255,255,255,.05),
+    0 1px 2px rgba(0,0,0,.30) !important;
+}
+
+#root .btn-organic-subtle,
 #root .btn-wood-dark {
+  position: relative;
+  isolation: isolate;
+  border-radius: 7px 5px 8px 6px / 6px 8px 5px 7px !important;
+  background-size: 128px 128px, 100% 100%, 100% 100% !important;
+  background-blend-mode: soft-light, screen, normal !important;
   background-image:
     var(--gh-noise-fine),
-    radial-gradient(ellipse at 24% 0%, rgba(118,126,104,.075), transparent 48%),
-    linear-gradient(180deg, #1d2921, #111914) !important;
-  border-color: rgba(56, 75, 61, .64) !important;
+    radial-gradient(ellipse at 24% 0%, rgba(145,130,105,.10), transparent 48%),
+    linear-gradient(180deg, #242c23, #131a15 92%) !important;
+  border: 1.5px solid rgba(78, 68, 52, .75) !important;
+  color: #ded6c3 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .85);
+  box-shadow:
+    inset 0 1px 0 rgba(240,225,190,.08),
+    inset 0 -3px 0 rgba(0,0,0,.45),
+    inset 0 -5px 10px rgba(0,0,0,.32),
+    0 2px 5px rgba(0,0,0,.38) !important;
+  transition: all 85ms ease !important;
 }
+#root .btn-organic-subtle:hover,
+#root .btn-wood-dark:hover {
+  filter: brightness(1.08);
+  border-color: rgba(118, 98, 70, .88) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(240,225,190,.14),
+    inset 0 -3px 0 rgba(0,0,0,.42),
+    0 3px 7px rgba(0,0,0,.42) !important;
+}
+#root .btn-organic-subtle:active,
+#root .btn-wood-dark:active {
+  transform: translateY(1px) !important;
+  filter: brightness(.94);
+  box-shadow:
+    inset 0 3px 7px rgba(0,0,0,.52),
+    0 1px 2px rgba(0,0,0,.25) !important;
+}
+
+#root .btn-organic-amber {
+  position: relative;
+  isolation: isolate;
+  border-radius: 7px 5px 8px 6px / 6px 8px 5px 7px !important;
+  background-size: 128px 128px, 100% 100%, 100% 100% !important;
+  background-blend-mode: soft-light, screen, normal !important;
+  background-image:
+    var(--gh-noise-fine),
+    radial-gradient(ellipse at 24% 0%, rgba(245,190,105,.22), transparent 48%),
+    linear-gradient(180deg, #5c3818, #38200d 92%) !important;
+  border: 1.5px solid rgba(162, 114, 62, .85) !important;
+  color: #faebd3 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .85);
+  box-shadow:
+    inset 0 1px 0 rgba(255,230,175,.20),
+    inset 0 -3px 0 rgba(0,0,0,.48),
+    inset 0 -5px 10px rgba(0,0,0,.35),
+    0 2px 6px rgba(0,0,0,.45) !important;
+  transition: all 85ms ease !important;
+}
+#root .btn-organic-amber:hover {
+  filter: brightness(1.10);
+  border-color: rgba(200, 142, 78, .95) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,230,175,.28),
+    inset 0 -3px 0 rgba(0,0,0,.45),
+    0 3px 8px rgba(0,0,0,.50),
+    0 0 10px rgba(185, 125, 60, .22) !important;
+}
+#root .btn-organic-amber:active {
+  transform: translateY(1px) !important;
+  filter: brightness(.93);
+  box-shadow:
+    inset 0 3px 7px rgba(0,0,0,.55),
+    0 1px 2px rgba(0,0,0,.30) !important;
+}
+
+#root .btn-organic-danger {
+  position: relative;
+  isolation: isolate;
+  border-radius: 7px 5px 8px 6px / 6px 8px 5px 7px !important;
+  background-size: 128px 128px, 100% 100%, 100% 100% !important;
+  background-blend-mode: soft-light, screen, normal !important;
+  background-image:
+    var(--gh-noise-fine),
+    radial-gradient(ellipse at 24% 0%, rgba(235,115,95,.20), transparent 48%),
+    linear-gradient(180deg, #4d1c16, #2d0e09 92%) !important;
+  border: 1.5px solid rgba(142, 60, 48, .82) !important;
+  color: #fadfd9 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .85);
+  box-shadow:
+    inset 0 1px 0 rgba(255,205,195,.16),
+    inset 0 -3px 0 rgba(0,0,0,.48),
+    inset 0 -5px 10px rgba(0,0,0,.35),
+    0 2px 6px rgba(0,0,0,.42) !important;
+  transition: all 85ms ease !important;
+}
+#root .btn-organic-danger:hover {
+  filter: brightness(1.10);
+  border-color: rgba(185, 75, 62, .92) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,205,195,.24),
+    inset 0 -3px 0 rgba(0,0,0,.45),
+    0 3px 8px rgba(0,0,0,.50),
+    0 0 10px rgba(185, 60, 45, .20) !important;
+}
+#root .btn-organic-danger:active {
+  transform: translateY(1px) !important;
+  filter: brightness(.93);
+  box-shadow:
+    inset 0 3px 7px rgba(0,0,0,.55),
+    0 1px 2px rgba(0,0,0,.30) !important;
+}
+
+/* Decorative faux rivets for corner accents */
+#root .organic-riveted {
+  position: relative;
+}
+#root .organic-riveted::before,
+#root .organic-riveted::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 35% 35%, #ecd49f, #75552b 65%, #301f0c 100%);
+  box-shadow:
+    0 1px 1px rgba(0,0,0,.85),
+    inset 0 0 1px rgba(255,255,255,.45);
+  opacity: .80;
+}
+#root .organic-riveted::before { left: 8px; }
+#root .organic-riveted::after { right: 8px; }
 
 /* -------------------------------------------------------------------------- */
 /* Tone down glass / oversized generic shadows                                 */
@@ -385,6 +570,85 @@
     var(--gh-noise-fine),
     linear-gradient(90deg, #3b2c1b, #594329 52%, #352819);
   background-size: 128px 128px, 100% 100%;
+}
+
+/* Tactical Transfer / Small Action Pill Buttons */
+#root .btn-transfer-pill {
+  position: relative;
+  isolation: isolate;
+  background: rgba(18, 14, 10, 0.85);
+  border: 1px solid rgba(138, 104, 62, 0.45);
+  color: #d4c2a5;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0,0,0,0.3);
+}
+#root .btn-transfer-pill:hover:not(:disabled) {
+  background: rgba(45, 32, 20, 0.95);
+  border-color: rgba(200, 150, 80, 0.8);
+  color: #fff4db;
+  box-shadow: 0 0 6px rgba(180, 130, 60, 0.25);
+}
+#root .btn-transfer-pill:active:not(:disabled) {
+  transform: translateY(1px);
+  background: rgba(12, 9, 6, 0.95);
+}
+#root .btn-transfer-pill-amber {
+  background: rgba(48, 28, 14, 0.88);
+  border-color: rgba(180, 120, 50, 0.7);
+  color: #ffdfa3;
+}
+#root .btn-transfer-pill-amber:hover:not(:disabled) {
+  background: rgba(70, 40, 18, 0.98);
+  border-color: rgba(230, 160, 70, 0.9);
+  color: #ffffff;
+}
+
+/* Modal specific action buttons: refined organic bevel without excessive blockiness */
+#root .btn-modal-action {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+#root .btn-modal-action-emerald {
+  background: linear-gradient(180deg, #2a4635, #16271c 95%);
+  border: 1px solid rgba(75, 140, 95, 0.7);
+  color: #d8f3e2;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0,0,0,0.3);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+#root .btn-modal-action-emerald:hover:not(:disabled) {
+  background: linear-gradient(180deg, #355843, #1c3224 95%);
+  border-color: rgba(105, 185, 130, 0.9);
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -2px 0 rgba(0, 0, 0, 0.4), 0 0 8px rgba(75, 160, 100, 0.25);
+}
+#root .btn-modal-action-amber {
+  background: linear-gradient(180deg, #3d2817, #24160b 95%);
+  border: 1px solid rgba(145, 95, 45, 0.7);
+  color: #f7e4ca;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0,0,0,0.3);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+#root .btn-modal-action-amber:hover:not(:disabled) {
+  background: linear-gradient(180deg, #523720, #301e10 95%);
+  border-color: rgba(195, 135, 65, 0.9);
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 -2px 0 rgba(0, 0, 0, 0.4), 0 0 8px rgba(185, 120, 50, 0.25);
 }
 
 @media (prefers-reduced-motion: reduce) {

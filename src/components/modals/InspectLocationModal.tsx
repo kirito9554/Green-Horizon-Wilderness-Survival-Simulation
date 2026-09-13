@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { CornerBrackets } from '../common/CornerBrackets';
 import { 
   X, 
   MapPin, 
@@ -178,10 +179,14 @@ export const InspectLocationModal: React.FC<InspectLocationModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
-      <div className="relative w-full max-w-4xl wood-border-outer rounded-xl flex flex-col overflow-hidden shadow-2xl max-h-[92vh] bg-[#120e09] text-[#e5dbc8]">
-        {/* Top Header Banner */}
-        <div className="relative h-36 sm:h-44 w-full overflow-hidden bg-stone-900 shrink-0">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-xs animate-in fade-in">
+      {/* Fixed dimension container to prevent UI jumps across tabs and data states */}
+      <div className="relative w-full max-w-4xl h-[92vh] sm:h-[620px] max-h-[680px] wood-border-outer rounded-xl flex flex-col overflow-hidden shadow-2xl bg-[#120e09] text-[#e5dbc8]">
+        {/* Expedition Forged Corner Brackets */}
+        <CornerBrackets style="bronze" size={26} inset={3} />
+
+        {/* Top Header Banner: Fixed height */}
+        <div className="relative h-32 sm:h-36 w-full overflow-hidden bg-stone-900 shrink-0">
           <img 
             src={bgUrl || area.imageUrl || 'https://images.unsplash.com/photo-1510414842594-a61c69b5ae57?auto=format&fit=crop&w=1200&q=80'} 
             alt={area.name}
@@ -191,19 +196,19 @@ export const InspectLocationModal: React.FC<InspectLocationModalProps> = ({
               e.currentTarget.src = 'https://images.unsplash.com/photo-1510414842594-a61c69b5ae57?auto=format&fit=crop&w=1200&q=80';
             }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#120e09] via-[#120e09]/65 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#120e09] via-[#120e09]/60 to-transparent" />
 
           {/* Action Buttons on Banner Header */}
-          <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+          <div className="absolute top-2.5 right-3 z-10 flex items-center gap-2">
             {uploadFeedback && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-950/90 border border-emerald-500 text-emerald-200 text-xs font-medium shadow animate-in fade-in">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-950/90 border border-emerald-500 text-emerald-200 text-xs font-medium shadow animate-in fade-in">
                 <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                 <span>{uploadFeedback}</span>
               </div>
             )}
             <label
               title="Tải ảnh nền cho địa điểm này hoặc quét nạp nhiều ảnh"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#22170f]/90 hover:bg-[#382618] text-[#e2d5bd] hover:text-white border border-[#523d24] text-xs font-serif shadow cursor-pointer transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#22170f]/90 hover:bg-[#382618] text-[#e2d5bd] hover:text-white border border-[#523d24] text-xs font-serif shadow cursor-pointer transition-colors"
             >
               <Upload className="w-3.5 h-3.5 text-amber-400" />
               <span className="hidden sm:inline">Nạp / Đổi ảnh</span>
@@ -218,32 +223,33 @@ export const InspectLocationModal: React.FC<InspectLocationModalProps> = ({
 
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg bg-[#22170f]/90 hover:bg-[#382618] text-[#a38d72] hover:text-white border border-[#422e1b] cursor-pointer transition-colors"
+              className="p-1.5 rounded bg-[#22170f]/90 hover:bg-[#382618] text-[#a38d72] hover:text-white border border-[#422e1b] cursor-pointer transition-colors"
+              title="Đóng (Close)"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {/* Location Title Info */}
-          <div className="absolute bottom-2.5 left-4 right-4 flex items-end justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 text-[10px] font-bold uppercase tracking-wider border border-emerald-700">
+          <div className="absolute bottom-2 left-4 right-4 flex items-end justify-between">
+            <div className="min-w-0 pr-3">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="px-1.5 py-0.2 rounded bg-emerald-950/90 text-emerald-300 text-[9.5px] font-bold uppercase tracking-wider border border-emerald-700/80">
                   {area.biome}
                 </span>
-                <span className="text-xs text-[#c9b79b]">
+                <span className="text-[11px] text-[#c9b79b]">
                   {isCamp ? 'Căn cứ chính (Home Base)' : `${area.distanceKm} km • ${area.baseTravelMinutes} phút hành trình`}
                 </span>
               </div>
-              <h2 className="font-serif font-black text-xl sm:text-2xl text-[#f5e6cc] drop-shadow-md">
+              <h2 className="font-serif font-black text-lg sm:text-xl text-[#f5e6cc] drop-shadow-md truncate">
                 {area.name}
               </h2>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#1f1208]/90 border border-[#523d24]">
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#1f1208]/90 border border-[#523d24]">
                 <AlertTriangle className={`w-3.5 h-3.5 ${area.baseDanger > 25 ? 'text-red-400' : 'text-amber-400'}`} />
-                <span className="text-xs font-semibold text-[#e2d5bd]">
+                <span className="text-[11px] font-semibold text-[#e2d5bd]">
                   Nguy hiểm: {area.baseDanger}%
                 </span>
               </div>
@@ -251,73 +257,73 @@ export const InspectLocationModal: React.FC<InspectLocationModalProps> = ({
           </div>
         </div>
 
-        {/* Tab Navigation & Survivor Bar */}
-        <div className="bg-[#19120a] border-b border-[#3b2a1a] px-4 py-2 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        {/* Tab Navigation & Survivor Bar: Fixed height 46px */}
+        <div className="bg-[#140d07] border-b border-[#3b2a1a] px-3 sm:px-4 py-1.5 flex items-center justify-between gap-2 shrink-0 h-[46px]">
           {/* Main 3 Tabs */}
-          <div className="flex items-center gap-1 bg-[#100b07] p-1 rounded-lg border border-[#3b2a1a]">
+          <div className="flex items-center gap-1 bg-[#0a0704] p-0.5 rounded-lg border border-[#3b2a1a] shadow-inner">
             <button
               onClick={() => setActiveTab('storage')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold font-serif transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold font-serif transition-all cursor-pointer ${
                 activeTab === 'storage'
-                  ? 'bg-[#3b2816] text-amber-200 border border-[#8c6543] shadow'
-                  : 'text-[#9c8973] hover:text-[#d6c4aa]'
+                  ? 'btn-organic-amber text-amber-100 shadow'
+                  : 'text-[#9c8973] hover:text-[#d6c4aa] hover:bg-[#1a120b]'
               }`}
             >
-              <Warehouse className="w-4 h-4 text-amber-400" />
-              <span>Kho Bãi & Giao Dịch</span>
-              <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] bg-amber-950 text-amber-300 border border-amber-800">
+              <Warehouse className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+              <span>Kho Bãi</span>
+              <span className="ml-1 px-1 py-0.1 rounded text-[9.5px] bg-black/50 text-amber-300 border border-amber-800/60 font-mono">
                 {poiStorage.items.length}
               </span>
             </button>
 
             <button
               onClick={() => setActiveTab('buildings')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold font-serif transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold font-serif transition-all cursor-pointer ${
                 activeTab === 'buildings'
-                  ? 'bg-[#3b2816] text-amber-200 border border-[#8c6543] shadow'
-                  : 'text-[#9c8973] hover:text-[#d6c4aa]'
+                  ? 'btn-organic-amber text-amber-100 shadow'
+                  : 'text-[#9c8973] hover:text-[#d6c4aa] hover:bg-[#1a120b]'
               }`}
             >
-              <Hammer className="w-4 h-4 text-amber-400" />
-              <span>Công Trình Tiền Trạm</span>
-              <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] bg-amber-950 text-amber-300 border border-amber-800">
+              <Hammer className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+              <span>Công Trình</span>
+              <span className="ml-1 px-1 py-0.1 rounded text-[9.5px] bg-black/50 text-amber-300 border border-amber-800/60 font-mono">
                 {areaBuildings.length}
               </span>
             </button>
 
             <button
               onClick={() => setActiveTab('resources')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold font-serif transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold font-serif transition-all cursor-pointer ${
                 activeTab === 'resources'
-                  ? 'bg-[#3b2816] text-amber-200 border border-[#8c6543] shadow'
-                  : 'text-[#9c8973] hover:text-[#d6c4aa]'
+                  ? 'btn-organic-amber text-amber-100 shadow'
+                  : 'text-[#9c8973] hover:text-[#d6c4aa] hover:bg-[#1a120b]'
               }`}
             >
-              <Activity className="w-4 h-4 text-emerald-400" />
-              <span>Sinh Thái & Khai Thác</span>
-              <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800">
+              <Activity className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+              <span>Sinh Thái & Mỏ</span>
+              <span className="ml-1 px-1 py-0.1 rounded text-[9.5px] bg-black/50 text-emerald-300 border border-emerald-800/60 font-mono">
                 {area.nodes.length}
               </span>
             </button>
           </div>
 
           {/* Survivor Assign Control */}
-          <div className="flex items-center gap-2">
-            <UserCheck className="w-4 h-4 text-emerald-400" />
-            <span className="text-xs font-serif font-bold text-[#cfbda4] hidden sm:inline">
-              Nhân sự:
+          <div className="flex items-center gap-1.5 shrink-0">
+            <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="text-xs font-serif font-bold text-[#cfbda4] hidden md:inline">
+              Thực hiện:
             </span>
             {chosenSurvivor && (
               <SurvivorPortrait
                 survivor={chosenSurvivor}
                 shape="portrait"
-                className="w-6 h-8 rounded border border-[#523d24]"
+                className="w-5 h-6 rounded border border-[#523d24]"
               />
             )}
             <select
               value={selectedSurvivorId}
               onChange={(e) => setSelectedSurvivorId(e.target.value)}
-              className="bg-[#24190f] text-xs text-[#f5e6cc] px-2.5 py-1.5 rounded border border-[#523d24] focus:outline-none focus:border-amber-400 cursor-pointer"
+              className="bg-[#1f150d] text-xs text-[#f5e6cc] px-2 py-1 rounded border border-[#523d24] focus:outline-none focus:border-amber-400 cursor-pointer shadow-inner max-w-[150px] sm:max-w-[200px] truncate"
             >
               {survivors.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -325,32 +331,27 @@ export const InspectLocationModal: React.FC<InspectLocationModalProps> = ({
                 </option>
               ))}
             </select>
-            {isSurvivorBusy && (
-              <span className="text-[10px] text-amber-400 max-w-[120px] truncate hidden md:inline" title={chosenSurvivor?.currentAction.description}>
-                {chosenSurvivor?.currentAction.description}
-              </span>
-            )}
           </div>
         </div>
 
-        {/* Tab Body Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Tab Body Content: flex-1 overflow-y-auto */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
           {/* TAB 1: KHO BÃI & GIAO DỊCH (DUAL STORAGE SYSTEM) */}
           {activeTab === 'storage' && (
             <div className="space-y-3">
               {/* Category Filter & Global Transfer Actions */}
-              <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-[#18110a] border border-[#382618]">
+              <div className="flex flex-wrap items-center justify-between gap-2 p-1.5 px-2 rounded-lg bg-[#140d07] border border-[#3b2a1a] shadow-inner">
                 {/* Category Filters */}
                 <div className="flex items-center gap-1">
-                  <Filter className="w-3.5 h-3.5 text-amber-400 ml-1 mr-1" />
+                  <Filter className="w-3.5 h-3.5 text-amber-400 ml-0.5 mr-1 shrink-0" />
                   {(['all', 'food', 'water', 'material', 'tool'] as const).map(cat => (
                     <button
                       key={cat}
                       onClick={() => setCategoryFilter(cat)}
-                      className={`px-2 py-0.8 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                      className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all cursor-pointer ${
                         categoryFilter === cat
-                          ? 'bg-[#47301c] text-amber-200 border border-[#8c6543]'
-                          : 'text-[#8f7d69] hover:text-[#e2d5bd]'
+                          ? 'bg-[#3d2411] border border-[#a87438] text-amber-100 font-semibold shadow-xs'
+                          : 'bg-transparent border border-transparent text-[#9c8973] hover:text-[#d4c3aa] hover:bg-[#1f150c]'
                       }`}
                     >
                       {cat === 'all' ? 'Tất cả' : cat === 'food' ? 'Thức ăn' : cat === 'water' ? 'Nước' : cat === 'material' ? 'Vật liệu' : 'Công cụ'}
@@ -359,225 +360,221 @@ export const InspectLocationModal: React.FC<InspectLocationModalProps> = ({
                 </div>
 
                 {/* Fast Transfer All Buttons */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => onTransferAll?.(area.id, 'party_to_poi')}
                     disabled={state.inventory.items.length === 0}
-                    className="btn-wood-dark px-2.5 py-1 rounded text-[11px] font-bold text-amber-300 hover:text-white flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="btn-transfer-pill flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     title="Chuyển toàn bộ vật phẩm từ túi vào kho POI"
                   >
-                    <span>Cất hết vào kho</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    <span>Cất hết</span>
+                    <ArrowRight className="w-3 h-3 text-amber-400" />
                   </button>
                   <button
                     onClick={() => onTransferAll?.(area.id, 'poi_to_party')}
                     disabled={poiStorage.items.length === 0}
-                    className="btn-wood-dark px-2.5 py-1 rounded text-[11px] font-bold text-amber-300 hover:text-white flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="btn-transfer-pill flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     title="Chuyển toàn bộ vật phẩm từ kho POI vào túi"
                   >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    <span>Lấy tất cả vào túi</span>
+                    <ArrowLeft className="w-3 h-3 text-amber-400" />
+                    <span>Lấy hết</span>
                   </button>
                 </div>
               </div>
 
               {/* Dual Column Layout: Left = Party Bag | Right = POI Storage */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {/* 1. TÚI HÀNH TRANG PARTY (Left) */}
-                <div className="p-3 rounded-lg bg-[#161009] border border-[#3b2a1a] flex flex-col justify-between">
-                  <div>
-                    {/* Header with Stats */}
-                    <div className="flex items-center justify-between border-b border-[#2b1e13] pb-2 mb-2">
-                      <div className="flex items-center gap-1.5">
-                        <Package className="w-4 h-4 text-amber-400" />
-                        <h3 className="font-serif font-bold text-xs text-[#f5e6cc] uppercase tracking-wider">
-                          Túi Đồ Party (Hành trang)
-                        </h3>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-mono text-xs font-bold text-amber-200">
-                          {partyOcc.weight.toFixed(1)} / {partyMaxWeight} kg
-                        </span>
-                        <span className="text-[10px] text-[#8f7a62] ml-1.5">
-                          ({partyOcc.volume.toFixed(1)}/{partyMaxVolume} L)
-                        </span>
-                      </div>
+                <div className="p-2.5 rounded-lg organic-chiseled-panel flex flex-col h-[390px]">
+                  {/* Header with Stats */}
+                  <div className="flex items-center justify-between border-b border-[#3b2a1a] pb-1.5 mb-1.5 shrink-0">
+                    <div className="flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5 text-amber-400" />
+                      <h3 className="font-serif font-bold text-xs text-[#f5e6cc] uppercase tracking-wider">
+                        Túi Đồ Party
+                      </h3>
                     </div>
-
-                    {/* Weight Bar */}
-                    <div className="w-full h-1.5 rounded-full bg-[#0a0704] overflow-hidden mb-3 border border-[#261b11]">
-                      <div
-                        className={`h-full transition-all duration-300 ${
-                          partyWeightPct > 90 ? 'bg-red-500' : partyWeightPct > 70 ? 'bg-amber-500' : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${partyWeightPct}%` }}
-                      />
+                    <div className="text-right">
+                      <span className="font-mono text-xs font-bold text-amber-200">
+                        {partyOcc.weight.toFixed(1)} / {partyMaxWeight} kg
+                      </span>
+                      <span className="text-[10px] text-[#8f7a62] ml-1">
+                        ({partyOcc.volume.toFixed(1)}/{partyMaxVolume} L)
+                      </span>
                     </div>
+                  </div>
 
-                    {/* Items List */}
-                    {filteredPartyItems.length === 0 ? (
-                      <div className="p-6 text-center text-[#6e5d4a] text-xs italic">
-                        Túi hành trang không có vật phẩm phù hợp bộ lọc.
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5 max-h-[360px] overflow-y-auto pr-1">
-                        {filteredPartyItems.map((item) => {
-                          const def = ITEMS_DATABASE[item.itemId];
-                          if (!def) return null;
-                          const dominantQ = getDominantQuality(item.qualityBreakdown, item.quality);
-                          const qConfig = QUALITY_CONFIG[dominantQ];
-                          const totalWeight = (def.weight * item.quantity).toFixed(1);
+                  {/* Weight Bar */}
+                  <div className="w-full h-1.5 rounded-full bg-[#0a0704] overflow-hidden mb-2 border border-[#3b2a1a] shadow-inner shrink-0">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        partyWeightPct > 90 ? 'bg-red-500' : partyWeightPct > 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${partyWeightPct}%` }}
+                    />
+                  </div>
 
-                          return (
-                            <div
-                              key={item.instanceId}
-                              className="p-1.5 rounded bg-[#1f160e] hover:bg-[#281d13] border border-[#3b2a1a] flex items-center justify-between gap-2 transition-colors"
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div className="w-8 h-8 rounded bg-black/40 border border-[#382618] p-0.5 flex items-center justify-center shrink-0">
-                                  <ItemIcon itemId={item.itemId} category={def.category} size={28} />
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1">
-                                    <span className="font-serif font-bold text-xs text-[#f5e6cc] truncate">
-                                      {def.name}
-                                    </span>
-                                    {dominantQ !== 'standard' && (
-                                      <span className={`text-[9px] font-bold px-1 rounded ${qConfig.textColor} bg-black/30`}>
-                                        {qConfig.nameVi}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="text-[10px] text-[#8f7a62]">
-                                    {item.quantity}x • {totalWeight} kg
-                                  </div>
-                                </div>
+                  {/* Items List */}
+                  {filteredPartyItems.length === 0 ? (
+                    <div className="flex-1 flex items-center justify-center p-6 text-center text-[#6e5d4a] text-xs italic">
+                      Túi hành trang không có vật phẩm phù hợp bộ lọc.
+                    </div>
+                  ) : (
+                    <div className="flex-1 space-y-1.5 overflow-y-auto pr-1">
+                      {filteredPartyItems.map((item) => {
+                        const def = ITEMS_DATABASE[item.itemId];
+                        if (!def) return null;
+                        const dominantQ = getDominantQuality(item.qualityBreakdown, item.quality);
+                        const qConfig = QUALITY_CONFIG[dominantQ];
+                        const totalWeight = (def.weight * item.quantity).toFixed(1);
+
+                        return (
+                          <div
+                            key={item.instanceId}
+                            className="p-1.5 rounded bg-black/40 border border-[#3a2818]/70 hover:border-[#634529] flex items-center justify-between gap-2 transition-colors"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-8 h-8 rounded bg-black/70 border border-[#4a341f] p-0.5 flex items-center justify-center shrink-0">
+                                <ItemIcon itemId={item.itemId} category={def.category} size={28} />
                               </div>
-
-                              {/* Transfer Controls */}
-                              <div className="flex items-center gap-1 shrink-0">
-                                <button
-                                  onClick={() => onTransferItem?.(area.id, item.instanceId, 1, 'party_to_poi')}
-                                  className="px-1.5 py-1 rounded bg-[#2e2014] hover:bg-[#47301c] text-[#e2d5bd] text-[10px] font-mono border border-[#523d24] cursor-pointer"
-                                  title="Chuyển 1 cái sang kho POI"
-                                >
-                                  1 ➔
-                                </button>
-                                {item.quantity > 1 && (
-                                  <button
-                                    onClick={() => onTransferItem?.(area.id, item.instanceId, item.quantity, 'party_to_poi')}
-                                    className="px-1.5 py-1 rounded bg-[#2e2014] hover:bg-[#47301c] text-amber-300 text-[10px] font-mono border border-[#523d24] cursor-pointer"
-                                    title="Chuyển tất cả sang kho POI"
-                                  >
-                                    Hết ➔
-                                  </button>
-                                )}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1">
+                                  <span className="font-serif font-bold text-xs text-[#f5e6cc] truncate">
+                                    {def.name}
+                                  </span>
+                                  {dominantQ !== 'standard' && (
+                                    <span className={`text-[8.5px] font-bold px-1 rounded ${qConfig.textColor} bg-black/40`}>
+                                      {qConfig.nameVi}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-[#8f7a62]">
+                                  {item.quantity}x • {totalWeight} kg
+                                </div>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+
+                            {/* Transfer Controls */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => onTransferItem?.(area.id, item.instanceId, 1, 'party_to_poi')}
+                                className="btn-transfer-pill"
+                                title="Chuyển 1 cái sang kho POI"
+                              >
+                                1 ➔
+                              </button>
+                              {item.quantity > 1 && (
+                                <button
+                                  onClick={() => onTransferItem?.(area.id, item.instanceId, item.quantity, 'party_to_poi')}
+                                  className="btn-transfer-pill btn-transfer-pill-amber"
+                                  title="Chuyển tất cả sang kho POI"
+                                >
+                                  Hết ➔
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* 2. KHO BÃI TẠI ĐỊA ĐIỂM (Right) */}
-                <div className="p-3 rounded-lg bg-[#161009] border border-[#3b2a1a] flex flex-col justify-between">
-                  <div>
-                    {/* Header with Stats */}
-                    <div className="flex items-center justify-between border-b border-[#2b1e13] pb-2 mb-2">
-                      <div className="flex items-center gap-1.5">
-                        <Warehouse className="w-4 h-4 text-amber-400" />
-                        <h3 className="font-serif font-bold text-xs text-[#f5e6cc] uppercase tracking-wider">
-                          Kho Bãi {area.name}
-                        </h3>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-mono text-xs font-bold text-amber-200">
-                          {poiOcc.weight.toFixed(1)} / {poiMaxWeight} kg
-                        </span>
-                        <span className="text-[10px] text-[#8f7a62] ml-1.5">
-                          ({poiOcc.volume.toFixed(1)}/{poiMaxVolume} L)
-                        </span>
-                      </div>
+                <div className="p-2.5 rounded-lg organic-chiseled-panel flex flex-col h-[390px]">
+                  {/* Header with Stats */}
+                  <div className="flex items-center justify-between border-b border-[#3b2a1a] pb-1.5 mb-1.5 shrink-0">
+                    <div className="flex items-center gap-1.5">
+                      <Warehouse className="w-3.5 h-3.5 text-amber-400" />
+                      <h3 className="font-serif font-bold text-xs text-[#f5e6cc] uppercase tracking-wider truncate max-w-[170px]">
+                        Kho {area.name}
+                      </h3>
                     </div>
-
-                    {/* Weight Bar */}
-                    <div className="w-full h-1.5 rounded-full bg-[#0a0704] overflow-hidden mb-3 border border-[#261b11]">
-                      <div
-                        className={`h-full transition-all duration-300 ${
-                          poiWeightPct > 90 ? 'bg-red-500' : poiWeightPct > 70 ? 'bg-amber-500' : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${poiWeightPct}%` }}
-                      />
+                    <div className="text-right">
+                      <span className="font-mono text-xs font-bold text-amber-200">
+                        {poiOcc.weight.toFixed(1)} / {poiMaxWeight} kg
+                      </span>
+                      <span className="text-[10px] text-[#8f7a62] ml-1">
+                        ({poiOcc.volume.toFixed(1)}/{poiMaxVolume} L)
+                      </span>
                     </div>
+                  </div>
 
-                    {/* Items List */}
-                    {filteredPoiItems.length === 0 ? (
-                      <div className="p-6 text-center text-[#6e5d4a] text-xs italic">
-                        Kho bãi tại địa điểm này đang trống. Bạn có thể cất bớt vật tư hoặc phân công thợ khai thác vào kho.
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5 max-h-[360px] overflow-y-auto pr-1">
-                        {filteredPoiItems.map((item) => {
-                          const def = ITEMS_DATABASE[item.itemId];
-                          if (!def) return null;
-                          const dominantQ = getDominantQuality(item.qualityBreakdown, item.quality);
-                          const qConfig = QUALITY_CONFIG[dominantQ];
-                          const totalWeight = (def.weight * item.quantity).toFixed(1);
+                  {/* Weight Bar */}
+                  <div className="w-full h-1.5 rounded-full bg-[#0a0704] overflow-hidden mb-2 border border-[#3b2a1a] shadow-inner shrink-0">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        poiWeightPct > 90 ? 'bg-red-500' : poiWeightPct > 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${poiWeightPct}%` }}
+                    />
+                  </div>
 
-                          return (
-                            <div
-                              key={item.instanceId}
-                              className="p-1.5 rounded bg-[#1f160e] hover:bg-[#281d13] border border-[#3b2a1a] flex items-center justify-between gap-2 transition-colors"
-                            >
-                              {/* Transfer Controls (Left Arrow) */}
-                              <div className="flex items-center gap-1 shrink-0">
+                  {/* Items List */}
+                  {filteredPoiItems.length === 0 ? (
+                    <div className="flex-1 flex items-center justify-center p-6 text-center text-[#6e5d4a] text-xs italic">
+                      Kho bãi tại địa điểm này đang trống. Bạn có thể cất bớt vật tư hoặc khai thác để nhập kho.
+                    </div>
+                  ) : (
+                    <div className="flex-1 space-y-1.5 overflow-y-auto pr-1">
+                      {filteredPoiItems.map((item) => {
+                        const def = ITEMS_DATABASE[item.itemId];
+                        if (!def) return null;
+                        const dominantQ = getDominantQuality(item.qualityBreakdown, item.quality);
+                        const qConfig = QUALITY_CONFIG[dominantQ];
+                        const totalWeight = (def.weight * item.quantity).toFixed(1);
+
+                        return (
+                          <div
+                            key={item.instanceId}
+                            className="p-1.5 rounded bg-black/40 border border-[#3a2818]/70 hover:border-[#634529] flex items-center justify-between gap-2 transition-colors"
+                          >
+                            {/* Transfer Controls (Left Arrow) */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => onTransferItem?.(area.id, item.instanceId, 1, 'poi_to_party')}
+                                className="btn-transfer-pill"
+                                title="Lấy 1 cái về túi party"
+                              >
+                                ⬅ 1
+                              </button>
+                              {item.quantity > 1 && (
                                 <button
-                                  onClick={() => onTransferItem?.(area.id, item.instanceId, 1, 'poi_to_party')}
-                                  className="px-1.5 py-1 rounded bg-[#2e2014] hover:bg-[#47301c] text-[#e2d5bd] text-[10px] font-mono border border-[#523d24] cursor-pointer"
-                                  title="Lấy 1 cái về túi party"
+                                  onClick={() => onTransferItem?.(area.id, item.instanceId, item.quantity, 'poi_to_party')}
+                                  className="btn-transfer-pill btn-transfer-pill-amber"
+                                  title="Lấy tất cả về túi party"
                                 >
-                                  ⬅ 1
+                                  ⬅ Hết
                                 </button>
-                                {item.quantity > 1 && (
-                                  <button
-                                    onClick={() => onTransferItem?.(area.id, item.instanceId, item.quantity, 'poi_to_party')}
-                                    className="px-1.5 py-1 rounded bg-[#2e2014] hover:bg-[#47301c] text-amber-300 text-[10px] font-mono border border-[#523d24] cursor-pointer"
-                                    title="Lấy tất cả về túi party"
-                                  >
-                                    ⬅ Hết
-                                  </button>
-                                )}
-                              </div>
+                              )}
+                            </div>
 
-                              {/* Item Info */}
-                              <div className="flex items-center gap-2 min-w-0 text-right justify-end flex-1">
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1 justify-end">
-                                    {dominantQ !== 'standard' && (
-                                      <span className={`text-[9px] font-bold px-1 rounded ${qConfig.textColor} bg-black/30`}>
-                                        {qConfig.nameVi}
-                                      </span>
-                                    )}
-                                    <span className="font-serif font-bold text-xs text-[#f5e6cc] truncate">
-                                      {def.name}
+                            {/* Item Info */}
+                            <div className="flex items-center gap-2 min-w-0 text-right justify-end flex-1">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1 justify-end">
+                                  {dominantQ !== 'standard' && (
+                                    <span className={`text-[8.5px] font-bold px-1 rounded ${qConfig.textColor} bg-black/40`}>
+                                      {qConfig.nameVi}
                                     </span>
-                                  </div>
-                                  <div className="text-[10px] text-[#8f7a62]">
-                                    {item.quantity}x • {totalWeight} kg
-                                  </div>
+                                  )}
+                                  <span className="font-serif font-bold text-xs text-[#f5e6cc] truncate">
+                                    {def.name}
+                                  </span>
                                 </div>
-                                <div className="w-8 h-8 rounded bg-black/40 border border-[#382618] p-0.5 flex items-center justify-center shrink-0">
-                                  <ItemIcon itemId={item.itemId} category={def.category} size={28} />
+                                <div className="text-[10px] text-[#8f7a62]">
+                                  {item.quantity}x • {totalWeight} kg
                                 </div>
+                              </div>
+                              <div className="w-8 h-8 rounded bg-black/70 border border-[#4a341f] p-0.5 flex items-center justify-center shrink-0">
+                                <ItemIcon itemId={item.itemId} category={def.category} size={28} />
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -725,7 +722,7 @@ export const InspectLocationModal: React.FC<InspectLocationModalProps> = ({
                               ? 'bg-[#221a12] text-emerald-400 border border-emerald-800/40 cursor-default'
                               : isSurvivorBusy || !canAfford
                               ? 'bg-[#241c14] text-[#6e5d4a] border border-[#382618] cursor-not-allowed'
-                              : 'btn-wood-green'
+                              : 'btn-modal-action btn-modal-action-emerald'
                           }`}
                         >
                           <Hammer className="w-3.5 h-3.5" />
@@ -819,7 +816,7 @@ export const InspectLocationModal: React.FC<InspectLocationModalProps> = ({
                           </div>
                         </div>
 
-                        {/* Extraction Button: Harvest into POI Storage */}
+                        {/* Extraction Button: Harvest into POI Storage or Party Bag */}
                         <div className="grid grid-cols-2 gap-1.5 mt-1">
                           <button
                             disabled={isSurvivorBusy || currentStock < 1}
@@ -829,8 +826,8 @@ export const InspectLocationModal: React.FC<InspectLocationModalProps> = ({
                             }}
                             className={`py-1.5 rounded text-[11px] font-bold flex items-center justify-center gap-1 transition-all ${
                               isSurvivorBusy || currentStock < 1
-                                ? 'bg-[#241c14] text-[#6e5d4a] cursor-not-allowed'
-                                : 'btn-wood-green cursor-pointer'
+                                ? 'bg-[#241c14] text-[#6e5d4a] border border-[#382618] cursor-not-allowed'
+                                : 'btn-modal-action btn-modal-action-emerald cursor-pointer'
                             }`}
                             title="Khai thác và nhập thẳng vào Kho bãi của địa điểm này"
                           >
@@ -846,8 +843,8 @@ export const InspectLocationModal: React.FC<InspectLocationModalProps> = ({
                             }}
                             className={`py-1.5 rounded text-[11px] font-bold flex items-center justify-center gap-1 transition-all ${
                               isSurvivorBusy || currentStock < 1
-                                ? 'bg-[#241c14] text-[#6e5d4a] cursor-not-allowed'
-                                : 'btn-wood-dark cursor-pointer text-amber-200'
+                                ? 'bg-[#241c14] text-[#6e5d4a] border border-[#382618] cursor-not-allowed'
+                                : 'btn-modal-action btn-modal-action-amber cursor-pointer'
                             }`}
                             title="Thu lượm bỏ vào túi đồ của party"
                           >
@@ -863,7 +860,7 @@ export const InspectLocationModal: React.FC<InspectLocationModalProps> = ({
 
               {/* Expedition Launcher if not base camp */}
               {!isCamp && (
-                <div className="pt-3 border-t border-[#382819] flex items-center justify-between">
+                <div className="pt-2.5 border-t border-[#382819] flex items-center justify-between">
                   <span className="text-xs text-[#a69279]">
                     Tổ chức thám hiểm chuyên sâu để khai phá toàn diện vùng đất này.
                   </span>
@@ -873,9 +870,9 @@ export const InspectLocationModal: React.FC<InspectLocationModalProps> = ({
                       onClose();
                     }}
                     disabled={isSurvivorBusy}
-                    className="btn-wood-dark py-2 px-4 rounded text-xs font-bold text-amber-300 hover:text-white flex items-center gap-1.5 cursor-pointer"
+                    className="btn-modal-action btn-modal-action-amber py-1.5 px-3.5 rounded text-xs font-bold text-amber-200 hover:text-white flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Compass className="w-4 h-4" />
+                    <Compass className="w-4 h-4 text-amber-300" />
                     <span>Khởi hành Thám hiểm</span>
                   </button>
                 </div>

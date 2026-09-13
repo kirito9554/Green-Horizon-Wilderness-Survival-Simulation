@@ -1,29 +1,31 @@
 import React from 'react';
+import { CornerBrackets } from '../common/CornerBrackets';
 import {
-  Binoculars,
   ChevronRight,
   CircleAlert,
-  Cross,
   Eye,
-  Footprints,
-  Hand,
   Heart,
-  Leaf,
-  Map,
   MapPin,
-  Beef,
-  PackageOpen,
-  Shield,
   Sparkles,
-  Star,
-  Sword,
-  Target,
-  Trees,
-  Utensils,
 } from 'lucide-react';
 import type { GameState } from '../../types';
 import type { EncounterActionView, EncounterInstance, EncounterRisk } from '../../encounter/encounterTypes';
 import { getEncounterActions, isEncounterSafe } from '../../encounter/encounterEngine';
+import { ItemIcon } from '../common/ItemIcon';
+import {
+  FootprintsAssetIcon,
+  ObserveAssetIcon,
+  CalmAssetIcon,
+  BackAwayAssetIcon,
+  DefendAssetIcon,
+  LeaveMapAssetIcon,
+  WildernessTreesAssetIcon,
+  RewardChestAssetIcon,
+  TacticalShieldAssetIcon,
+  KnowledgeAssetIcon,
+  InjuryAssetIcon,
+  ExperienceAssetIcon,
+} from './encounterUiAssets';
 
 interface EncounterScreenProps {
   encounter: EncounterInstance;
@@ -35,9 +37,10 @@ const UI_FONT = '"Roboto Condensed", "Be Vietnam Pro", -apple-system, BlinkMacSy
 const STORY_FONT = '"Baskerville", "Palatino Linotype", "Book Antiqua", Georgia, serif';
 
 const panelStyle: React.CSSProperties = {
-  background: 'linear-gradient(180deg, rgba(10,39,35,.97), rgba(7,28,26,.98))',
-  border: '2px solid #795536',
-  boxShadow: 'inset 0 0 0 1px rgba(218,169,98,.22), 0 8px 20px rgba(0,0,0,.55)',
+  background: 'linear-gradient(180deg, rgba(12,36,31,.97), rgba(7,24,21,.98))',
+  border: '2px solid rgba(122, 88, 54, .82)',
+  borderRadius: '8px 6px 9px 7px / 7px 9px 6px 8px',
+  boxShadow: 'inset 0 1px 0 rgba(238,206,148,.18), inset 1px 0 0 rgba(195,160,105,.08), inset 0 -3px 0 rgba(0,0,0,.60), inset 0 -6px 14px rgba(0,0,0,.45), 0 6px 20px rgba(0,0,0,.60)',
 };
 
 const riskColor: Record<EncounterRisk, string> = {
@@ -55,31 +58,55 @@ const riskLabel: Record<EncounterRisk, string> = {
 };
 
 const ActionIcon: React.FC<{ action: EncounterActionView }> = ({ action }) => {
-  const className = 'w-7 h-7';
+  const className = 'w-7 h-7 filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]';
   switch (action.icon) {
-    case 'observe': return <Binoculars className={className} />;
-    case 'calm': return <Hand className={className} />;
-    case 'back_away': return <Footprints className={className} />;
-    case 'defend': return <Sword className={className} />;
-    case 'food': return <Beef className={className} />;
-    case 'leave': return <Map className={className} />;
-    default: return <Target className={className} />;
+    case 'observe': return <ObserveAssetIcon className={className} />;
+    case 'calm': return <CalmAssetIcon className={className} />;
+    case 'back_away': return <BackAwayAssetIcon className={className} />;
+    case 'defend': return <DefendAssetIcon className={className} />;
+    case 'food':
+      // Dùng ItemIcon ảnh thật nếu là đồ ăn / vật phẩm
+      return (
+        <div className="w-7 h-7 flex items-center justify-center">
+          <ItemIcon itemId="animal_fat" size={28} className="drop-shadow-md" />
+        </div>
+      );
+    case 'leave': return <LeaveMapAssetIcon className={className} />;
+    default: return <ObserveAssetIcon className={className} />;
   }
 };
 
 const OutcomeIcon: React.FC<{ icon: string }> = ({ icon }) => {
   const className = 'w-4 h-4 shrink-0';
   switch (icon) {
-    case 'meat': return <Beef className={`${className} text-[#e67958]`} />;
-    case 'fiber': return <Leaf className={`${className} text-[#86c94d]`} />;
-    case 'knowledge': return <Eye className={`${className} text-[#d6c49d]`} />;
-    case 'route': return <Footprints className={`${className} text-[#cdbb8c]`} />;
+    // 1. Các kết quả là VẬT PHẨM: giữ nguyên dùng ItemIcon ảnh asset
+    case 'meat':
+      return (
+        <div className="w-4 h-4 shrink-0 flex items-center justify-center">
+          <ItemIcon itemId="animal_fat" size={16} />
+        </div>
+      );
+    case 'fiber':
+      return (
+        <div className="w-4 h-4 shrink-0 flex items-center justify-center">
+          <ItemIcon itemId="bark_fiber" size={16} />
+        </div>
+      );
+    case 'food':
+      return (
+        <div className="w-4 h-4 shrink-0 flex items-center justify-center">
+          <ItemIcon itemId="animal_fat" size={16} />
+        </div>
+      );
+
+    // 2. Các icon phi vật phẩm: dùng asset icon rustic
+    case 'knowledge': return <KnowledgeAssetIcon className={className} />;
+    case 'route': return <BackAwayAssetIcon className={className} />;
     case 'location': return <MapPin className={`${className} text-[#e6d8ae]`} />;
-    case 'injury': return <Cross className={`${className} text-[#ff665c]`} />;
-    case 'food': return <Utensils className={`${className} text-[#e67958]`} />;
+    case 'injury': return <InjuryAssetIcon className={className} />;
     case 'medical': return <Heart className={`${className} text-[#ff665c]`} />;
     case 'risk': return <CircleAlert className={`${className} text-[#e8d7b4]`} />;
-    case 'xp': return <Star className={`${className} text-[#f7c64c]`} />;
+    case 'xp': return <ExperienceAssetIcon className={className} />;
     default: return <Sparkles className={className} />;
   }
 };
@@ -100,28 +127,37 @@ interface ActionCardProps {
 }
 
 const ActionCard: React.FC<ActionCardProps> = ({ action, onChooseAction }) => {
+  const isStayCalm = action.id === 'stay_calm';
   return (
     <button
       type="button"
       disabled={action.disabled}
       onClick={() => onChooseAction(action.id)}
       title={action.disabledReason || `${action.title} • ${action.timeMinutes} min • ${action.noise.replace('_', ' ')} noise`}
-      className={`group relative w-full min-h-[68px] rounded-md text-left transition-all ${
+      className={`group relative w-full min-h-[68px] text-left transition-all ${
         action.disabled
           ? 'opacity-40 cursor-not-allowed'
-          : 'hover:-translate-y-[1px] hover:brightness-110 active:translate-y-0 cursor-pointer'
+          : 'hover:-translate-y-[1px] hover:brightness-105 active:translate-y-[1px] cursor-pointer'
       }`}
       style={{
-        background: action.id === 'stay_calm'
-          ? 'linear-gradient(90deg, rgba(33,104,58,.58), rgba(9,45,34,.82))'
-          : 'linear-gradient(90deg, rgba(10,42,39,.92), rgba(7,31,29,.96))',
-        border: action.id === 'stay_calm' ? '2px solid #4cc978' : '1px solid #9a6a40',
-        boxShadow: action.id === 'stay_calm'
-          ? 'inset 0 0 0 1px rgba(148,255,178,.18), 0 0 10px rgba(62,190,109,.18)'
-          : 'inset 0 0 0 1px rgba(255,216,155,.06)',
+        borderRadius: '7px 5px 8px 6px / 6px 8px 5px 7px',
+        background: isStayCalm
+          ? 'linear-gradient(90deg, rgba(38,98,62,.72), rgba(16,52,40,.92) 80%)'
+          : 'linear-gradient(90deg, rgba(24,39,32,.95), rgba(12,25,21,.98) 80%)',
+        border: isStayCalm ? '2px solid #52bc7a' : '2px solid #6b4d31',
+        boxShadow: isStayCalm
+          ? 'inset 0 1px 0 rgba(210,255,225,.25), inset 0 -3px 0 rgba(0,0,0,.55), inset 0 -5px 10px rgba(0,0,0,.35), 0 3px 8px rgba(0,0,0,.45), 0 0 12px rgba(82,188,122,.15)'
+          : 'inset 0 1px 0 rgba(245,220,170,.14), inset 0 -3px 0 rgba(0,0,0,.55), inset 0 -5px 10px rgba(0,0,0,.35), 0 3px 8px rgba(0,0,0,.40)',
       }}
     >
-      <div className="absolute left-0 top-0 bottom-0 w-[58px] flex items-center justify-center border-r border-white/5 text-[#ead6b0]">
+      <div
+        className="absolute left-0 top-0 bottom-0 w-[58px] flex items-center justify-center text-[#ead6b0]"
+        style={{
+          background: 'rgba(0, 0, 0, 0.24)',
+          borderRight: '1.5px solid rgba(120, 88, 56, 0.40)',
+          boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.03)',
+        }}
+      >
         <ActionIcon action={action} />
       </div>
       <div className="pl-[72px] pr-[118px] py-[10px]">
@@ -137,7 +173,7 @@ const ActionCard: React.FC<ActionCardProps> = ({ action, onChooseAction }) => {
       <ChevronRight className="absolute right-[10px] top-1/2 -translate-y-1/2 w-5 h-5 text-[#e8c99c] group-hover:translate-x-[2px] transition-transform" />
     </button>
   );
-}
+};
 
 export const EncounterScreen: React.FC<EncounterScreenProps> = ({ encounter, state, onChooseAction }) => {
   const actions = getEncounterActions(encounter, state);
@@ -153,6 +189,7 @@ export const EncounterScreen: React.FC<EncounterScreenProps> = ({ encounter, sta
         className="absolute left-0 top-0 w-[64.5%] h-[82.2%] overflow-hidden rounded-[5px]"
         style={panelStyle}
       >
+        <CornerBrackets style="bronze" size={24} inset={3} />
         <img
           src={encounter.sceneImageUrl}
           alt={encounter.sceneAlt}
@@ -170,8 +207,8 @@ export const EncounterScreen: React.FC<EncounterScreenProps> = ({ encounter, sta
             boxShadow: '0 5px 14px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,226,165,.16)',
           }}
         >
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 w-[62px] h-[62px] rounded-sm bg-[#e2a65f]/95 border-2 border-[#57371e] flex items-center justify-center shadow-inner">
-            <Footprints className="w-10 h-10 text-[#1b120c]" strokeWidth={2.6} />
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 w-[62px] h-[62px] rounded-sm bg-[#e2a65f]/95 border-2 border-[#57371e] flex items-center justify-center shadow-inner overflow-hidden">
+            <FootprintsAssetIcon className="w-10 h-10 drop-shadow-md" />
           </div>
           <div>
             <div className="font-black text-[26px] tracking-[0.05em] text-[#f2d4ac] drop-shadow-[0_2px_2px_rgba(0,0,0,.9)]">{encounter.title}</div>
@@ -184,11 +221,12 @@ export const EncounterScreen: React.FC<EncounterScreenProps> = ({ encounter, sta
 
         {/* narrative box */}
         <div
-          className="absolute left-[2.2%] right-[2.2%] bottom-[2.3%] min-h-[15%] px-6 py-4 rounded-md"
+          className="absolute left-[2.2%] right-[2.2%] bottom-[2.3%] min-h-[15%] px-6 py-4"
           style={{
-            background: 'linear-gradient(180deg, rgba(4,17,15,.88), rgba(5,16,14,.94))',
-            border: '1px solid rgba(181,139,84,.7)',
-            boxShadow: 'inset 0 0 12px rgba(0,0,0,.55)',
+            borderRadius: '7px 5px 8px 6px / 6px 8px 5px 7px',
+            background: 'linear-gradient(180deg, rgba(8,24,20,.94), rgba(4,16,13,.98))',
+            border: '2px solid rgba(125, 92, 56, .78)',
+            boxShadow: 'inset 0 1px 0 rgba(235,205,150,.16), inset 0 4px 10px rgba(0,0,0,.70), 0 3px 8px rgba(0,0,0,.50)',
             fontFamily: STORY_FONT,
           }}
         >
@@ -199,30 +237,39 @@ export const EncounterScreen: React.FC<EncounterScreenProps> = ({ encounter, sta
 
         {/* context chips */}
         <div className="absolute right-[2%] top-[2%] flex gap-1.5 text-[9px] uppercase tracking-[.07em]">
-          <span className="px-2 py-1 rounded bg-black/55 border border-white/10 text-[#d9ccb3]">{Math.round(encounter.state.distance)} m</span>
-          <span className="px-2 py-1 rounded bg-black/55 border border-white/10 text-[#d9ccb3]">Knowledge {Math.round(encounter.knowledge.total)}%</span>
+          <span className="px-2.5 py-1 rounded bg-[#091714]/85 border border-[#52412e] text-[#d9ccb3] shadow-[0_1px_3px_rgba(0,0,0,.45)]">{Math.round(encounter.state.distance)} m</span>
+          <span className="px-2.5 py-1 rounded bg-[#091714]/85 border border-[#52412e] text-[#d9ccb3] shadow-[0_1px_3px_rgba(0,0,0,.45)]">Knowledge {Math.round(encounter.knowledge.total)}%</span>
         </div>
       </section>
 
       {/* Decision column */}
       <section className="absolute left-[65.5%] top-0 w-[34.5%] h-[82.2%] flex flex-col gap-[1.4%]">
         <div className="relative h-[65.5%] rounded-[5px] px-4 pt-3 pb-3 overflow-hidden" style={panelStyle}>
-          <div className="flex items-center gap-3 h-[34px] border-b border-[#6f5136]/45 mb-2">
-            <Trees className="w-7 h-7 text-[#ead5b0]" />
+          <CornerBrackets style="bronze" size={20} inset={2} />
+          <div className="flex items-center gap-3 h-[34px] border-b border-[#6f5136]/55 mb-2">
+            <WildernessTreesAssetIcon className="w-7 h-7 drop-shadow-sm" />
             <h2 className="font-black text-[20px] tracking-[0.075em] text-[#f0e5d1]">WHAT WILL YOU DO?</h2>
           </div>
 
-          <div className="relative rounded-md bg-black/12 border border-white/5 px-3 py-2 pr-[112px] min-h-[58px] mb-2.5">
+          <div
+            className="relative rounded-md px-3 py-2 pr-[112px] min-h-[58px] mb-2.5"
+            style={{
+              background: 'rgba(5, 15, 12, 0.65)',
+              border: '1.5px solid rgba(75, 58, 38, 0.70)',
+              boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.65)',
+            }}
+          >
             <p className="text-[12px] leading-[1.45] text-[#e2d8c6]" style={{ fontFamily: STORY_FONT }}>{encounter.intro}</p>
             {observe && !safe && (
               <button
                 type="button"
                 onClick={() => onChooseAction(observe.id)}
-                className="absolute right-2 top-2 bottom-2 w-[96px] rounded border border-[#786447] bg-[#182a24]/90 hover:bg-[#22382f] text-[#e8d8ba] text-[10px] font-bold flex flex-col items-center justify-center gap-1"
+                className="btn-organic-action absolute right-2 top-2 bottom-2 w-[96px] text-[#e8d8ba] text-[10px] font-bold flex flex-col items-center justify-center gap-1 cursor-pointer"
+                title="Observe creature behavior"
               >
-                <Binoculars className="w-4 h-4" />
-                <span>OBSERVE</span>
-                <span className="text-[#7fcca0]">{observe.estimate}</span>
+                <ObserveAssetIcon className="w-4 h-4 drop-shadow-sm" />
+                <span className="tracking-wider">OBSERVE</span>
+                <span className="text-[#96f5ba] font-mono text-[9px]">{observe.estimate}</span>
               </button>
             )}
           </div>
@@ -237,7 +284,7 @@ export const EncounterScreen: React.FC<EncounterScreenProps> = ({ encounter, sta
             <div className="flex justify-between text-[8px] uppercase tracking-[.08em] text-[#8b9e94] mb-1">
               <span>Calm</span><span>Escalation {escalation}%</span><span>Danger</span>
             </div>
-            <div className="h-[5px] rounded-full bg-black/45 overflow-hidden border border-white/5">
+            <div className="h-[6px] rounded-full bg-black/60 overflow-hidden border border-[#52412e] shadow-inner">
               <div
                 className="h-full transition-all duration-500"
                 style={{
@@ -251,18 +298,36 @@ export const EncounterScreen: React.FC<EncounterScreenProps> = ({ encounter, sta
 
         {/* outcomes */}
         <div className="relative flex-1 rounded-[5px] px-3 pt-2 pb-2 overflow-hidden" style={panelStyle}>
-          <div className="flex items-center gap-2 h-[26px] text-[#ead9bb] border-b border-[#6f5136]/45 mb-2">
-            <PackageOpen className="w-4 h-4" />
+          <div className="flex items-center gap-2 h-[26px] text-[#ead9bb] border-b border-[#6f5136]/55 mb-2">
+            <RewardChestAssetIcon className="w-4 h-4" />
             <span className="font-black text-[12px] tracking-[0.06em] uppercase">Known Possible Outcomes</span>
           </div>
           <div className="grid grid-cols-3 gap-1.5 h-[calc(100%-34px)]">
             {encounter.outcomeGroups.map((group) => {
-              const headColor = group.tone === 'success' ? '#58d780' : group.tone === 'danger' ? '#ef6858' : '#e7dfca';
-              const borderColor = group.tone === 'success' ? '#4f7852' : group.tone === 'danger' ? '#7d3d35' : '#695b48';
+              const headColor = group.tone === 'success' ? '#68e290' : group.tone === 'danger' ? '#ff7260' : '#e8dec9';
+              const borderColor = group.tone === 'success' ? 'rgba(68,135,85,.75)' : group.tone === 'danger' ? 'rgba(145,60,50,.75)' : 'rgba(105,82,54,.75)';
               return (
-                <div key={group.id} className="rounded overflow-hidden" style={{ border: `1px solid ${borderColor}`, background: 'rgba(8,27,25,.72)' }}>
-                  <div className="h-[24px] flex items-center justify-center font-bold text-[10px]" style={{ color: headColor, background: 'rgba(255,255,255,.035)' }}>{group.title}</div>
-                  <div className="p-2 space-y-1.5">
+                <div
+                  key={group.id}
+                  className="rounded overflow-hidden flex flex-col"
+                  style={{
+                    borderRadius: '6px 4px 6px 5px',
+                    border: `1.5px solid ${borderColor}`,
+                    background: 'rgba(7, 20, 17, 0.88)',
+                    boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.60)',
+                  }}
+                >
+                  <div
+                    className="h-[24px] flex items-center justify-center font-bold text-[10px] tracking-wider uppercase"
+                    style={{
+                      color: headColor,
+                      background: 'rgba(0,0,0,.35)',
+                      borderBottom: `1px solid ${borderColor}`,
+                    }}
+                  >
+                    {group.title}
+                  </div>
+                  <div className="p-2 space-y-1.5 flex-1">
                     {group.items.map((item, idx) => {
                       const visible = encounter.knowledge.total >= (item.revealAtKnowledge || 0);
                       return (
@@ -282,8 +347,9 @@ export const EncounterScreen: React.FC<EncounterScreenProps> = ({ encounter, sta
 
       {/* bottom event log */}
       <section className="absolute left-0 bottom-0 w-full h-[16.4%] rounded-[5px] px-4 py-2 overflow-hidden" style={panelStyle}>
-        <div className="h-[27px] border-b border-[#6f5136]/45 flex items-center gap-2 text-[#efe3ce]">
-          <Shield className="w-4 h-4" />
+        <CornerBrackets style="bronze" size={18} inset={2} />
+        <div className="h-[27px] border-b border-[#6f5136]/55 flex items-center gap-2 text-[#efe3ce]">
+          <TacticalShieldAssetIcon className="w-4 h-4" />
           <span className="font-black text-[12px] tracking-[0.06em]">EVENT LOG</span>
           <div className="ml-auto flex items-center gap-3 text-[9px] text-[#82968c]">
             <span>AGG {Math.round(encounter.state.aggression)}</span>

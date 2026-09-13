@@ -49,23 +49,25 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   ];
 
   return (
-    <nav className="w-full bg-[#111814] border-t border-[#24332b] px-4 py-2 flex items-center justify-around z-20 shrink-0 text-[#e2d5bd]">
+    <nav className="w-full bg-[#101713] border-t border-[#2a3c30] px-4 py-2 flex items-center justify-around z-20 shrink-0 text-[#e2d5bd] shadow-[0_-4px_16px_rgba(0,0,0,0.6)]">
       {navItems.map(item => {
         const isActive = activeTab === item.id;
         return (
           <button
             key={item.id}
             onClick={() => onSelectTab(item.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all select-none relative ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded text-xs font-medium transition-all select-none relative cursor-pointer ${
               isActive
-                ? 'bg-[#1f2d24] text-emerald-300 border border-emerald-500/60 shadow-inner'
-                : 'text-[#8ea596] hover:text-[#e2d5bd] hover:bg-[#16211a]'
+                ? 'bg-gradient-to-b from-[#25392d] to-[#16241c] text-emerald-300 border border-emerald-500/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),_0_2px_4px_rgba(0,0,0,0.5)]'
+                : 'text-[#94a89a] hover:text-[#f2e7d3] hover:bg-[#18231c] border border-transparent hover:border-[#2f4236]/60'
             }`}
           >
-            {item.icon}
-            <span className="font-serif tracking-wide">{item.label}</span>
+            <span className={isActive ? 'text-emerald-400 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]' : 'text-[#8ea596]'}>
+              {item.icon}
+            </span>
+            <span className="font-serif tracking-wide text-xs">{item.label}</span>
             {item.badge !== undefined && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-[#293c30] text-[#c9dcce] font-mono">
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-[#223328] text-emerald-200 border border-emerald-800/40 font-mono">
                 {item.badge}
               </span>
             )}

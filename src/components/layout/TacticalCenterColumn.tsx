@@ -15,10 +15,15 @@ import {
   ShieldAlert,
   Thermometer,
   Clock,
+  MapPin,
+  AlertTriangle,
+  ShieldCheck,
+  ArrowUpRight,
 } from 'lucide-react';
 import { GameState, AreaDefinition, InventoryItem } from '../../types';
 import { ITEMS_DATABASE } from '../../data/items';
 import { ItemIcon } from '../common/ItemIcon';
+import { CornerBrackets } from '../common/CornerBrackets';
 import { preloadImage, preloadImages } from '../../utils/imageCache';
 import { 
   getFreshnessStage, 
@@ -37,7 +42,7 @@ interface TacticalCenterColumnProps {
   onOpenInspectLocation: () => void;
   onConsumeItem: (instanceId: string) => void;
   onDiscardItem: (instanceId: string, qty: number) => void;
-  onQuickGather: (nodeId: string) => void;
+  onQuickGather?: (nodeId: string) => void;
   onRepairItem?: (instanceId: string) => void;
   onUnloadToPoiStorage?: (areaId: string) => void;
 }
@@ -655,25 +660,29 @@ export const TacticalCenterColumn: React.FC<TacticalCenterColumnProps> = ({
 
       {/* 2. SELECTED LOCATION SECTION */}
       <div className="w-full relative" style={{ height: `${UI.sections.selectedLocationHeight}%` }}>
+        {/* Section Header: Left title + Right Inspect Action */}
         <div
           className="absolute flex items-center justify-between"
           style={pctStyle(UI.selectedLocation.header)}
         >
-          <span
-            className="uppercase"
-            style={{
-              ...softTextStyle(UI.typography.heading),
-              fontSize: UI.selectedLocation.header.fontPx,
-              fontWeight: UI.selectedLocation.header.fontWeight,
-              letterSpacing: `${UI.selectedLocation.header.letterSpacingEm}em`,
-            }}
-          >
-            SELECTED LOCATION
-          </span>
+          <div className="flex items-center gap-1.5">
+            <Compass className="w-3.5 h-3.5 text-amber-400/90" />
+            <span
+              className="uppercase"
+              style={{
+                ...softTextStyle(UI.typography.heading),
+                fontSize: UI.selectedLocation.header.fontPx,
+                fontWeight: UI.selectedLocation.header.fontWeight,
+                letterSpacing: `${UI.selectedLocation.header.letterSpacingEm}em`,
+              }}
+            >
+              SELECTED LOCATION
+            </span>
+          </div>
 
           <button
             onClick={onOpenInspectLocation}
-            className="bg-[#382618]/90 hover:bg-[#4c3422] border border-[#8c6543] text-amber-200 hover:text-white flex items-center cursor-pointer transition-colors shadow-sm"
+            className="btn-organic-amber flex items-center cursor-pointer transition-all shadow-md group active:scale-95"
             style={{
               ...softTextStyle(UI.typography.strong),
               fontSize: UI.selectedLocation.inspectButton.fontPx,
@@ -686,52 +695,48 @@ export const TacticalCenterColumn: React.FC<TacticalCenterColumnProps> = ({
               gap: UI.selectedLocation.inspectButton.gapPx,
               borderRadius: UI.selectedLocation.inspectButton.radiusPx,
             }}
+            title="Mở hồ sơ trinh sát & khảo sát chi tiết (Inspect Location)"
           >
             <Sparkles
-              className="text-amber-400"
+              className="text-amber-300 group-hover:rotate-12 transition-transform duration-200"
               style={{
                 width: UI.selectedLocation.inspectButton.iconPx,
                 height: UI.selectedLocation.inspectButton.iconPx,
               }}
             />
-            <span>Inspect</span>
+            <span>Khảo sát</span>
+            <ArrowUpRight className="w-2.5 h-2.5 text-amber-200/70 ml-0.5" />
           </button>
         </div>
 
+        {/* Tactical Location Plaque */}
         <div
-          className="absolute flex items-center overflow-hidden rounded-md border border-[#8c6543] shadow-md p-1.5 transition-all duration-300"
+          onClick={onOpenInspectLocation}
+          className="absolute flex items-stretch overflow-hidden rounded-md organic-chiseled-panel p-2 transition-all duration-200 cursor-pointer group hover:border-[#b58c54]/90"
           style={{
             ...pctStyle(UI.selectedLocation.content),
-            gap: UI.selectedLocation.content.gapPx,
-            background: 'linear-gradient(90deg, rgba(29, 45, 38, 0.94) 0%, rgba(23, 38, 32, 0.91) 52%, rgba(16, 29, 25, 0.86) 100%)',
+            gap: 10,
           }}
+          title="Bấm để xem hồ sơ trinh sát, kho bãi & bản đồ chi tiết"
         >
+          <CornerBrackets style="bronze" size={14} inset={1} />
+
+          {/* Left: Tactical POI Illustration Stamp */}
           <div
-            onClick={onOpenInspectLocation}
-            className="overflow-hidden shrink-0 bg-transparent relative group cursor-pointer transition-all duration-200 hover:border-amber-300"
+            className="overflow-hidden shrink-0 relative rounded border border-[#6b5235]/80 bg-black/40 shadow-inner group/thumb"
             style={{
-              width: `${UI.selectedLocation.thumbnail.width}%`,
+              width: '31%',
               aspectRatio: String(UI.selectedLocation.thumbnail.aspectRatio),
-              maxHeight: `${UI.selectedLocation.thumbnail.maxHeightPercent}%`,
-              borderRadius: UI.selectedLocation.thumbnail.radiusPx,
+              maxHeight: '100%',
+              alignSelf: 'center',
             }}
-            title="Bấm để xem chi tiết & ảnh phóng to"
           >
             <img
               src={selectedPoiCardUrl}
               alt={selectedArea.name}
               loading="eager"
               decoding="async"
-              className="w-full h-full object-center transition-transform duration-300"
-              style={{
-                objectFit: UI.selectedLocation.thumbnail.objectFit,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = `scale(${UI.selectedLocation.thumbnail.hoverScale})`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
+              className="w-full h-full object-cover object-center transition-transform duration-300 group-hover/thumb:scale-105"
               onError={(e) => {
                 const fallback = `${POI_CARD_UI.basePath}/${POI_CARD_UI.fallbackFile}`;
                 if (!e.currentTarget.src.endsWith(POI_CARD_UI.fallbackFile)) {
@@ -739,61 +744,99 @@ export const TacticalCenterColumn: React.FC<TacticalCenterColumnProps> = ({
                 }
               }}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center p-0.5">
-              <span className="text-[9px] text-amber-200 font-bold drop-shadow">Inspect</span>
+            {/* Vignette & Corner Framing */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
+            <div className="absolute top-1 left-1.5 flex items-center gap-1">
+              <span className="text-[8.5px] uppercase font-bold text-amber-300 tracking-wider px-1 py-0.2 rounded bg-black/75 border border-amber-500/30">
+                {selectedArea.biome}
+              </span>
+            </div>
+            <div className="absolute bottom-1 right-1 flex items-center gap-1 opacity-0 group-hover/thumb:opacity-100 transition-opacity bg-black/80 px-1 py-0.5 rounded text-[8px] text-amber-200 font-medium">
+              <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+              <span>Phóng to</span>
             </div>
           </div>
 
-          <div className="flex-1 min-w-0 flex flex-col justify-center leading-tight z-10">
-            <h4
-              className="truncate"
-              style={{
-                ...softTextStyle(UI.typography.strong),
-                fontSize: UI.selectedLocation.info.nameFontPx,
-                fontWeight: UI.selectedLocation.info.nameFontWeight,
-                letterSpacing: `${UI.selectedLocation.info.nameLetterSpacingEm}em`,
-              }}
-            >
-              {selectedArea.name}
-            </h4>
-            <p
-              className="line-clamp-2"
-              style={{
-                ...softTextStyle(UI.typography.body),
-                fontSize: UI.selectedLocation.info.descriptionFontPx,
-                fontWeight: UI.selectedLocation.info.descriptionFontWeight,
-                letterSpacing: `${UI.selectedLocation.info.descriptionLetterSpacingEm}em`,
-                marginTop: UI.selectedLocation.info.descriptionMarginTopPx,
-              }}
-            >
-              {selectedArea.description}
-            </p>
+          {/* Right: Tactical Briefing & Recon Telemetry */}
+          <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5 z-10">
+            {/* Location Title & Distance */}
+            <div>
+              <div className="flex items-center justify-between gap-1.5 mb-0.5">
+                <h4
+                  className="truncate text-[#f5ebd7] font-bold text-[14px] tracking-wide group-hover:text-amber-300 transition-colors"
+                  style={{
+                    ...softTextStyle(UI.typography.strong),
+                  }}
+                >
+                  {selectedArea.name}
+                </h4>
+                <span className="shrink-0 text-[10px] text-[#a9987f] font-mono flex items-center gap-0.5">
+                  <MapPin className="w-2.5 h-2.5 text-amber-400/80" />
+                  {selectedArea.distanceKm > 0 ? `${selectedArea.distanceKm} km` : 'Tại trại'}
+                </span>
+              </div>
 
-            {selectedArea.nodes.length > 0 && (
-              <div
-                className="flex items-center"
+              {/* Atmospheric Description */}
+              <p
+                className="line-clamp-2 text-[#b7a892] text-[10.5px] leading-[1.3] italic"
                 style={{
-                  gap: UI.selectedLocation.info.quickActionsGapPx,
-                  marginTop: UI.selectedLocation.info.quickActionsMarginTopPx,
+                  ...softTextStyle(UI.typography.body),
                 }}
               >
-                {selectedArea.nodes.slice(0, 2).map((node) => (
-                  <button
-                    key={node.id}
-                    onClick={() => onQuickGather(node.id)}
-                    className="px-1.5 py-0.5 rounded bg-[#382618]/90 hover:bg-[#4d3624] border border-[#7a5839] hover:border-amber-300 text-amber-200 hover:text-white truncate cursor-pointer transition-colors"
-                    style={{
-                      ...softTextStyle(UI.typography.strong),
-                      fontSize: UI.selectedLocation.info.quickActionFontPx,
-                      fontWeight: UI.selectedLocation.info.quickActionFontWeight,
-                    }}
-                    title={`Thu lượm: ${node.name}`}
-                  >
-                    + {node.name.split(' ')[0]}
-                  </button>
-                ))}
+                {selectedArea.description}
+              </p>
+            </div>
+
+            {/* Tactical Badges: Hazard & Resource Nodes (replacing clunky quick-gather buttons) */}
+            <div className="flex items-center gap-1.5 mt-1 pt-1 border-t border-[#4a3a25]/60 text-[9.5px]">
+              {/* Danger Level indicator */}
+              <div
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded border ${
+                  selectedArea.baseDanger > 40
+                    ? 'bg-red-950/40 border-red-800/60 text-red-300'
+                    : selectedArea.baseDanger > 15
+                    ? 'bg-amber-950/40 border-amber-800/60 text-amber-300'
+                    : 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300'
+                }`}
+              >
+                {selectedArea.baseDanger > 40 ? (
+                  <AlertTriangle className="w-2.5 h-2.5" />
+                ) : (
+                  <ShieldCheck className="w-2.5 h-2.5" />
+                )}
+                <span className="font-semibold uppercase tracking-wider text-[8.5px]">
+                  {selectedArea.baseDanger > 40
+                    ? `Nguy hiểm (${selectedArea.baseDanger}%)`
+                    : selectedArea.baseDanger > 15
+                    ? `Cảnh giác (${selectedArea.baseDanger}%)`
+                    : 'An toàn'}
+                </span>
               </div>
-            )}
+
+              {/* Resource node count */}
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/40 border border-[#52412e] text-[#c9bfae]">
+                <Leaf className="w-2.5 h-2.5 text-emerald-400" />
+                <span>
+                  {selectedArea.nodes.length > 0
+                    ? `${selectedArea.nodes.length} mỏ tài nguyên`
+                    : 'Chưa phát hiện'}
+                </span>
+              </div>
+
+              {/* Water status badge if available */}
+              {selectedArea.waterAvailability && selectedArea.waterAvailability !== 'none' && (
+                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-950/30 border border-sky-800/40 text-sky-300">
+                  <Droplet className="w-2.5 h-2.5 text-sky-400" />
+                  <span className="capitalize text-[8.5px]">
+                    {selectedArea.waterAvailability === 'fresh_stream'
+                      ? 'Nước ngọt'
+                      : selectedArea.waterAvailability === 'brackish'
+                      ? 'Nước lợ'
+                      : 'Nước đục'}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
