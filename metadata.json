@@ -1,0 +1,6 @@
+{
+  "name": "Green Horizon: Tropical Survival Colony",
+  "description": "A tactical tropical survival colony simulation focusing on exploration, camp logistics, crafting, and party management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

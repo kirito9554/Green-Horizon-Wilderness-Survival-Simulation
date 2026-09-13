@@ -1,0 +1,822 @@
+[
+  {
+    "index": 1,
+    "name": "Twig",
+    "slug": "test_twig",
+    "filename": "test_twig.png",
+    "row": 1,
+    "col": 1,
+    "path": "/iconsets/raw-materials/test_twig.png",
+    "id": "ITEM_TWIG"
+  },
+  {
+    "index": 2,
+    "name": "Dry Twig",
+    "slug": "dry_twig",
+    "filename": "dry_twig.png",
+    "row": 1,
+    "col": 2,
+    "path": "/iconsets/raw-materials/dry_twig.png",
+    "id": "ITEM_DRY_TWIG"
+  },
+  {
+    "index": 3,
+    "name": "Branch",
+    "slug": "branch",
+    "filename": "branch.png",
+    "row": 1,
+    "col": 3,
+    "path": "/iconsets/raw-materials/branch.png",
+    "id": "ITEM_BRANCH"
+  },
+  {
+    "index": 4,
+    "name": "Thick Branch",
+    "slug": "branch",
+    "filename": "branch.png",
+    "row": 1,
+    "col": 4,
+    "path": "/iconsets/raw-materials/branch.png",
+    "id": "ITEM_THICK_BRANCH"
+  },
+  {
+    "index": 5,
+    "name": "Short Wood Pole",
+    "slug": "driftwood",
+    "filename": "driftwood.png",
+    "row": 1,
+    "col": 5,
+    "path": "/iconsets/raw-materials/driftwood.png",
+    "id": "ITEM_SHORT_WOOD_POLE"
+  },
+  {
+    "index": 6,
+    "name": "Long Wood Pole",
+    "slug": "driftwood",
+    "filename": "driftwood.png",
+    "row": 1,
+    "col": 6,
+    "path": "/iconsets/raw-materials/driftwood.png",
+    "id": "ITEM_LONG_WOOD_POLE"
+  },
+  {
+    "index": 7,
+    "name": "Small Log",
+    "slug": "driftwood",
+    "filename": "driftwood.png",
+    "row": 1,
+    "col": 7,
+    "path": "/iconsets/raw-materials/driftwood.png",
+    "id": "ITEM_SMALL_LOG"
+  },
+  {
+    "index": 8,
+    "name": "Log",
+    "slug": "driftwood",
+    "filename": "driftwood.png",
+    "row": 1,
+    "col": 8,
+    "path": "/iconsets/raw-materials/driftwood.png",
+    "id": "ITEM_LOG"
+  },
+  {
+    "index": 9,
+    "name": "Hardwood Log",
+    "slug": "driftwood",
+    "filename": "driftwood.png",
+    "row": 1,
+    "col": 9,
+    "path": "/iconsets/raw-materials/driftwood.png",
+    "id": "ITEM_HARDWOOD_LOG"
+  },
+  {
+    "index": 10,
+    "name": "Driftwood",
+    "slug": "driftwood",
+    "filename": "driftwood.png",
+    "row": 1,
+    "col": 10,
+    "path": "/iconsets/raw-materials/driftwood.png",
+    "id": "ITEM_DRIFTWOOD"
+  },
+  {
+    "index": 11,
+    "name": "Bamboo Shoot",
+    "slug": "bamboo_shoot",
+    "filename": "bamboo_shoot.png",
+    "row": 2,
+    "col": 1,
+    "path": "/iconsets/raw-materials/bamboo_shoot.png",
+    "id": "ITEM_BAMBOO_SHOOT"
+  },
+  {
+    "index": 12,
+    "name": "Bamboo Pole",
+    "slug": "bamboo_pole",
+    "filename": "bamboo_pole.png",
+    "row": 2,
+    "col": 2,
+    "path": "/iconsets/raw-materials/bamboo_pole.png",
+    "id": "ITEM_BAMBOO_POLE"
+  },
+  {
+    "index": 13,
+    "name": "Thick Bamboo Pole",
+    "slug": "bamboo_pole",
+    "filename": "bamboo_pole.png",
+    "row": 2,
+    "col": 3,
+    "path": "/iconsets/raw-materials/bamboo_pole.png",
+    "id": "ITEM_THICK_BAMBOO_POLE"
+  },
+  {
+    "index": 14,
+    "name": "Split Bamboo",
+    "slug": "bamboo_strip",
+    "filename": "bamboo_strip.png",
+    "row": 2,
+    "col": 4,
+    "path": "/iconsets/raw-materials/bamboo_strip.png",
+    "id": "ITEM_SPLIT_BAMBOO"
+  },
+  {
+    "index": 15,
+    "name": "Bamboo Strip",
+    "slug": "bamboo_strip",
+    "filename": "bamboo_strip.png",
+    "row": 2,
+    "col": 5,
+    "path": "/iconsets/raw-materials/bamboo_strip.png",
+    "id": "ITEM_BAMBOO_STRIP"
+  },
+  {
+    "index": 16,
+    "name": "Tree Bark",
+    "slug": "bark_strip",
+    "filename": "bark_strip.png",
+    "row": 2,
+    "col": 6,
+    "path": "/iconsets/raw-materials/bark_strip.png",
+    "id": "ITEM_TREE_BARK"
+  },
+  {
+    "index": 17,
+    "name": "Bark Strip",
+    "slug": "bark_strip",
+    "filename": "bark_strip.png",
+    "row": 2,
+    "col": 7,
+    "path": "/iconsets/raw-materials/bark_strip.png",
+    "id": "ITEM_BARK_STRIP"
+  },
+  {
+    "index": 18,
+    "name": "Palm Leaf",
+    "slug": "broad_leaf",
+    "filename": "broad_leaf.png",
+    "row": 2,
+    "col": 8,
+    "path": "/iconsets/raw-materials/broad_leaf.png",
+    "id": "ITEM_PALM_LEAF"
+  },
+  {
+    "index": 19,
+    "name": "Large Palm Leaf",
+    "slug": "broad_leaf",
+    "filename": "broad_leaf.png",
+    "row": 2,
+    "col": 9,
+    "path": "/iconsets/raw-materials/broad_leaf.png",
+    "id": "ITEM_LARGE_PALM_LEAF"
+  },
+  {
+    "index": 20,
+    "name": "Broad Leaf",
+    "slug": "broad_leaf",
+    "filename": "broad_leaf.png",
+    "row": 2,
+    "col": 10,
+    "path": "/iconsets/raw-materials/broad_leaf.png",
+    "id": "ITEM_BROAD_LEAF"
+  },
+  {
+    "index": 21,
+    "name": "Dry Leaves",
+    "slug": "dry_leaves",
+    "filename": "dry_leaves.png",
+    "row": 3,
+    "col": 1,
+    "path": "/iconsets/raw-materials/dry_leaves.png",
+    "id": "ITEM_DRY_LEAVES"
+  },
+  {
+    "index": 22,
+    "name": "Grass Bundle",
+    "slug": "grass_bundle",
+    "filename": "grass_bundle.png",
+    "row": 3,
+    "col": 2,
+    "path": "/iconsets/raw-materials/grass_bundle.png",
+    "id": "ITEM_GRASS_BUNDLE"
+  },
+  {
+    "index": 23,
+    "name": "Dry Grass",
+    "slug": "dry_grass",
+    "filename": "dry_grass.png",
+    "row": 3,
+    "col": 3,
+    "path": "/iconsets/raw-materials/dry_grass.png",
+    "id": "ITEM_DRY_GRASS"
+  },
+  {
+    "index": 24,
+    "name": "Vine",
+    "slug": "bark_fiber",
+    "filename": "bark_fiber.png",
+    "row": 3,
+    "col": 4,
+    "path": "/iconsets/raw-materials/bark_fiber.png",
+    "id": "ITEM_VINE"
+  },
+  {
+    "index": 25,
+    "name": "Long Vine",
+    "slug": "bark_fiber",
+    "filename": "bark_fiber.png",
+    "row": 3,
+    "col": 5,
+    "path": "/iconsets/raw-materials/bark_fiber.png",
+    "id": "ITEM_LONG_VINE"
+  },
+  {
+    "index": 26,
+    "name": "Plant Fiber",
+    "slug": "bark_fiber",
+    "filename": "bark_fiber.png",
+    "row": 3,
+    "col": 6,
+    "path": "/iconsets/raw-materials/bark_fiber.png",
+    "id": "ITEM_PLANT_FIBER"
+  },
+  {
+    "index": 27,
+    "name": "Palm Fiber",
+    "slug": "bark_fiber",
+    "filename": "bark_fiber.png",
+    "row": 3,
+    "col": 7,
+    "path": "/iconsets/raw-materials/bark_fiber.png",
+    "id": "ITEM_PALM_FIBER"
+  },
+  {
+    "index": 28,
+    "name": "Bark Fiber",
+    "slug": "bark_fiber",
+    "filename": "bark_fiber.png",
+    "row": 3,
+    "col": 8,
+    "path": "/iconsets/raw-materials/bark_fiber.png",
+    "id": "ITEM_BARK_FIBER"
+  },
+  {
+    "index": 29,
+    "name": "Coconut Husk",
+    "slug": "coconut_husk",
+    "filename": "coconut_husk.png",
+    "row": 3,
+    "col": 9,
+    "path": "/iconsets/raw-materials/coconut_husk.png",
+    "id": "ITEM_COCONUT_HUSK"
+  },
+  {
+    "index": 30,
+    "name": "Coconut Shell",
+    "slug": "coconut_shell",
+    "filename": "coconut_shell.png",
+    "row": 3,
+    "col": 10,
+    "path": "/iconsets/raw-materials/coconut_shell.png",
+    "id": "ITEM_COCONUT_SHELL"
+  },
+  {
+    "index": 31,
+    "name": "Resin",
+    "slug": "clay",
+    "filename": "clay.png",
+    "row": 4,
+    "col": 1,
+    "path": "/iconsets/raw-materials/clay.png",
+    "id": "ITEM_RESIN"
+  },
+  {
+    "index": 32,
+    "name": "Tree Sap",
+    "slug": "clay",
+    "filename": "clay.png",
+    "row": 4,
+    "col": 2,
+    "path": "/iconsets/raw-materials/clay.png",
+    "id": "ITEM_TREE_SAP"
+  },
+  {
+    "index": 33,
+    "name": "Pebble",
+    "slug": "flat_stone",
+    "filename": "flat_stone.png",
+    "row": 4,
+    "col": 3,
+    "path": "/iconsets/raw-materials/flat_stone.png",
+    "id": "ITEM_PEBBLE"
+  },
+  {
+    "index": 34,
+    "name": "Small Stone",
+    "slug": "flat_stone",
+    "filename": "flat_stone.png",
+    "row": 4,
+    "col": 4,
+    "path": "/iconsets/raw-materials/flat_stone.png",
+    "id": "ITEM_SMALL_STONE"
+  },
+  {
+    "index": 35,
+    "name": "Stone",
+    "slug": "flat_stone",
+    "filename": "flat_stone.png",
+    "row": 4,
+    "col": 5,
+    "path": "/iconsets/raw-materials/flat_stone.png",
+    "id": "ITEM_STONE"
+  },
+  {
+    "index": 36,
+    "name": "Large Stone",
+    "slug": "flat_stone",
+    "filename": "flat_stone.png",
+    "row": 4,
+    "col": 6,
+    "path": "/iconsets/raw-materials/flat_stone.png",
+    "id": "ITEM_LARGE_STONE"
+  },
+  {
+    "index": 37,
+    "name": "Flat Stone",
+    "slug": "flat_stone",
+    "filename": "flat_stone.png",
+    "row": 4,
+    "col": 7,
+    "path": "/iconsets/raw-materials/flat_stone.png",
+    "id": "ITEM_FLAT_STONE"
+  },
+  {
+    "index": 38,
+    "name": "Sharp Stone",
+    "slug": "bone_shard",
+    "filename": "bone_shard.png",
+    "row": 4,
+    "col": 8,
+    "path": "/iconsets/raw-materials/bone_shard.png",
+    "id": "ITEM_SHARP_STONE"
+  },
+  {
+    "index": 39,
+    "name": "Stone Flake",
+    "slug": "bone_shard",
+    "filename": "bone_shard.png",
+    "row": 4,
+    "col": 9,
+    "path": "/iconsets/raw-materials/bone_shard.png",
+    "id": "ITEM_STONE_FLAKE"
+  },
+  {
+    "index": 40,
+    "name": "Stone Blade",
+    "slug": "bone_shard",
+    "filename": "bone_shard.png",
+    "row": 4,
+    "col": 10,
+    "path": "/iconsets/raw-materials/bone_shard.png",
+    "id": "ITEM_STONE_BLADE"
+  },
+  {
+    "index": 41,
+    "name": "Stone Axe Head",
+    "slug": "flat_stone",
+    "filename": "flat_stone.png",
+    "row": 5,
+    "col": 1,
+    "path": "/iconsets/raw-materials/flat_stone.png",
+    "id": "ITEM_STONE_AXE_HEAD"
+  },
+  {
+    "index": 42,
+    "name": "Stone Hammer Head",
+    "slug": "flat_stone",
+    "filename": "flat_stone.png",
+    "row": 5,
+    "col": 2,
+    "path": "/iconsets/raw-materials/flat_stone.png",
+    "id": "ITEM_STONE_HAMMER_HEAD"
+  },
+  {
+    "index": 43,
+    "name": "Sand",
+    "slug": "ash",
+    "filename": "ash.png",
+    "row": 5,
+    "col": 3,
+    "path": "/iconsets/raw-materials/ash.png",
+    "id": "ITEM_SAND"
+  },
+  {
+    "index": 44,
+    "name": "Wet Sand",
+    "slug": "ash",
+    "filename": "ash.png",
+    "row": 5,
+    "col": 4,
+    "path": "/iconsets/raw-materials/ash.png",
+    "id": "ITEM_WET_SAND"
+  },
+  {
+    "index": 45,
+    "name": "Clay",
+    "slug": "clay",
+    "filename": "clay.png",
+    "row": 5,
+    "col": 5,
+    "path": "/iconsets/raw-materials/clay.png",
+    "id": "ITEM_CLAY"
+  },
+  {
+    "index": 46,
+    "name": "Wet Clay",
+    "slug": "clay",
+    "filename": "clay.png",
+    "row": 5,
+    "col": 6,
+    "path": "/iconsets/raw-materials/clay.png",
+    "id": "ITEM_WET_CLAY"
+  },
+  {
+    "index": 47,
+    "name": "Charcoal",
+    "slug": "charcoal",
+    "filename": "charcoal.png",
+    "row": 5,
+    "col": 7,
+    "path": "/iconsets/raw-materials/charcoal.png",
+    "id": "ITEM_CHARCOAL"
+  },
+  {
+    "index": 48,
+    "name": "Ash",
+    "slug": "ash",
+    "filename": "ash.png",
+    "row": 5,
+    "col": 8,
+    "path": "/iconsets/raw-materials/ash.png",
+    "id": "ITEM_ASH"
+  },
+  {
+    "index": 49,
+    "name": "Small Bone",
+    "slug": "bone",
+    "filename": "bone.png",
+    "row": 5,
+    "col": 9,
+    "path": "/iconsets/raw-materials/bone.png",
+    "id": "ITEM_SMALL_BONE"
+  },
+  {
+    "index": 50,
+    "name": "Bone",
+    "slug": "bone",
+    "filename": "bone.png",
+    "row": 5,
+    "col": 10,
+    "path": "/iconsets/raw-materials/bone.png",
+    "id": "ITEM_BONE"
+  },
+  {
+    "index": 51,
+    "name": "Large Bone",
+    "slug": "bone",
+    "filename": "bone.png",
+    "row": 6,
+    "col": 1,
+    "path": "/iconsets/raw-materials/bone.png",
+    "id": "ITEM_LARGE_BONE"
+  },
+  {
+    "index": 52,
+    "name": "Bone Shard",
+    "slug": "bone_shard",
+    "filename": "bone_shard.png",
+    "row": 6,
+    "col": 2,
+    "path": "/iconsets/raw-materials/bone_shard.png",
+    "id": "ITEM_BONE_SHARD"
+  },
+  {
+    "index": 53,
+    "name": "Animal Hide",
+    "slug": "animal_hide",
+    "filename": "animal_hide.png",
+    "row": 6,
+    "col": 3,
+    "path": "/iconsets/raw-materials/animal_hide.png",
+    "id": "ITEM_ANIMAL_HIDE"
+  },
+  {
+    "index": 54,
+    "name": "Raw Hide",
+    "slug": "animal_hide",
+    "filename": "animal_hide.png",
+    "row": 6,
+    "col": 4,
+    "path": "/iconsets/raw-materials/animal_hide.png",
+    "id": "ITEM_RAW_HIDE"
+  },
+  {
+    "index": 55,
+    "name": "Tendon",
+    "slug": "feather",
+    "filename": "feather.png",
+    "row": 6,
+    "col": 5,
+    "path": "/iconsets/raw-materials/feather.png",
+    "id": "ITEM_TENDON"
+  },
+  {
+    "index": 56,
+    "name": "Sinew",
+    "slug": "feather",
+    "filename": "feather.png",
+    "row": 6,
+    "col": 6,
+    "path": "/iconsets/raw-materials/feather.png",
+    "id": "ITEM_SINEW"
+  },
+  {
+    "index": 57,
+    "name": "Feather",
+    "slug": "feather",
+    "filename": "feather.png",
+    "row": 6,
+    "col": 7,
+    "path": "/iconsets/raw-materials/feather.png",
+    "id": "ITEM_FEATHER"
+  },
+  {
+    "index": 58,
+    "name": "Shell",
+    "slug": "fish_bone",
+    "filename": "fish_bone.png",
+    "row": 6,
+    "col": 8,
+    "path": "/iconsets/raw-materials/fish_bone.png",
+    "id": "ITEM_SHELL"
+  },
+  {
+    "index": 59,
+    "name": "Large Shell",
+    "slug": "fish_bone",
+    "filename": "fish_bone.png",
+    "row": 6,
+    "col": 9,
+    "path": "/iconsets/raw-materials/fish_bone.png",
+    "id": "ITEM_LARGE_SHELL"
+  },
+  {
+    "index": 60,
+    "name": "Fish Bone",
+    "slug": "fish_bone",
+    "filename": "fish_bone.png",
+    "row": 6,
+    "col": 10,
+    "path": "/iconsets/raw-materials/fish_bone.png",
+    "id": "ITEM_FISH_BONE"
+  },
+  {
+    "index": 61,
+    "name": "Fish Guts",
+    "slug": "fish_guts",
+    "filename": "fish_guts.png",
+    "row": 7,
+    "col": 1,
+    "path": "/iconsets/raw-materials/fish_guts.png",
+    "id": "ITEM_FISH_GUTS"
+  },
+  {
+    "index": 62,
+    "name": "Animal Fat",
+    "slug": "animal_fat",
+    "filename": "animal_fat.png",
+    "row": 7,
+    "col": 2,
+    "path": "/iconsets/raw-materials/animal_fat.png",
+    "id": "ITEM_ANIMAL_FAT"
+  },
+  {
+    "index": 63,
+    "name": "Animal Guts",
+    "slug": "animal_guts",
+    "filename": "animal_guts.png",
+    "row": 7,
+    "col": 3,
+    "path": "/iconsets/raw-materials/animal_guts.png",
+    "id": "ITEM_ANIMAL_GUTS"
+  },
+  {
+    "index": 64,
+    "name": "Manure",
+    "slug": "dry_tinder",
+    "filename": "dry_tinder.png",
+    "row": 7,
+    "col": 4,
+    "path": "/iconsets/raw-materials/dry_tinder.png",
+    "id": "ITEM_MANURE"
+  },
+  {
+    "index": 65,
+    "name": "Plant Cord",
+    "slug": "fiber_rope",
+    "filename": "fiber_rope.png",
+    "row": 7,
+    "col": 5,
+    "path": "/iconsets/raw-materials/fiber_rope.png",
+    "id": "ITEM_PLANT_CORD"
+  },
+  {
+    "index": 66,
+    "name": "Fiber Rope",
+    "slug": "fiber_rope",
+    "filename": "fiber_rope.png",
+    "row": 7,
+    "col": 6,
+    "path": "/iconsets/raw-materials/fiber_rope.png",
+    "id": "ITEM_FIBER_ROPE"
+  },
+  {
+    "index": 67,
+    "name": "Vine Rope",
+    "slug": "bark_rope",
+    "filename": "bark_rope.png",
+    "row": 7,
+    "col": 7,
+    "path": "/iconsets/raw-materials/bark_rope.png",
+    "id": "ITEM_VINE_ROPE"
+  },
+  {
+    "index": 68,
+    "name": "Bark Rope",
+    "slug": "bark_rope",
+    "filename": "bark_rope.png",
+    "row": 7,
+    "col": 8,
+    "path": "/iconsets/raw-materials/bark_rope.png",
+    "id": "ITEM_BARK_ROPE"
+  },
+  {
+    "index": 69,
+    "name": "Bamboo Rope",
+    "slug": "bamboo_rope",
+    "filename": "bamboo_rope.png",
+    "row": 7,
+    "col": 9,
+    "path": "/iconsets/raw-materials/bamboo_rope.png",
+    "id": "ITEM_BAMBOO_ROPE"
+  },
+  {
+    "index": 70,
+    "name": "Wooden Stake",
+    "slug": "bamboo_handle",
+    "filename": "bamboo_handle.png",
+    "row": 7,
+    "col": 10,
+    "path": "/iconsets/raw-materials/bamboo_handle.png",
+    "id": "ITEM_WOODEN_STAKE"
+  },
+  {
+    "index": 71,
+    "name": "Sharpened Stick",
+    "slug": "bamboo_handle",
+    "filename": "bamboo_handle.png",
+    "row": 8,
+    "col": 1,
+    "path": "/iconsets/raw-materials/bamboo_handle.png",
+    "id": "ITEM_SHARPENED_STICK"
+  },
+  {
+    "index": 72,
+    "name": "Wooden Handle",
+    "slug": "bamboo_handle",
+    "filename": "bamboo_handle.png",
+    "row": 8,
+    "col": 2,
+    "path": "/iconsets/raw-materials/bamboo_handle.png",
+    "id": "ITEM_WOODEN_HANDLE"
+  },
+  {
+    "index": 73,
+    "name": "Short Handle",
+    "slug": "bamboo_handle",
+    "filename": "bamboo_handle.png",
+    "row": 8,
+    "col": 3,
+    "path": "/iconsets/raw-materials/bamboo_handle.png",
+    "id": "ITEM_SHORT_HANDLE"
+  },
+  {
+    "index": 74,
+    "name": "Long Handle",
+    "slug": "bamboo_handle",
+    "filename": "bamboo_handle.png",
+    "row": 8,
+    "col": 4,
+    "path": "/iconsets/raw-materials/bamboo_handle.png",
+    "id": "ITEM_LONG_HANDLE"
+  },
+  {
+    "index": 75,
+    "name": "Bamboo Handle",
+    "slug": "bamboo_handle",
+    "filename": "bamboo_handle.png",
+    "row": 8,
+    "col": 5,
+    "path": "/iconsets/raw-materials/bamboo_handle.png",
+    "id": "ITEM_BAMBOO_HANDLE"
+  },
+  {
+    "index": 76,
+    "name": "Wooden Plank",
+    "slug": "driftwood",
+    "filename": "driftwood.png",
+    "row": 8,
+    "col": 6,
+    "path": "/iconsets/raw-materials/driftwood.png",
+    "id": "ITEM_WOODEN_PLANK"
+  },
+  {
+    "index": 77,
+    "name": "Wooden Peg",
+    "slug": "test_twig",
+    "filename": "test_twig.png",
+    "row": 8,
+    "col": 7,
+    "path": "/iconsets/raw-materials/test_twig.png",
+    "id": "ITEM_WOODEN_PEG"
+  },
+  {
+    "index": 78,
+    "name": "Bone Needle",
+    "slug": "bone_needle",
+    "filename": "bone_needle.png",
+    "row": 8,
+    "col": 8,
+    "path": "/iconsets/raw-materials/bone_needle.png",
+    "id": "ITEM_BONE_NEEDLE"
+  },
+  {
+    "index": 79,
+    "name": "Bone Hook",
+    "slug": "bone_hook",
+    "filename": "bone_hook.png",
+    "row": 8,
+    "col": 9,
+    "path": "/iconsets/raw-materials/bone_hook.png",
+    "id": "ITEM_BONE_HOOK"
+  },
+  {
+    "index": 80,
+    "name": "Fish Hook",
+    "slug": "fish_hook",
+    "filename": "fish_hook.png",
+    "row": 8,
+    "col": 10,
+    "path": "/iconsets/raw-materials/fish_hook.png",
+    "id": "ITEM_FISH_HOOK"
+  },
+  {
+    "index": 81,
+    "name": "Tinder Bundle",
+    "slug": "dry_tinder",
+    "filename": "dry_tinder.png",
+    "row": 9,
+    "col": 1,
+    "path": "/iconsets/raw-materials/dry_tinder.png",
+    "id": "ITEM_TINDER_BUNDLE"
+  },
+  {
+    "index": 82,
+    "name": "Dry Tinder",
+    "slug": "dry_tinder",
+    "filename": "dry_tinder.png",
+    "row": 9,
+    "col": 2,
+    "path": "/iconsets/raw-materials/dry_tinder.png",
+    "id": "ITEM_DRY_TINDER"
+  }
+]
