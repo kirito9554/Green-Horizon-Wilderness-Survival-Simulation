@@ -40,6 +40,12 @@ import { SaveModal } from './components/modals/SaveModal';
 import { DevPanel } from './components/modals/DevPanel';
 import { ResetConfirmModal } from './components/modals/ResetConfirmModal';
 
+// Encounter System
+import { EncounterScreen } from './components/encounter/EncounterScreen';
+import { createLeopardEncounter } from './encounter/encounterData';
+import { resolveEncounterAction } from './encounter/encounterEngine';
+import type { EncounterInstance } from './encounter/encounterTypes';
+
 export default function App() {
   // Initialize from autosave or default initial state
   const [gameState, setGameState] = useState<GameState>(() => {
@@ -59,6 +65,52 @@ export default function App() {
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+
+  // Active Tactical Encounter state
+  const [activeEncounter, setActiveEncounter] = useState<EncounterInstance | null>(null);
+  const previousSpeedRef = useRef<number>(1);
+
+  const handleTriggerDevEncounter = () => {
+    const absoluteMinute = (gameState.gameTime.day - 1) * 1440 + gameState.gameTime.minuteOfDay;
+    const partyIds = gameState.survivors.slice(0, 4).map((s) => s.id);
+    const enc = createLeopardEncounter(absoluteMinute, partyIds);
+    if (gameState.gameTime.speed > 0) {
+      previousSpeedRef.current = gameState.gameTime.speed;
+    }
+    setGameState(prev => ({
+      ...prev,
+      gameTime: { ...prev.gameTime, speed: 0 },
+    }));
+    setActiveEncounter(enc);
+    setIsDevPanelOpen(false);
+  };
+
+  const handleEncounterAction = (actionId: string) => {
+    if (!activeEncounter) return;
+    const resolved = resolveEncounterAction(activeEncounter, gameState, actionId);
+    if (!resolved) return;
+    setActiveEncounter(resolved.encounter);
+    setGameState(resolved.gameState);
+  };
+
+  const handleExitEncounter = () => {
+    setActiveEncounter(null);
+    setGameState(prev => ({
+      ...prev,
+      gameTime: { ...prev.gameTime, speed: previousSpeedRef.current || 1 },
+    }));
+  };
+
+  // Support direct query param ?encounter=1 without full page reload
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('encounter') === '1') {
+      params.delete('encounter');
+      const newRelative = window.location.pathname + (params.toString() ? `?${params.toString()}` : '') + window.location.hash;
+      window.history.replaceState(null, '', newRelative);
+      handleTriggerDevEncounter();
+    }
+  }, []);
 
   // Keep ref to gameState for simulation tick and interval
   const stateRef = useRef(gameState);
@@ -496,7 +548,7 @@ export default function App() {
         </div>
 
         {/* 2. Left Column: Tactical World Map (Pinned precisely inside the large wooden frame) */}
-        <div className="absolute left-[1.7%] top-[10.9%] w-[54.9%] h-[86.4%] z-10 flex">
+        <div className={`absolute left-[1.7%] top-[10.9%] w-[54.9%] h-[86.4%] z-10 ${activeEncounter ? 'hidden' : 'flex'}`}>
           <TacticalWorldMap
             state={gameState}
             areas={AREAS_DATABASE}
@@ -506,7 +558,7 @@ export default function App() {
         </div>
 
         {/* 3. Middle Column: Camp, Location, Inventory (15 slots), Log (Pinned over the 4 center frames) */}
-        <div className="absolute left-[57.9%] top-[10.9%] w-[27.2%] h-[86.4%] z-10 flex">
+        <div className={`absolute left-[57.9%] top-[10.9%] w-[27.2%] h-[86.4%] z-10 ${activeEncounter ? 'hidden' : 'flex'}`}>
           <TacticalCenterColumn
             state={gameState}
             selectedArea={selectedArea}
@@ -523,6 +575,15 @@ export default function App() {
           />
         </div>
 
+        {/* Tactical Encounter Layer (Rendered smoothly over map and center column with 0 reload) */}
+        {activeEncounter && (
+          <EncounterScreen
+            encounter={activeEncounter}
+            state={gameState}
+            onChooseAction={handleEncounterAction}
+          />
+        )}
+
         {/* 4. Right Column: Party Leader & 3 Recruit Slots (Pinned over the right column frames) */}
         <div className="absolute left-[85.9%] top-[10.9%] w-[13.0%] h-[86.4%] z-10 flex">
           <TacticalPartyColumn
@@ -534,6 +595,23 @@ export default function App() {
             onRecruitSurvivor={handleRecruitSurvivor}
           />
         </div>
+
+        {/* Encounter Completion Modal Overlay */}
+        {activeEncounter?.completed && (
+          <div className="absolute inset-0 z-40 bg-black/50 flex items-center justify-center backdrop-blur-[2px]">
+            <div className="w-[420px] rounded-md border-2 border-[#8b633d] bg-[#092723]/95 p-5 text-center shadow-2xl">
+              <div className="text-[11px] uppercase tracking-[.16em] text-[#9eaf9f]">Cuộc chạm trán kết thúc</div>
+              <h2 className="text-[22px] font-black text-[#f0dfc2] mt-1">Con đường trở lại yên tĩnh</h2>
+              <p className="text-[13px] text-[#c9bea9] mt-2">{activeEncounter.completionReason || 'Mối đe dọa trước mắt đã qua đi.'}</p>
+              <button
+                onClick={handleExitEncounter}
+                className="mt-5 px-6 py-2 rounded bg-[#285b3e] border border-[#61a572] hover:bg-[#33714d] text-[#f4ead8] font-bold text-[12px] cursor-pointer transition-colors shadow-lg"
+              >
+                Trở lại bản đồ thế giới
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 3. Camp Management Modal (Buildings, Crafting, Survivor Priorities) */}
@@ -586,6 +664,7 @@ export default function App() {
         onFastForwardHours={handleDevFastForward}
         onHealAllSurvivors={handleDevHealAll}
         onChangeWeather={handleDevChangeWeather}
+        onTriggerEncounter={handleTriggerDevEncounter}
       />
 
       {/* 7. Reset Game Confirmation Modal */}

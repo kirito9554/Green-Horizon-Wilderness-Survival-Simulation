@@ -11,7 +11,7 @@ import {
   Leaf,
   Map,
   MapPin,
-  Meat,
+  Beef,
   PackageOpen,
   Shield,
   Sparkles,
@@ -54,23 +54,23 @@ const riskLabel: Record<EncounterRisk, string> = {
   extreme: 'Extreme Risk',
 };
 
-function ActionIcon({ action }: { action: EncounterActionView }) {
+const ActionIcon: React.FC<{ action: EncounterActionView }> = ({ action }) => {
   const className = 'w-7 h-7';
   switch (action.icon) {
     case 'observe': return <Binoculars className={className} />;
     case 'calm': return <Hand className={className} />;
     case 'back_away': return <Footprints className={className} />;
     case 'defend': return <Sword className={className} />;
-    case 'food': return <Meat className={className} />;
+    case 'food': return <Beef className={className} />;
     case 'leave': return <Map className={className} />;
     default: return <Target className={className} />;
   }
-}
+};
 
-function OutcomeIcon({ icon }: { icon: string }) {
+const OutcomeIcon: React.FC<{ icon: string }> = ({ icon }) => {
   const className = 'w-4 h-4 shrink-0';
   switch (icon) {
-    case 'meat': return <Meat className={`${className} text-[#e67958]`} />;
+    case 'meat': return <Beef className={`${className} text-[#e67958]`} />;
     case 'fiber': return <Leaf className={`${className} text-[#86c94d]`} />;
     case 'knowledge': return <Eye className={`${className} text-[#d6c49d]`} />;
     case 'route': return <Footprints className={`${className} text-[#cdbb8c]`} />;
@@ -82,9 +82,9 @@ function OutcomeIcon({ icon }: { icon: string }) {
     case 'xp': return <Star className={`${className} text-[#f7c64c]`} />;
     default: return <Sparkles className={className} />;
   }
-}
+};
 
-function ChanceText({ action }: { action: EncounterActionView }) {
+const ChanceText: React.FC<{ action: EncounterActionView }> = ({ action }) => {
   const color = action.chance >= 70 ? '#77efa8' : action.chance >= 50 ? '#d7dc62' : action.chance >= 35 ? '#f3bf4e' : '#ff755e';
   return (
     <div className="text-right leading-none min-w-[74px]">
@@ -92,9 +92,14 @@ function ChanceText({ action }: { action: EncounterActionView }) {
       <div className="text-[10px] font-bold mt-1" style={{ color: riskColor[action.risk] }}>{riskLabel[action.risk]}</div>
     </div>
   );
+};
+
+interface ActionCardProps {
+  action: EncounterActionView;
+  onChooseAction: (id: string) => void;
 }
 
-function ActionCard({ action, onChooseAction }: { action: EncounterActionView; onChooseAction: (id: string) => void }) {
+const ActionCard: React.FC<ActionCardProps> = ({ action, onChooseAction }) => {
   return (
     <button
       type="button"

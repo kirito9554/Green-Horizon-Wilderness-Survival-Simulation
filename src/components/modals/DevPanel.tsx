@@ -9,6 +9,7 @@ interface DevPanelProps {
   onFastForwardHours: (hours: number) => void;
   onHealAllSurvivors: () => void;
   onChangeWeather: (weather: WeatherType) => void;
+  onTriggerEncounter?: () => void;
 }
 
 export const DevPanel: React.FC<DevPanelProps> = ({
@@ -18,13 +19,18 @@ export const DevPanel: React.FC<DevPanelProps> = ({
   onFastForwardHours,
   onHealAllSurvivors,
   onChangeWeather,
+  onTriggerEncounter,
 }) => {
   if (!isOpen) return null;
 
-  const openEncounterDemo = () => {
-    const url = new URL(window.location.href);
-    url.searchParams.set('encounter', '1');
-    window.location.href = `${url.pathname}${url.search}${url.hash}`;
+  const handleTrigger = () => {
+    if (onTriggerEncounter) {
+      onTriggerEncounter();
+    } else {
+      const url = new URL(window.location.href);
+      url.searchParams.set('encounter', '1');
+      window.location.href = `${url.pathname}${url.search}${url.hash}`;
+    }
   };
 
   return (
@@ -78,8 +84,8 @@ export const DevPanel: React.FC<DevPanelProps> = ({
         <div className="pt-2 border-t border-[#25352b]">
           <span className="text-[10px] text-[#788e80] font-mono block mb-1">ENCOUNTER TEST:</span>
           <button
-            onClick={openEncounterDemo}
-            className="w-full px-2 py-1.5 bg-[#3a2516] hover:bg-[#51321c] text-amber-200 rounded border border-amber-600/50 text-[10px] flex items-center justify-center gap-1.5"
+            onClick={handleTrigger}
+            className="w-full px-2 py-1.5 bg-[#3a2516] hover:bg-[#51321c] text-amber-200 rounded border border-amber-600/50 text-[10px] flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <PawPrint className="w-3.5 h-3.5" />
             <span>Trigger Jungle Leopard</span>
