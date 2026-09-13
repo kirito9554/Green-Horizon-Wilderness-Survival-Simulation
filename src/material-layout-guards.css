@@ -1,0 +1,10 @@
+/*
+ * Material skin safety guards.
+ * The global skin makes otherwise-static controls/surfaces positioning contexts
+ * for their texture overlays. Explicit Tailwind positioning must remain exact.
+ */
+#root .static { position: static !important; }
+#root .relative { position: relative !important; }
+#root .absolute { position: absolute !important; }
+#root .fixed { position: fixed !important; }
+#root .sticky { position: sticky !important; }
