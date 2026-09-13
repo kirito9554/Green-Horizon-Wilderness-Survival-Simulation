@@ -9,7 +9,6 @@ interface DevPanelProps {
   onFastForwardHours: (hours: number) => void;
   onHealAllSurvivors: () => void;
   onChangeWeather: (weather: WeatherType) => void;
-  onStartEncounter?: () => void;
 }
 
 export const DevPanel: React.FC<DevPanelProps> = ({
@@ -19,9 +18,14 @@ export const DevPanel: React.FC<DevPanelProps> = ({
   onFastForwardHours,
   onHealAllSurvivors,
   onChangeWeather,
-  onStartEncounter,
 }) => {
   if (!isOpen) return null;
+
+  const openEncounterDemo = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('encounter', '1');
+    window.location.href = `${url.pathname}${url.search}${url.hash}`;
+  };
 
   return (
     <div className="fixed bottom-16 right-4 z-50 bg-[#16211a] border border-amber-500/60 rounded-xl p-4 w-80 text-[#e2d5bd] shadow-2xl backdrop-blur select-none">
@@ -71,18 +75,16 @@ export const DevPanel: React.FC<DevPanelProps> = ({
           </div>
         </div>
 
-        {onStartEncounter && (
-          <div className="pt-2 border-t border-[#25352b]">
-            <span className="text-[10px] text-[#788e80] font-mono block mb-1">ENCOUNTER TEST:</span>
-            <button
-              onClick={() => { onStartEncounter(); onClose(); }}
-              className="w-full px-2 py-1.5 bg-[#3a2516] hover:bg-[#51321c] text-amber-200 rounded border border-amber-600/50 text-[10px] flex items-center justify-center gap-1.5"
-            >
-              <PawPrint className="w-3.5 h-3.5" />
-              <span>Trigger Jungle Leopard</span>
-            </button>
-          </div>
-        )}
+        <div className="pt-2 border-t border-[#25352b]">
+          <span className="text-[10px] text-[#788e80] font-mono block mb-1">ENCOUNTER TEST:</span>
+          <button
+            onClick={openEncounterDemo}
+            className="w-full px-2 py-1.5 bg-[#3a2516] hover:bg-[#51321c] text-amber-200 rounded border border-amber-600/50 text-[10px] flex items-center justify-center gap-1.5"
+          >
+            <PawPrint className="w-3.5 h-3.5" />
+            <span>Trigger Jungle Leopard</span>
+          </button>
+        </div>
       </div>
     </div>
   );
