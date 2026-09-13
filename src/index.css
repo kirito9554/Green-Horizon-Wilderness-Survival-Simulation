@@ -100,3 +100,52 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #523e2a;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Sunken / Recessed Camp Panels (Carved cavity, no protruding border)        */
+/* -------------------------------------------------------------------------- */
+.camp-sunken-panel {
+  position: relative;
+  background: linear-gradient(180deg, rgba(2, 14, 12, 0.88) 0%, rgba(3, 20, 18, 0.94) 100%);
+  border-top: 1px solid rgba(0, 0, 0, 0.85);
+  border-left: 1px solid rgba(0, 0, 0, 0.70);
+  border-right: 1px solid rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+  box-shadow: 
+    inset 0 6px 16px rgba(0, 0, 0, 0.82),
+    inset 0 1px 3px rgba(0, 0, 0, 0.92),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.025),
+    0 1px 0 rgba(255, 255, 255, 0.015);
+  border-radius: 8px;
+}
+
+.camp-sunken-panel-soft {
+  position: relative;
+  background: linear-gradient(180deg, rgba(2, 16, 14, 0.75) 0%, rgba(3, 22, 19, 0.85) 100%);
+  border-top: 1px solid rgba(0, 0, 0, 0.80);
+  border-left: 1px solid rgba(0, 0, 0, 0.65);
+  border-right: 1px solid rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: 
+    inset 0 4px 12px rgba(0, 0, 0, 0.70),
+    inset 0 1px 2px rgba(0, 0, 0, 0.85),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.025);
+  border-radius: 8px;
+}
+
+.camp-sunken-slot {
+  background: rgba(1, 9, 8, 0.82);
+  border-top: 1px solid rgba(0, 0, 0, 0.92);
+  border-left: 1px solid rgba(0, 0, 0, 0.82);
+  border-right: 1px solid rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: 
+    inset 0 3px 8px rgba(0, 0, 0, 0.90),
+    inset 0 1px 2px rgba(0, 0, 0, 0.95);
+  border-radius: 6px;
+}
+
+.camp-groove-divider {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.65);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.035);
+}

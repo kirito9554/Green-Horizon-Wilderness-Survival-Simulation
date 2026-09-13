@@ -78,9 +78,9 @@ export const SurvivorView: React.FC<SurvivorViewProps> = ({
   const selectedSurvivorForPortrait = survivors.find(s => s.id === pickingPortraitForSurvivorId);
 
   return (
-    <div className="flex-1 flex flex-col p-4 gap-4 overflow-y-auto bg-[#0d1410] text-[#e2d5bd]">
+    <div className="flex-1 flex flex-col p-3.5 gap-3.5 overflow-y-auto text-[#e2d5bd]">
       {/* 1. Header & Rations Policies */}
-      <div className="bg-[#141d18] border border-[#27382d] rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+      <div className="camp-sunken-panel-soft p-3.5 flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5 text-emerald-400" />
@@ -106,13 +106,13 @@ export const SurvivorView: React.FC<SurvivorViewProps> = ({
             </button>
           )}
 
-          <div className="flex items-center gap-3 bg-[#18231d] px-3.5 py-2 rounded-lg border border-[#27382d]">
+          <div className="flex items-center gap-3 camp-sunken-slot px-3.5 py-2 rounded-lg">
             <div>
               <span className="text-[#8ea596] block text-xs font-semibold">Chính sách ăn:</span>
               <select
                 value={settings.foodPolicy}
                 onChange={(e) => onUpdatePolicy('foodPolicy', e.target.value as any)}
-                className="bg-[#131b16] text-xs md:text-sm text-[#f2e7d3] font-medium rounded-md px-2.5 py-1.5 border border-[#2d3f32] mt-1 focus:outline-none cursor-pointer"
+                className="camp-sunken-panel text-xs md:text-sm text-[#f2e7d3] font-medium rounded-md px-2.5 py-1.5 mt-1 focus:outline-none cursor-pointer"
               >
                 <option value="ration">Tiết kiệm (Ration)</option>
                 <option value="normal">Bình thường (Normal)</option>
@@ -125,7 +125,7 @@ export const SurvivorView: React.FC<SurvivorViewProps> = ({
               <select
                 value={settings.waterPolicy}
                 onChange={(e) => onUpdatePolicy('waterPolicy', e.target.value as any)}
-                className="bg-[#131b16] text-xs md:text-sm text-[#f2e7d3] font-medium rounded-md px-2.5 py-1.5 border border-[#2d3f32] mt-1 focus:outline-none cursor-pointer"
+                className="camp-sunken-panel text-xs md:text-sm text-[#f2e7d3] font-medium rounded-md px-2.5 py-1.5 mt-1 focus:outline-none cursor-pointer"
               >
                 <option value="ration">Tiết kiệm (Ration)</option>
                 <option value="normal">Bình thường (Normal)</option>
@@ -137,11 +137,11 @@ export const SurvivorView: React.FC<SurvivorViewProps> = ({
       </div>
 
       {/* 2. Job Priority Matrix Table */}
-      <div className="bg-[#141d18] border border-[#27382d] rounded-xl overflow-hidden shadow-md">
+      <div className="camp-sunken-panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-[#18231d] text-[#8ea596] border-b border-[#25362c]">
+              <tr className="camp-groove-divider text-[#8ea596]">
                 <th className="p-3.5 font-bold text-sm text-[#f0e6d2]">Nhân sự (Bấm ảnh đổi chân dung)</th>
                 {jobList.map(job => (
                   <th key={job.id} className="p-3 font-bold text-center text-xs md:text-sm text-[#c6d7cd] whitespace-nowrap">
@@ -150,7 +150,7 @@ export const SurvivorView: React.FC<SurvivorViewProps> = ({
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#223128]">
+            <tbody className="divide-y divide-[#1e3428]/40">
               {survivors.map(survivor => (
                 <tr key={survivor.id} className="hover:bg-[#18231d]/60 transition-colors">
                   <td className="p-3.5">
@@ -207,11 +207,11 @@ export const SurvivorView: React.FC<SurvivorViewProps> = ({
         {survivors.map(survivor => (
           <div
             key={survivor.id}
-            className="bg-[#18231d] border border-[#27382d] rounded-xl p-4 flex flex-col justify-between gap-3.5 shadow"
+            className="camp-sunken-panel p-4 flex flex-col justify-between gap-3.5"
           >
             <div>
               {/* Header: Portrait & Identity */}
-              <div className="flex items-start gap-3.5 mb-3.5">
+              <div className="flex items-start gap-3.5 mb-3.5 pb-2.5 camp-groove-divider">
                 <div 
                   onClick={() => setPickingPortraitForSurvivorId(survivor.id)}
                   className="cursor-pointer group relative shrink-0"
@@ -232,7 +232,7 @@ export const SurvivorView: React.FC<SurvivorViewProps> = ({
                   <p className="text-xs text-[#8ea596] truncate mb-1.5">{survivor.role}</p>
                   
                   {/* Mini rounded vitals */}
-                  <div className="grid grid-cols-2 gap-1.5 text-xs font-mono font-semibold">
+                  <div className="grid grid-cols-2 gap-1.5 text-xs font-mono font-semibold camp-sunken-slot p-2 rounded">
                     <div className="flex items-center gap-1 text-red-300">
                       <Heart className="w-3.5 h-3.5 text-red-400 shrink-0" />
                       <span>{Math.round(survivor.health)}%</span>
@@ -262,7 +262,7 @@ export const SurvivorView: React.FC<SurvivorViewProps> = ({
                   {survivor.traits.map(trait => (
                     <span
                       key={trait}
-                      className="px-2.5 py-1 rounded-md text-xs bg-[#1d2b22] text-emerald-300 border border-[#2c3d31] flex items-center gap-1.5 font-medium"
+                      className="px-2.5 py-1 rounded-md text-xs camp-sunken-slot text-emerald-300 flex items-center gap-1.5 font-medium"
                     >
                       <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
                       <span>{trait}</span>
@@ -285,7 +285,7 @@ export const SurvivorView: React.FC<SurvivorViewProps> = ({
                           <span>{skillName}</span>
                           <span className="font-mono text-amber-300 font-bold">Cấp {Math.round(level)}</span>
                         </div>
-                        <div className="w-full bg-[#121914] h-2 rounded-full overflow-hidden border border-[#25352b]">
+                        <div className="w-full camp-sunken-slot h-2 rounded-full overflow-hidden">
                           <div
                             className="bg-emerald-500 h-full rounded-full"
                             style={{ width: `${Math.min(100, Math.max(15, (level / 5) * 100))}%` }}
