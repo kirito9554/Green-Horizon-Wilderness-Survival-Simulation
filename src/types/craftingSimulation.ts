@@ -59,7 +59,12 @@ export interface MaterialReservationSource {
   areaId?: string;
 }
 
-export type MaterialReservationOwnerType = 'crafting' | 'repair' | 'upgrade' | 'research';
+export type MaterialReservationOwnerType =
+  | 'crafting'
+  | 'repair'
+  | 'upgrade'
+  | 'research'
+  | 'construction';
 
 /**
  * A reservation never removes an item from inventory. It marks an exact slice
