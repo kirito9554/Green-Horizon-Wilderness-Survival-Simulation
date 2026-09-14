@@ -32,17 +32,20 @@ export const CraftingDetailCard: React.FC<CraftingDetailCardProps> = ({
 
   const ingredientStatus = useMemo(
     () => recipe.ingredients.map((ing) => {
-      const owned = inventoryItems
-        .filter((item) => item.itemId === ing.itemId)
-        .reduce((sum, item) => sum + item.quantity, 0);
+      const matching = inventoryItems.filter((item) => item.itemId === ing.itemId);
+      const totalOwned = matching.reduce((sum, item) => sum + item.quantity, 0);
+      const reserved = matching.reduce((sum, item) => sum + Math.min(item.quantity, item.reservedQuantity || 0), 0);
+      const available = Math.max(0, totalOwned - reserved);
       const required = ing.quantity * quantity;
       const itemDef = ITEMS_DATABASE[ing.itemId];
       return {
         itemId: ing.itemId,
         name: itemDef?.name || ing.itemId.replace('ITEM_', '').replace(/_/g, ' '),
-        owned,
+        owned: available,
+        totalOwned,
+        reserved,
         required,
-        sufficient: owned >= required,
+        sufficient: available >= required,
         clue: recipe.ingredientClues?.[ing.itemId] || 'Gathered while exploring the island',
       };
     }),
@@ -54,10 +57,10 @@ export const CraftingDetailCard: React.FC<CraftingDetailCardProps> = ({
     0,
     Math.min(
       ...recipe.ingredients.map((ing) => {
-        const owned = inventoryItems
+        const available = inventoryItems
           .filter((item) => item.itemId === ing.itemId)
-          .reduce((sum, item) => sum + item.quantity, 0);
-        return Math.floor(owned / ing.quantity);
+          .reduce((sum, item) => sum + Math.max(0, item.quantity - (item.reservedQuantity || 0)), 0);
+        return Math.floor(available / ing.quantity);
       })
     )
   );
@@ -71,12 +74,7 @@ export const CraftingDetailCard: React.FC<CraftingDetailCardProps> = ({
       <div className="shrink-0 p-3 border-b border-[#34493a]">
         <div className="flex gap-3">
           <div className="w-[92px] h-[92px] shrink-0 rounded-[5px] border border-[#49624e] bg-[#091510] flex items-center justify-center">
-            <CraftedItemArt
-              itemId={recipe.outputs[0]?.itemId || ''}
-              recipeId={recipe.id}
-              size={82}
-              className="drop-shadow-[0_5px_8px_rgba(0,0,0,.8)]"
-            />
+            <CraftedItemArt itemId={recipe.outputs[0]?.itemId || ''} recipeId={recipe.id} size={82} className="drop-shadow-[0_5px_8px_rgba(0,0,0,.8)]" />
           </div>
 
           <div className="min-w-0 flex-1">
@@ -88,12 +86,7 @@ export const CraftingDetailCard: React.FC<CraftingDetailCardProps> = ({
                   <span className="px-2 py-0.5 rounded bg-[#473712] border border-[#816426] text-[10px] font-bold text-[#f0d583]">{recipe.tier || 'Primitive'}</span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => onTogglePin(recipe.id)}
-                className={`p-1.5 rounded cursor-pointer ${isPinned ? 'text-[#f2ca4e]' : 'text-[#8d8e79] hover:text-[#dfcf95]'}`}
-                title={isPinned ? 'Unpin recipe' : 'Pin recipe'}
-              >
+              <button type="button" onClick={() => onTogglePin(recipe.id)} className={`p-1.5 rounded cursor-pointer ${isPinned ? 'text-[#f2ca4e]' : 'text-[#8d8e79] hover:text-[#dfcf95]'}`} title={isPinned ? 'Unpin recipe' : 'Pin recipe'}>
                 <Bookmark className={`w-5 h-5 ${isPinned ? 'fill-current' : ''}`} />
               </button>
             </div>
@@ -104,7 +97,7 @@ export const CraftingDetailCard: React.FC<CraftingDetailCardProps> = ({
         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 pt-2.5 border-t border-[#32483a] text-[11px]">
           <div className="flex items-center justify-between gap-2"><span className="text-[#9aa393] flex items-center gap-1"><Shield className="w-3.5 h-3.5" />Durability</span><strong className="text-[#e9d77f]">{recipe.durabilityLevel || 'Medium'}</strong></div>
           <div className="flex items-center justify-between gap-2"><span className="text-[#9aa393] flex items-center gap-1"><Weight className="w-3.5 h-3.5" />Weight</span><strong className="text-[#e8e1d3]">{recipe.weightKg || 0.5} kg</strong></div>
-          <div className="flex items-center justify-between gap-2"><span className="text-[#9aa393] flex items-center gap-1"><Clock3 className="w-3.5 h-3.5" />Craft Time</span><strong className="text-[#e8e1d3]">{totalCraftTime}s</strong></div>
+          <div className="flex items-center justify-between gap-2"><span className="text-[#9aa393] flex items-center gap-1"><Clock3 className="w-3.5 h-3.5" />Base Time</span><strong className="text-[#e8e1d3]">{totalCraftTime}s</strong></div>
           <div className="flex items-center justify-between gap-2"><span className="text-[#9aa393] flex items-center gap-1"><Layers className="w-3.5 h-3.5" />Workstation</span><strong className="text-[#e8e1d3] truncate">{workstation}</strong></div>
         </div>
       </div>
@@ -112,7 +105,7 @@ export const CraftingDetailCard: React.FC<CraftingDetailCardProps> = ({
       <div className="min-h-0 flex-1 flex flex-col p-3">
         <div className="shrink-0 flex items-center justify-between text-[12px] font-black tracking-wide text-[#f0e8d6] uppercase">
           <span>Required Materials</span>
-          <span className="text-[10px] font-medium text-[#a8aa96] normal-case">Have / Need</span>
+          <span className="text-[10px] font-medium text-[#a8aa96] normal-case">Available / Need</span>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar mt-2 space-y-1.5 pr-1">
@@ -123,7 +116,9 @@ export const CraftingDetailCard: React.FC<CraftingDetailCardProps> = ({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[11px] font-bold text-[#ede8dc] truncate">{ing.name}</div>
-                <div className="text-[9.5px] text-[#7d8b7e] truncate">{ing.clue}</div>
+                <div className="text-[9.5px] text-[#7d8b7e] truncate">
+                  {ing.reserved > 0 ? `${ing.reserved} reserved by queued work · ` : ''}{ing.clue}
+                </div>
               </div>
               <div className={`shrink-0 font-mono text-[12px] font-black ${ing.sufficient ? 'text-[#8be06b]' : 'text-[#ef7564]'}`}>
                 {ing.owned} / {ing.required}
@@ -136,15 +131,9 @@ export const CraftingDetailCard: React.FC<CraftingDetailCardProps> = ({
           <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
             <label className="h-8 flex items-center gap-1.5 px-2 border border-[#314a3a] bg-[#081713] rounded-[4px] min-w-0">
               <UserCheck className="w-3.5 h-3.5 text-[#82c9a3] shrink-0" />
-              <select
-                value={selectedSurvivorId}
-                onChange={(e) => onSelectSurvivor(e.target.value)}
-                className="min-w-0 flex-1 bg-transparent outline-none text-[10.5px] text-[#dcd7c8] cursor-pointer"
-              >
+              <select value={selectedSurvivorId} onChange={(e) => onSelectSurvivor(e.target.value)} className="min-w-0 flex-1 bg-transparent outline-none text-[10.5px] text-[#dcd7c8] cursor-pointer">
                 {survivors.map((s) => (
-                  <option key={s.id} value={s.id} className="bg-[#0a1a15]">
-                    {s.name} — {s.currentAction.type === 'idle' ? 'Idle' : 'Busy'}
-                  </option>
+                  <option key={s.id} value={s.id} className="bg-[#0a1a15]">{s.name} — {s.currentAction.type === 'idle' ? 'Idle' : 'Busy'}</option>
                 ))}
               </select>
             </label>
@@ -152,7 +141,7 @@ export const CraftingDetailCard: React.FC<CraftingDetailCardProps> = ({
             <div className="h-8 flex items-center border border-[#314a3a] bg-[#081713] rounded-[4px] overflow-hidden">
               <button type="button" onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="h-full w-7 flex items-center justify-center text-[#a9ac98] hover:text-white cursor-pointer"><Minus className="w-3.5 h-3.5" /></button>
               <span className="w-7 text-center text-[11px] font-bold text-[#eed36d]">{quantity}</span>
-              <button type="button" onClick={() => setQuantity((q) => Math.min(Math.max(1, maxCraftable || 1), q + 1))} className="h-full w-7 flex items-center justify-center text-[#a9ac98] hover:text-white cursor-pointer"><Plus className="w-3.5 h-3.5" /></button>
+              <button type="button" onClick={() => setQuantity((q) => Math.min(20, q + 1))} className="h-full w-7 flex items-center justify-center text-[#a9ac98] hover:text-white cursor-pointer"><Plus className="w-3.5 h-3.5" /></button>
             </div>
           </div>
 
@@ -162,14 +151,15 @@ export const CraftingDetailCard: React.FC<CraftingDetailCardProps> = ({
               disabled={!canAfford || survivorBusy}
               onClick={() => onCraftNow(recipe.id, quantity, selectedSurvivorId)}
               className="h-11 rounded-[5px] border border-[#d8d54c] bg-gradient-to-b from-[#466326] to-[#244719] text-[#fffbdc] font-black text-[14px] flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(208,211,69,.2)] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              title={canAfford ? 'Reserve materials and start through the crafting scheduler' : 'Not enough unreserved materials for immediate crafting'}
             >
               <Hammer className="w-4 h-4" /> Craft
             </button>
             <button
               type="button"
-              disabled={!canAfford}
               onClick={() => onAddToQueue(recipe.id, quantity, selectedSurvivorId)}
-              className="h-11 rounded-[5px] border border-[#4a6554] bg-[#0d2923] text-[#e4dfd0] font-bold text-[12px] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer hover:bg-[#13342c]"
+              className="h-11 rounded-[5px] border border-[#4a6554] bg-[#0d2923] text-[#e4dfd0] font-bold text-[12px] cursor-pointer hover:bg-[#13342c]"
+              title={maxCraftable > 0 ? 'Reserve available materials for planned production' : 'Plan this job; it will wait for missing materials'}
             >
               Add to Queue
             </button>
