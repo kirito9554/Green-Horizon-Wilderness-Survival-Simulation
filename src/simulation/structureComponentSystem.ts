@@ -6,6 +6,7 @@ import type {
   StructureDerivedPerformance,
 } from '../types/structureSimulation';
 import '../types/structureSimulation';
+import { STRUCTURE_MODIFICATIONS } from '../data/structureModifications';
 import { getPoiBuildGridView } from './buildGridSystem';
 
 const QUALITY_SCORE: Record<ItemQuality, number> = {
@@ -94,18 +95,46 @@ function createComponent(
   };
 }
 
+function summedModificationEffects(building: GameState['buildings'][number]) {
+  const total = {
+    moistureResistance: 0,
+    floodProtection: 0,
+    windProtection: 0,
+    functionality: 0,
+    fireSafety: 0,
+  };
+  for (const record of building.structureModifications || []) {
+    const effects = STRUCTURE_MODIFICATIONS[record.modificationId]?.effects;
+    if (!effects) continue;
+    total.moistureResistance += effects.moistureResistance || 0;
+    total.floodProtection += effects.floodProtection || 0;
+    total.windProtection += effects.windProtection || 0;
+    total.functionality += effects.functionality || 0;
+    total.fireSafety += effects.fireSafety || 0;
+  }
+  return total;
+}
+
 function placementEnvironment(state: GameState, building: GameState['buildings'][number]) {
   const areaId = building.areaId || 'AREA_CAMP_CLEARING';
   const grid = getPoiBuildGridView(state, areaId);
   const cellIds = new Set((building.placement || []).map(allocation => allocation.cellId));
   const cells = grid.cells.filter(cell => cellIds.has(cell.id));
   const used = cells.length ? cells : grid.cells.slice(0, 1);
+  const modifications = summedModificationEffects(building);
+  const rawMoisture = average(used.map(cell => cell.moisture), 55);
+  const rawFloodRisk = average(used.map(cell => cell.floodRisk), 30);
+  const rawWindExposure = average(used.map(cell => cell.windExposure), 45);
+  const rawDrainage = average(used.map(cell => cell.drainage), 50);
+  const rawFireRisk = average(used.map(cell => cell.fireRisk), 40);
+
   return {
-    moisture: average(used.map(cell => cell.moisture), 55),
-    floodRisk: average(used.map(cell => cell.floodRisk), 30),
-    windExposure: average(used.map(cell => cell.windExposure), 45),
-    fireRisk: average(used.map(cell => cell.fireRisk), 40),
-    drainage: average(used.map(cell => cell.drainage), 50),
+    moisture: clamp(rawMoisture - modifications.moistureResistance * 0.45 - modifications.floodProtection * 0.12),
+    floodRisk: clamp(rawFloodRisk - modifications.floodProtection),
+    windExposure: clamp(rawWindExposure - modifications.windProtection),
+    fireRisk: clamp(rawFireRisk - modifications.fireSafety),
+    drainage: clamp(rawDrainage + modifications.floodProtection * 0.65),
+    modificationEffects: modifications,
   };
 }
 
@@ -129,7 +158,7 @@ export function deriveStructurePerformance(
     component.conditionMax > 0 ? clamp(component.condition / component.conditionMax * 100) : 0;
   const structural = components.filter(component => ['foundation', 'frame', 'bindings', 'hearth'].includes(component.kind));
   const roof = components.filter(component => component.kind === 'roof');
-  const functional = components.filter(component => ['surface', 'fixture', 'hearth', 'roof'].includes(component.kind));
+  const functional = components.filter(component => ['surface', 'fixture', 'hearth', 'roof', 'drainage'].includes(component.kind));
   const environment = placementEnvironment(state, building);
   const fireDamage = average(components.map(component => component.fireDamage), 0);
   const rot = average(components.map(component => component.rot), 0);
@@ -137,13 +166,17 @@ export function deriveStructurePerformance(
   return {
     structuralIntegrity: Math.round(average((structural.length ? structural : components).map(ratio), 100)),
     weatherProtection: Math.round(clamp(
-      average((roof.length ? roof : components).map(ratio), 100) * 0.72 +
-      (100 - average((roof.length ? roof : components).map(component => component.moisture), 0)) * 0.18 +
-      environment.drainage * 0.10,
+      average((roof.length ? roof : components).map(ratio), 100) * 0.68 +
+      (100 - average((roof.length ? roof : components).map(component => component.moisture), 0)) * 0.16 +
+      environment.drainage * 0.10 +
+      environment.modificationEffects.moistureResistance * 0.06,
     )),
     fireSafety: Math.round(clamp(100 - environment.fireRisk * 0.55 - fireDamage * 0.45)),
-    functionality: Math.round(average((functional.length ? functional : components).map(ratio), 100)),
-    cleanliness: Math.round(clamp(92 - rot * 0.42 - environment.moisture * 0.08)),
+    functionality: Math.round(clamp(
+      average((functional.length ? functional : components).map(ratio), 100) +
+      environment.modificationEffects.functionality * 0.35,
+    )),
+    cleanliness: Math.round(clamp(92 - rot * 0.42 - environment.moisture * 0.08 + environment.modificationEffects.floodProtection * 0.08)),
   };
 }
 
@@ -199,6 +232,8 @@ function organicFraction(component: StructureComponentInstance): number {
 /**
  * Deterministic slow environmental wear. No hidden RNG is used; identical
  * structure/environment histories therefore produce identical degradation.
+ * Physical modifications change the effective local exposure rather than
+ * adding arbitrary RPG percentages after damage is calculated.
  */
 export function tickStructureEnvironment(state: GameState, deltaGameMinutes: number): void {
   if (deltaGameMinutes <= 0) return;
