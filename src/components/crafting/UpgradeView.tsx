@@ -1,143 +1,260 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowUpCircle, Search, CheckCircle2, Clock3, Trash2, History, Package, TrendingUp, ArrowRight } from 'lucide-react';
 import {
-  TieredUpgradeItem,
-  UpgradeCategoryFilter,
-  UpgradeQueueItem,
-  UpgradeHistoryItem,
-} from '../../types/crafting';
-import {
-  INITIAL_TIERED_UPGRADE_ITEMS,
-  INITIAL_UPGRADE_QUEUE_ITEMS,
-  INITIAL_UPGRADE_HISTORY_ITEMS,
-} from '../../data/upgradeData';
+  ArrowRight,
+  ArrowUpCircle,
+  Clock3,
+  Gauge,
+  Hammer,
+  Pause,
+  Play,
+  Search,
+  Shield,
+  Sparkles,
+  Trash2,
+  Wrench,
+} from 'lucide-react';
+import type { GameState } from '../../types';
+import type { ComponentModification } from '../../types/upgradeSimulation';
+import { ITEMS_DATABASE } from '../../data/items';
+import { RECIPES_DATABASE } from '../../data/recipes';
+import { deriveToolStats, getNextTierRecipeForItem } from '../../simulation/upgradeSystem';
 import { CraftedItemArt } from './CraftedItemArt';
 
-const CATEGORIES: Array<{ id: UpgradeCategoryFilter; label: string }> = [
-  { id: 'all', label: 'All' },
-  { id: 'tools', label: 'Tools' },
-  { id: 'weapons', label: 'Weapons' },
-  { id: 'equipment', label: 'Equipment' },
-  { id: 'utility', label: 'Structures' },
-];
+interface UpgradeViewProps {
+  state: GameState;
+  onQueueTierUpgrade?: (instanceId: string, survivorId?: string) => void;
+  onQueueComponentModification?: (
+    instanceId: string,
+    modification: ComponentModification,
+    componentInstanceId?: string,
+    survivorId?: string,
+  ) => void;
+  onCancelUpgrade?: (jobId: string) => void;
+  onTogglePauseUpgrade?: (jobId: string) => void;
+}
 
-const formatSeconds = (seconds: number) => {
-  const sec = Math.max(0, Math.floor(seconds));
-  const minutes = Math.floor(sec / 60);
-  return `00:${String(minutes).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
-};
+function pct(value: number, max: number): number {
+  return max > 0 ? Math.max(0, Math.min(100, value / max * 100)) : 0;
+}
 
-export const UpgradeView: React.FC = () => {
-  const [items] = useState<TieredUpgradeItem[]>(INITIAL_TIERED_UPGRADE_ITEMS);
-  const [selectedItemId, setSelectedItemId] = useState('upg_stone_knife');
-  const [categoryFilter, setCategoryFilter] = useState<UpgradeCategoryFilter>('all');
+function formatSeconds(seconds: number): string {
+  const value = Math.max(0, Math.floor(seconds));
+  const mins = Math.floor(value / 60);
+  const secs = value % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function ageText(currentMinute: number, eventMinute: number): string {
+  const elapsed = Math.max(0, currentMinute - eventMinute);
+  if (elapsed < 60) return `${Math.max(1, Math.round(elapsed))}m ago`;
+  if (elapsed < 1440) return `${Math.round(elapsed / 60)}h ago`;
+  return `${Math.round(elapsed / 1440)}d ago`;
+}
+
+export const UpgradeView: React.FC<UpgradeViewProps> = ({
+  state,
+  onQueueTierUpgrade,
+  onQueueComponentModification,
+  onCancelUpgrade,
+  onTogglePauseUpgrade,
+}) => {
+  const [selectedInstanceId, setSelectedInstanceId] = useState('');
+  const [selectedComponentId, setSelectedComponentId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [queue, setQueue] = useState<UpgradeQueueItem[]>(INITIAL_UPGRADE_QUEUE_ITEMS);
-  const [history, setHistory] = useState<UpgradeHistoryItem[]>(INITIAL_UPGRADE_HISTORY_ITEMS);
+  const [modification, setModification] = useState<ComponentModification>('sharpen');
 
-  const activeItem = items.find((item) => item.id === selectedItemId) || items[0];
-  const filteredItems = useMemo(() => items.filter((item) => {
-    if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-    return item.name.toLowerCase().includes(query) || item.tags.some((tag) => tag.toLowerCase().includes(query));
-  }), [items, categoryFilter, searchQuery]);
+  const tools = useMemo(
+    () => state.inventory.items.filter(item => {
+      const def = ITEMS_DATABASE[item.itemId];
+      return Boolean(def && (def.category === 'tool' || def.toolProperties));
+    }),
+    [state.inventory.items],
+  );
+
+  const filtered = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return tools;
+    return tools.filter(item => {
+      const def = ITEMS_DATABASE[item.itemId];
+      return def?.name.toLowerCase().includes(query)
+        || def?.tags.some(tag => tag.toLowerCase().includes(query));
+    });
+  }, [tools, searchQuery]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setQueue((previous) => {
-        if (previous.length === 0) return previous;
-        const next = previous.map((item, index) => index === 0 && item.remainingSeconds > 0 ? { ...item, remainingSeconds: item.remainingSeconds - 1 } : item);
-        if (next[0] && next[0].remainingSeconds <= 0) {
-          const completed = next[0];
-          setHistory((entries) => [{ id: `uh_${Date.now()}`, fromName: completed.name, toName: `${completed.name} ${completed.targetTierLabel}`, timeAgo: 'Just now' }, ...entries.slice(0, 4)]);
-          return next.slice(1);
-        }
-        return next;
-      });
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, []);
+    if (!selectedInstanceId || !tools.some(item => item.instanceId === selectedInstanceId)) {
+      if (tools[0]) setSelectedInstanceId(tools[0].instanceId);
+    }
+  }, [tools, selectedInstanceId]);
 
-  const startUpgrade = () => {
-    if (!activeItem || activeItem.currentTier >= activeItem.maxTier || queue.length >= 3 || queue.some((item) => item.itemId === activeItem.id)) return;
-    const nextStep = activeItem.tierSteps.find((step) => step.tier === activeItem.currentTier + 1);
-    setQueue((previous) => [...previous, {
-      id: `uq_${Date.now()}`,
-      itemId: activeItem.id,
-      name: activeItem.name,
-      targetTierLabel: nextStep?.tierLabel || `Tier ${activeItem.currentTier + 1}`,
-      remainingSeconds: 300,
-      totalSeconds: 300,
-      status: 'in_progress',
-    }]);
+  const activeItem = tools.find(item => item.instanceId === selectedInstanceId) || tools[0];
+  const activeDef = activeItem ? ITEMS_DATABASE[activeItem.itemId] : undefined;
+  const components = activeItem?.components || [];
+
+  useEffect(() => {
+    if (!activeItem) return;
+    if (!selectedComponentId || !components.some(component => component.instanceId === selectedComponentId)) {
+      const preferred = components.find(component => component.properties.edgeSharpness !== undefined) || components[0];
+      if (preferred) setSelectedComponentId(preferred.instanceId);
+    }
+  }, [activeItem?.instanceId, components, selectedComponentId]);
+
+  const activeComponent = components.find(component => component.instanceId === selectedComponentId) || components[0];
+  const stats = activeItem ? deriveToolStats(activeItem) : null;
+  const nextRecipe = activeItem ? getNextTierRecipeForItem(activeItem.itemId) : undefined;
+  const nextItemId = nextRecipe?.outputs[0]?.itemId;
+  const nextDef = nextItemId ? ITEMS_DATABASE[nextItemId] : undefined;
+  const sourceRecipe = activeItem
+    ? Object.values(RECIPES_DATABASE).find(recipe => recipe.outputs.some(output => output.itemId === activeItem.itemId))
+    : undefined;
+  const queue = state.upgradeSystem?.queue || [];
+  const history = state.upgradeSystem?.history || [];
+  const activeQueuedJob = activeItem ? queue.find(job => job.targetInstanceId === activeItem.instanceId) : undefined;
+  const idleWorker = state.survivors
+    .filter(survivor => survivor.currentAction.type === 'idle')
+    .sort((a, b) => (b.skills.crafting || 1) - (a.skills.crafting || 1))[0];
+  const currentMinute = Math.max(0, (state.gameTime.day - 1) * 1440 + state.gameTime.minuteOfDay);
+
+  const projectedStats = stats ? {
+    durability: nextDef?.toolProperties?.durabilityMax || Math.round(stats.durability * 1.12),
+    cuttingPower: nextDef ? Math.round(stats.cuttingPower * 1.22 * 10) / 10 : stats.cuttingPower,
+    efficiency: nextDef ? Math.min(160, Math.round(stats.efficiency * 1.12 * 10) / 10) : stats.efficiency,
+    handling: nextDef ? Math.min(100, Math.round((stats.handling + 6) * 10) / 10) : stats.handling,
+    reachM: stats.reachM,
+    reliability: nextDef ? Math.min(100, Math.round((stats.reliability + 8) * 10) / 10) : stats.reliability,
+  } : null;
+
+  if (!activeItem || !activeDef || !stats) {
+    return <div className="h-full flex items-center justify-center border border-[#40503d] bg-[#071711] text-[#8fa194]">No upgradeable equipment in inventory.</div>;
+  }
+
+  const queueTier = () => {
+    if (!nextRecipe || activeQueuedJob) return;
+    onQueueTierUpgrade?.(activeItem.instanceId, idleWorker?.id);
+  };
+
+  const queueModification = () => {
+    if (!activeComponent || activeQueuedJob) return;
+    onQueueComponentModification?.(activeItem.instanceId, modification, activeComponent.instanceId, idleWorker?.id);
   };
 
   return (
-    <div className="h-full min-h-0 grid grid-cols-[.98fr_1.55fr_.9fr] gap-2 overflow-hidden select-none">
-      <section className="min-w-0 min-h-0 flex flex-col border border-[#40503d] bg-[#071711] overflow-hidden">
-        <div className="h-11 shrink-0 px-3 flex items-center gap-2 border-b border-[#3b4c3a] bg-[#0c241d]"><ArrowUpCircle className="w-4 h-4 text-[#e2d470]" /><h3 className="text-[13px] font-black text-[#eee6d5] tracking-wide">UPGRADEABLE EQUIPMENT</h3></div>
-        <div className="shrink-0 px-2 py-2 border-b border-[#314538] space-y-2">
-          <div className="grid grid-cols-5 gap-1">{CATEGORIES.map((category) => <button key={category.id} type="button" onClick={() => setCategoryFilter(category.id)} className={`h-8 rounded-[4px] border text-[10px] font-bold cursor-pointer ${categoryFilter === category.id ? 'bg-[#345528] border-[#d1cb4b] text-[#fff6cf]' : 'bg-[#0b211b] border-[#2d4639] text-[#aaa995]'}`}>{category.label}</button>)}</div>
-          <label className="h-8 flex items-center gap-2 px-2.5 rounded-[4px] border border-[#30483a] bg-[#081813]"><Search className="w-3.5 h-3.5 text-[#9b8d6c]" /><input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search upgradeable gear..." className="min-w-0 flex-1 bg-transparent outline-none text-[11px] text-[#e5dfd0] placeholder:text-[#766e5d]" /></label>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-2">
-          <div className="grid grid-cols-4 gap-2 auto-rows-[112px] content-start">
-            {filteredItems.map((item) => {
-              const selected = item.id === activeItem.id;
-              return <button key={item.id} type="button" onClick={() => setSelectedItemId(item.id)} className={`p-1.5 border rounded-[5px] flex flex-col items-center justify-between cursor-pointer ${selected ? 'bg-[#17351f] border-[#e0d34e] shadow-[0_0_10px_rgba(220,211,75,.2)]' : 'bg-[#0a1d17] border-[#324a3b] hover:border-[#60715a]'}`}>
-                <div className="w-12 h-12 flex items-center justify-center"><CraftedItemArt itemId="" recipeId="" size={42} /></div>
-                <div className="w-full text-center"><div className="text-[10.5px] font-bold text-[#eee8da] truncate">{item.name}</div><div className="flex items-center justify-center gap-1 mt-2">{Array.from({ length: item.maxTier }).map((_, index) => <span key={index} className={`w-2 h-2 rounded-full border ${index < item.currentTier ? 'bg-[#e7d452] border-[#e7d452]' : 'bg-[#25362d] border-[#46574a]'}`} />)}</div></div>
-              </button>;
+    <div className="h-full min-h-0 grid grid-cols-[.92fr_1.55fr_.83fr] gap-2 overflow-hidden text-[#e8e2d4]">
+      <section className="min-h-0 border border-[#40503d] bg-[#071711] p-2 flex flex-col overflow-hidden">
+        <div className="shrink-0 flex items-center justify-between pb-2 border-b border-[#31483a]"><div className="flex items-center gap-2"><ArrowUpCircle className="w-4 h-4 text-[#e5d574]" /><span className="text-[13px] font-black">UPGRADEABLE EQUIPMENT</span></div><span className="text-[10px] text-[#869789]">{tools.length}</span></div>
+        <label className="h-8 shrink-0 mt-2 px-2 flex items-center gap-2 border border-[#31483a] bg-[#091813]"><Search className="w-3.5 h-3.5 text-[#718678]" /><input value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="Search equipment..." className="min-w-0 flex-1 bg-transparent outline-none text-[11px]" /></label>
+        <div className="min-h-0 flex-1 mt-2 overflow-y-auto custom-scrollbar pr-1">
+          <div className="grid grid-cols-3 gap-1.5">
+            {filtered.map(item => {
+              const def = ITEMS_DATABASE[item.itemId];
+              const selected = item.instanceId === activeItem.instanceId;
+              const locked = (item.reservedQuantity || 0) > 0;
+              const condition = pct(item.condition || 0, item.conditionMax || 100);
+              const recipe = getNextTierRecipeForItem(item.itemId);
+              return (
+                <button key={item.instanceId} type="button" onClick={() => setSelectedInstanceId(item.instanceId)} className={`min-h-[100px] p-1.5 border text-center cursor-pointer ${selected ? 'border-[#ddd94e] bg-[#173421]' : 'border-[#304739] bg-[#091813] hover:bg-[#10251d]'}`}>
+                  <div className="h-[50px] flex items-center justify-center"><CraftedItemArt itemId={item.itemId} size={44} /></div>
+                  <div className="text-[10px] font-bold truncate">{def?.name || item.itemId}</div>
+                  <div className="mt-0.5 flex justify-center gap-1">{[0, 1, 2, 3].map(index => <span key={index} className={`w-1.5 h-1.5 rounded-full ${index === 0 || item.modifications?.length && index <= Math.min(3, item.modifications.length) ? 'bg-[#d9c851]' : 'bg-[#34483b]'}`} />)}</div>
+                  <div className="text-[8px] text-[#829385]">{recipe ? 'tier path available' : 'component mods'}</div>
+                  {locked && <div className="text-[8px] text-[#d8a560]">reserved</div>}
+                  <div className="h-1 mt-1 bg-[#17261f]"><div className="h-full bg-[#5fc462]" style={{ width: `${condition}%` }} /></div>
+                </button>
+              );
             })}
           </div>
         </div>
       </section>
 
-      <section className="min-w-0 min-h-0 flex flex-col border border-[#40503d] bg-[#071711] overflow-hidden">
-        <div className="h-[92px] shrink-0 px-3 py-2.5 border-b border-[#3b4c3a] bg-[#0b211a] flex items-center gap-3">
-          <div className="w-[74px] h-[74px] shrink-0 border border-[#405646] bg-[#07130f] flex items-center justify-center"><CraftedItemArt itemId="" recipeId="" size={60} /></div>
-          <div className="min-w-0 flex-1"><h2 className="text-[20px] font-black text-[#f2ead9] leading-none">{activeItem.name}</h2><p className="text-[11px] text-[#b2b7aa] mt-2 line-clamp-2">{activeItem.description}</p><div className="flex gap-1.5 mt-2">{activeItem.tags.slice(0,3).map((tag) => <span key={tag} className="px-2 py-0.5 rounded bg-[#0f473a] border border-[#2b735e] text-[9.5px] text-[#c8eadc]">{tag}</span>)}</div></div>
-          <div className="text-right"><div className="text-[9px] text-[#8e998e] uppercase">Current Tier</div><div className="text-[18px] font-black text-[#e5ca55]">Tier {activeItem.currentTier}</div></div>
+      <section className="min-h-0 border border-[#40503d] bg-[#081813] flex flex-col overflow-hidden">
+        <div className="shrink-0 p-2.5 border-b border-[#31483a] flex items-center gap-3">
+          <div className="w-16 h-16 border border-[#405746] bg-[#07120e] flex items-center justify-center"><CraftedItemArt itemId={activeItem.itemId} size={56} /></div>
+          <div className="min-w-0 flex-1"><h2 className="text-[18px] font-black truncate">{activeDef.name}</h2><p className="text-[10px] text-[#98a69a] line-clamp-2">{activeDef.description}</p><div className="mt-1 flex items-center gap-2 text-[9px]"><span className="px-1.5 py-0.5 border border-[#49604c] bg-[#10261d]">{activeItem.quality || 'standard'}</span><span className="text-[#d9ca6e]">{sourceRecipe?.tier || 'Field-built'}</span><span className="text-[#7f9687]">{activeItem.modifications?.length || 0} mods</span></div></div>
         </div>
 
-        <div className="shrink-0 px-3 py-2 border-b border-[#34493b] bg-[#081914]">
-          <div className="text-[12px] font-black text-[#eae2d1] tracking-wide flex items-center gap-2"><ArrowUpCircle className="w-4 h-4 text-[#e3d16e]" /> UPGRADE PATH</div>
-          <div className="mt-2 grid grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] gap-1 items-center">
-            {activeItem.tierSteps.slice(0,4).map((step, index) => <React.Fragment key={step.tier}><div className={`h-[112px] border rounded-[5px] p-2 flex flex-col items-center justify-between ${step.isCurrent ? 'bg-[#304b24] border-[#e0d24e] shadow-[0_0_10px_rgba(223,211,77,.2)]' : step.isUnlocked ? 'bg-[#0b211a] border-[#3c5545]' : 'bg-[#08140f] border-[#25372d] opacity-55'}`}><div className="w-12 h-12 flex items-center justify-center"><CraftedItemArt itemId="" recipeId="" size={40} /></div><div className="text-center"><div className="text-[10px] font-bold text-[#eee8da] truncate max-w-[95px]">{step.name}</div><div className="text-[9px] mt-1 text-[#9aa294]">{step.tierLabel}</div></div></div>{index < Math.min(3, activeItem.tierSteps.length - 1) && <ArrowRight className="w-4 h-4 text-[#d9c961]" />}</React.Fragment>)}
+        <div className="shrink-0 p-2.5 border-b border-[#31483a]">
+          <div className="text-[11px] font-black mb-1.5">UPGRADE PATH</div>
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+            <div className="h-[88px] border border-[#d3cf49] bg-[#173421] flex items-center gap-2 p-2"><CraftedItemArt itemId={activeItem.itemId} size={54} /><div className="min-w-0"><div className="text-[10px] font-black truncate">{activeDef.name}</div><div className="text-[8.5px] text-[#8da092]">Current physical instance</div><div className="text-[8px] text-[#d7c95e]">Durability {stats.durability}</div></div></div>
+            <ArrowRight className="w-5 h-5 text-[#dfd263]" />
+            <div className={`h-[88px] border p-2 flex items-center gap-2 ${nextDef ? 'border-[#52684f] bg-[#0a1d17]' : 'border-dashed border-[#35483c] bg-[#07140f]'}`}>{nextDef ? <><CraftedItemArt itemId={nextItemId || ''} size={54} /><div className="min-w-0"><div className="text-[10px] font-black truncate">{nextDef.name}</div><div className="text-[8.5px] text-[#8da092]">{nextRecipe?.tier || 'Next tier'}</div><div className="text-[8px] text-[#7fc980]">Preserves instance history</div></div></> : <div className="w-full text-center text-[9px] text-[#75887a]">No recipe-tier successor. Use component modifications.</div>}</div>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 grid grid-rows-[1fr_auto_auto] gap-2 p-2 overflow-hidden">
-          <div className="min-h-0 border border-[#354a3b] bg-[#091813] overflow-hidden flex flex-col">
-            <div className="h-9 shrink-0 px-2 flex items-center border-b border-[#354a3b] bg-[#0c211a] text-[11px] font-black text-[#e4dcc9]">STAT COMPARISON</div>
-            <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
-              <table className="w-full text-[10.5px]">
-                <thead className="sticky top-0 bg-[#0a1b16] text-[#8e998e]"><tr><th className="text-left px-2 py-1.5">Stat</th><th className="px-2 py-1.5">Current</th><th className="px-2 py-1.5">Next</th><th className="px-2 py-1.5 text-right">Change</th></tr></thead>
-                <tbody>{activeItem.statComparisons.map((row) => <tr key={row.label} className="border-t border-[#24372d]"><td className="px-2 py-1.5 text-[#d9d5c9] font-medium">{row.label}</td><td className="px-2 py-1.5 text-center text-[#aaa99d] font-mono">{row.currentValue}</td><td className="px-2 py-1.5 text-center text-[#eee8d8] font-mono font-bold">{row.nextValue}</td><td className={`px-2 py-1.5 text-right font-mono font-bold ${row.isPositive === true ? 'text-[#79da61]' : row.isPositive === false ? 'text-[#ea6558]' : 'text-[#9da297]'}`}>{row.changeText}</td></tr>)}</tbody>
-              </table>
+        <div className="min-h-0 flex-1 grid grid-cols-[1.06fr_.94fr] gap-2 p-2.5 overflow-hidden">
+          <div className="min-h-0 border border-[#31483a] bg-[#07150f] p-2 overflow-y-auto custom-scrollbar">
+            <div className="text-[10px] font-black mb-1.5">STAT COMPARISON — DERIVED FROM COMPONENTS</div>
+            <CompareRow label="Durability" current={stats.durability.toFixed(0)} next={projectedStats?.durability.toFixed(0) || '—'} />
+            <CompareRow label="Cutting Power" current={stats.cuttingPower.toFixed(1)} next={projectedStats?.cuttingPower.toFixed(1) || '—'} />
+            <CompareRow label="Efficiency" current={`${stats.efficiency.toFixed(1)}%`} next={projectedStats ? `${projectedStats.efficiency.toFixed(1)}%` : '—'} />
+            <CompareRow label="Handling" current={`${stats.handling.toFixed(1)}%`} next={projectedStats ? `${projectedStats.handling.toFixed(1)}%` : '—'} />
+            <CompareRow label="Reach" current={`${stats.reachM.toFixed(2)} m`} next={projectedStats ? `${projectedStats.reachM.toFixed(2)} m` : '—'} />
+            <CompareRow label="Reliability" current={`${stats.reliability.toFixed(1)}%`} next={projectedStats ? `${projectedStats.reliability.toFixed(1)}%` : '—'} />
+          </div>
+
+          <div className="min-h-0 border border-[#31483a] bg-[#07150f] p-2 flex flex-col overflow-hidden">
+            <div className="text-[10px] font-black mb-1.5">COMPONENT MODIFICATION</div>
+            <select value={selectedComponentId} onChange={event => setSelectedComponentId(event.target.value)} className="h-8 bg-[#091813] border border-[#344b3c] px-2 text-[10px] outline-none">
+              {components.map(component => <option key={component.instanceId} value={component.instanceId}>{component.name} — {Math.round(pct(component.condition, component.conditionMax))}%</option>)}
+            </select>
+            <div className="grid grid-cols-2 gap-1.5 mt-2">
+              {([
+                ['sharpen', 'Sharpen'],
+                ['reinforce', 'Reinforce'],
+                ['rebalance', 'Rebalance'],
+                ['weatherproof', 'Weatherproof'],
+              ] as Array<[ComponentModification, string]>).map(([id, label]) => (
+                <button key={id} type="button" onClick={() => setModification(id)} className={`h-8 border text-[9px] font-bold cursor-pointer ${modification === id ? 'border-[#dad54b] bg-[#23431d] text-[#fffbd8]' : 'border-[#3b5242] bg-[#0a1f18] text-[#aab5ac]'}`}>{label}</button>
+              ))}
             </div>
+            {activeComponent && <div className="mt-2 text-[8.5px] text-[#859689] space-y-1"><Stat label="Part" value={activeComponent.name} /><Stat label="Condition" value={`${activeComponent.condition.toFixed(1)} / ${activeComponent.conditionMax.toFixed(1)}`} />{activeComponent.properties.edgeSharpness !== undefined && <Stat label="Edge" value={`${Math.round(activeComponent.properties.edgeSharpness)}%`} />}{activeComponent.properties.tension !== undefined && <Stat label="Tension" value={`${Math.round(activeComponent.properties.tension)}%`} />}{activeComponent.properties.moistureResistance !== undefined && <Stat label="Moisture resist." value={`${Math.round(activeComponent.properties.moistureResistance)}%`} />}</div>}
           </div>
+        </div>
 
-          <div className="grid grid-cols-[1.1fr_.9fr] gap-2">
-            <div className="border border-[#354a3b] bg-[#091813] p-2"><div className="text-[10px] font-black text-[#e1d9c7] mb-1.5">REQUIRED MATERIALS</div><div className="grid grid-cols-3 gap-1.5">{activeItem.requiredMaterials.slice(0,3).map((material) => <div key={material.itemId} className="border border-[#2d4336] bg-[#07140f] p-1.5 text-center"><Package className="w-4 h-4 mx-auto text-[#cfb765]" /><div className="text-[8.5px] mt-1 truncate text-[#d9d5ca]">{material.name}</div><div className={`text-[10px] font-bold ${material.owned >= material.needed ? 'text-[#7ada61]' : 'text-[#e96558]'}`}>{material.owned} / {material.needed}</div></div>)}</div></div>
-            <div className="border border-[#354a3b] bg-[#091813] p-2"><div className="text-[10px] font-black text-[#e1d9c7] mb-1.5">UPGRADE REQUIREMENTS</div><div className="space-y-1">{activeItem.requirements.slice(0,4).map((requirement) => <div key={requirement.id} className="h-6 flex items-center gap-1.5 text-[9.5px] text-[#d4d1c6]"><CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${requirement.isMet ? 'text-[#75d660]' : 'text-[#876f58]'}`} /><span className="truncate">{requirement.label}</span></div>)}</div></div>
-          </div>
-
-          <button type="button" onClick={startUpgrade} className="h-11 rounded-[5px] border border-[#ddd34e] bg-gradient-to-b from-[#4a6728] to-[#254719] text-[#fffbd7] font-black text-[14px] flex items-center justify-center gap-2 cursor-pointer"><ArrowUpCircle className="w-4 h-4" /> Upgrade to Tier {Math.min(activeItem.maxTier, activeItem.currentTier + 1)}</button>
+        <div className="shrink-0 p-2.5 border-t border-[#31483a] grid grid-cols-[1.15fr_.85fr] gap-2">
+          <button type="button" disabled={!nextRecipe || Boolean(activeQueuedJob)} onClick={queueTier} className="h-11 border border-[#d9d54b] bg-gradient-to-b from-[#486526] to-[#244719] disabled:opacity-35 text-[#fffbd9] font-black text-[12px] flex items-center justify-center gap-2 cursor-pointer"><ArrowUpCircle className="w-4 h-4" /> {nextDef ? `Upgrade to ${nextDef.name}` : 'No tier upgrade'}</button>
+          <button type="button" disabled={!activeComponent || Boolean(activeQueuedJob)} onClick={queueModification} className="h-11 border border-[#56705c] bg-[#0d2923] disabled:opacity-35 text-[#ded8c9] font-bold text-[11px] flex items-center justify-center gap-2 cursor-pointer"><Wrench className="w-4 h-4" /> Apply {modification}</button>
         </div>
       </section>
 
-      <aside className="min-w-0 min-h-0 flex flex-col gap-2 overflow-hidden">
-        <section className="shrink-0 border border-[#40503d] bg-[#0b201a]"><PanelTitle icon={<TrendingUp className="w-4 h-4" />} title="UPGRADE INFO" /><div className="p-3 space-y-1.5 text-[11px]"><Stat label="Total Upgradeable Items" value={`${items.length} / 24`} /><Stat label="Upgrades Unlocked" value="8 / 32" /><Stat label="Average Item Level" value="1.6" /><Stat label="Upgrade Success Rate" value="100%" /></div></section>
-        <section className="min-h-0 flex-1 border border-[#40503d] bg-[#0b201a] flex flex-col"><PanelTitle icon={<ArrowUpCircle className="w-4 h-4" />} title={`UPGRADE QUEUE  ${queue.length} / 3`} /><div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1.5">{queue.map((item) => <div key={item.id} className="h-[64px] border border-[#344c3c] bg-[#081914] p-2 flex items-center gap-2"><ArrowUpCircle className="w-5 h-5 text-[#d2bd61] shrink-0" /><div className="min-w-0 flex-1"><div className="text-[10.5px] font-bold text-[#ebe5d7] truncate">{item.name}</div><div className="text-[9px] text-[#87958a]">{item.targetTierLabel}</div><div className="text-[9px] font-mono text-[#c7bdab] mt-1">{formatSeconds(item.remainingSeconds)}</div></div><button type="button" onClick={() => setQueue((entries) => entries.filter((entry) => entry.id !== item.id))} className="w-7 h-7 border border-[#8b4537] text-[#ef6656] flex items-center justify-center cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button></div>)}</div></section>
-        <section className="shrink-0 border border-[#40503d] bg-[#0b201a]"><PanelTitle icon={<History className="w-4 h-4" />} title="UPGRADE HISTORY" /><div className="p-2 space-y-1">{history.slice(0,5).map((entry) => <div key={entry.id} className="h-7 flex items-center gap-2 text-[9px] border-b border-[#25372d] last:border-0"><span className="min-w-0 flex-1 truncate text-[#cfcabd]">{entry.fromName} → {entry.toName}</span><span className="text-[#77857a] shrink-0">{entry.timeAgo}</span></div>)}</div></section>
-        <button type="button" className="h-11 shrink-0 border border-[#40503d] bg-[#0d2721] text-[11px] text-[#e5dfcf] flex items-center justify-center gap-2 cursor-pointer"><Clock3 className="w-4 h-4 text-[#d3c269]" /> View Full History</button>
+      <aside className="min-h-0 flex flex-col gap-2 overflow-hidden">
+        <section className="shrink-0 border border-[#40503d] bg-[#0b201a]">
+          <div className="h-9 px-2.5 flex items-center gap-2 border-b border-[#31483a]"><Gauge className="w-4 h-4 text-[#e5d574]" /><span className="text-[12px] font-black">UPGRADE INFO</span></div>
+          <div className="p-2 text-[9.5px] space-y-1"><Stat label="Derived durability" value={stats.durability.toFixed(0)} /><Stat label="Condition" value={`${stats.conditionPct.toFixed(1)}%`} /><Stat label="Reliability" value={`${stats.reliability.toFixed(1)}%`} /><Stat label="Craft worker" value={idleWorker?.name || 'None idle'} /></div>
+        </section>
+
+        <section className="min-h-0 flex-1 border border-[#40503d] bg-[#0b201a] flex flex-col overflow-hidden">
+          <div className="h-9 shrink-0 px-2.5 flex items-center justify-between border-b border-[#31483a]"><span className="text-[12px] font-black">UPGRADE QUEUE</span><span className="text-[10px] text-[#dfcc68]">{queue.length}/3</span></div>
+          <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1.5">
+            {queue.length === 0 ? <div className="text-[10px] text-[#73877a] italic">No upgrade jobs.</div> : queue.map(job => {
+              const progress = job.totalSeconds > 0 ? Math.min(100, job.progressSeconds / job.totalSeconds * 100) : 0;
+              const targetDef = ITEMS_DATABASE[job.targetItemId || job.sourceItemId];
+              return (
+                <div key={job.id} className="p-2 border border-[#344d3d] bg-[#081813]">
+                  <div className="flex gap-2"><CraftedItemArt itemId={job.targetItemId || job.sourceItemId} size={34} /><div className="min-w-0 flex-1"><div className="text-[10px] font-bold truncate">{targetDef?.name || job.sourceItemId}</div><div className="text-[8.5px] text-[#8fa095]">{job.mode === 'tier' ? 'tier upgrade' : job.modification} · {job.status.replace('_', ' ')}</div></div></div>
+                  {job.blockedReasons[0] ? <div className="mt-1 text-[8px] text-[#e0a36c] truncate">{job.blockedReasons[0]}</div> : <><div className="h-1.5 mt-1.5 bg-[#17271f]"><div className="h-full bg-[#4fc5a5]" style={{ width: `${progress}%` }} /></div><div className="mt-1 text-[8px] text-[#819085]">{formatSeconds(Math.max(0, job.totalSeconds - job.progressSeconds))}</div></>}
+                  <div className="mt-1 flex justify-end gap-1"><button type="button" onClick={() => onTogglePauseUpgrade?.(job.id)} className="w-6 h-5 border border-[#51644f] flex items-center justify-center cursor-pointer">{job.status === 'paused' ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}</button><button type="button" onClick={() => onCancelUpgrade?.(job.id)} className="w-6 h-5 border border-[#88483c] text-[#ed6d5b] flex items-center justify-center cursor-pointer"><Trash2 className="w-3 h-3" /></button></div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="h-[150px] shrink-0 border border-[#40503d] bg-[#0b201a] flex flex-col overflow-hidden">
+          <div className="h-9 shrink-0 px-2.5 flex items-center gap-2 border-b border-[#31483a]"><Clock3 className="w-3.5 h-3.5 text-[#e5d574]" /><span className="text-[11px] font-black">UPGRADE HISTORY</span></div>
+          <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+            {history.length === 0 ? <div className="text-[9px] text-[#74877a] italic">No upgrade history yet.</div> : history.slice(0, 8).map(entry => <div key={entry.id} className="flex items-start justify-between gap-2 text-[8.5px] border-b border-[#273b30] pb-1"><div className="min-w-0"><div className="text-[#bdc6bc] truncate">{ITEMS_DATABASE[entry.fromItemId]?.name || entry.fromItemId} → {ITEMS_DATABASE[entry.toItemId]?.name || entry.toItemId}</div><div className="text-[#7e9184]">{entry.mode === 'tier' ? 'tier upgrade' : `${entry.modification} ${entry.componentName || ''}`}</div></div><span className="shrink-0 text-[#697d70]">{ageText(currentMinute, entry.gameMinute)}</span></div>)}
+          </div>
+        </section>
       </aside>
     </div>
   );
 };
 
-const PanelTitle: React.FC<{ icon: React.ReactNode; title: string }> = ({ icon, title }) => <div className="h-10 px-3 flex items-center gap-2 border-b border-[#3b4c3a] bg-[#0d2721] text-[#eee6d5]"><span className="text-[#dfce6d]">{icon}</span><h3 className="text-[12px] font-black tracking-wide">{title}</h3></div>;
-const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => <div className="h-6 flex items-center border-b border-[#26392f] last:border-0"><span className="min-w-0 flex-1 text-[#b3b7aa]">{label}</span><strong className="text-[#e2cc57] font-mono">{value}</strong></div>;
+const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="flex items-center justify-between gap-2"><span className="text-[#829487]">{label}</span><strong className="text-[#ded6c5] font-mono text-right truncate">{value}</strong></div>
+);
+
+const CompareRow: React.FC<{ label: string; current: string; next: string }> = ({ label, current, next }) => (
+  <div className="grid grid-cols-[1fr_.65fr_auto_.65fr] items-center gap-2 min-h-7 border-b border-[#273b30] last:border-0 text-[9.5px]"><span className="text-[#aab5aa]">{label}</span><strong className="font-mono text-right text-[#ded7c8]">{current}</strong><ArrowRight className="w-3 h-3 text-[#cdbf68]" /><strong className="font-mono text-[#7fd274]">{next}</strong></div>
+);
