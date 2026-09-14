@@ -18,6 +18,7 @@ import { cancelMaintenanceJob, queueMaintenanceJob, togglePauseMaintenanceJob } 
 import { cancelUpgradeJob, queueComponentModification, queueTierUpgrade, togglePauseUpgradeJob } from './upgradeSystem';
 import { dismantleTool } from './dismantleSystem';
 import { establishClusterAtCandidate, reserveStructurePlacement } from './buildingClusterSystem';
+import { planSpatialConstruction } from './buildingConstructionSystem';
 
 export function startGatheringTask(
   state: GameState,
@@ -168,7 +169,7 @@ function handleBuildingCommand(state: GameState, survivorId: string, command: st
     const clusterId = parts[1];
     const buildingId = parts[2];
     return clusterId && buildingId
-      ? startConstructionTask(state, survivorId, buildingId, clusterId)
+      ? planSpatialConstruction(state, survivorId || undefined, clusterId, buildingId)
       : state;
   }
 
@@ -180,6 +181,11 @@ function totalAvailableForConstruction(state: GameState, areaId: string, itemId:
   return getAvailableInventoryStock(poiStorage, itemId) + getAvailableInventoryStock(state.inventory, itemId);
 }
 
+/**
+ * Legacy direct construction path. New cluster-based construction is routed to
+ * planSpatialConstruction above and therefore uses reservation -> hauling ->
+ * staging -> phase consumption. This path remains for old saves/other screens.
+ */
 export function startConstructionTask(
   state: GameState,
   survivorId: string,
@@ -189,22 +195,18 @@ export function startConstructionTask(
   const routed = handleBuildingCommand(state, survivorId, buildingId);
   if (routed) return routed;
 
+  if (areaOrClusterId.startsWith('cluster_')) {
+    return planSpatialConstruction(state, survivorId || undefined, areaOrClusterId, buildingId);
+  }
+
   const next = JSON.parse(JSON.stringify(state)) as GameState;
   const survivor = next.survivors.find(candidate => candidate.id === survivorId);
   const blueprint = BUILDINGS_DATABASE[buildingId];
   if (!survivor || !blueprint || survivor.currentAction.type !== 'idle') return state;
 
-  const cluster = areaOrClusterId.startsWith('cluster_')
-    ? next.buildingSimulation?.clusters.find(candidate => candidate.id === areaOrClusterId)
-    : undefined;
-  const clusterId = cluster?.id;
-  const areaId = cluster?.poiId || (areaOrClusterId.startsWith('AREA_') ? areaOrClusterId : 'AREA_CAMP_CLEARING');
+  const areaId = areaOrClusterId.startsWith('AREA_') ? areaOrClusterId : 'AREA_CAMP_CLEARING';
   const poiStorage = getOrCreatePoiStorage(next, areaId);
-
-  let building = next.buildings.find(candidate =>
-    !candidate.isBuilt && candidate.buildingId === buildingId &&
-    (clusterId ? candidate.clusterId === clusterId : candidate.areaId === areaId)
-  );
+  let building = next.buildings.find(candidate => !candidate.isBuilt && candidate.buildingId === buildingId && candidate.areaId === areaId && !candidate.clusterId);
 
   if (!building) {
     const missing = blueprint.cost.filter(cost => totalAvailableForConstruction(next, areaId, cost.itemId) < cost.quantity);
@@ -214,18 +216,6 @@ export function startConstructionTask(
         day: next.gameTime.day,
         timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
         text: `Chưa đủ vật liệu để xây ${blueprint.name}: ${missing.map(cost => `${ITEMS_DATABASE[cost.itemId]?.name || cost.itemId} ${totalAvailableForConstruction(next, areaId, cost.itemId)}/${cost.quantity}`).join(', ')}.`,
-        type: 'warning',
-      });
-      return next;
-    }
-
-    const placement = clusterId ? reserveStructurePlacement(next, clusterId, buildingId) : null;
-    if (clusterId && (!placement || !['available', 'preparation_required'].includes(placement.status))) {
-      next.logs.unshift({
-        id: `bld_space_${Date.now()}`,
-        day: next.gameTime.day,
-        timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
-        text: `Không thể bố trí ${blueprint.name} trong ${cluster?.name || 'cluster'}: ${placement?.reasons.join(', ') || 'không đủ mặt bằng phù hợp'}.`,
         type: 'warning',
       });
       return next;
@@ -241,24 +231,18 @@ export function startConstructionTask(
       if (needed > 0) deductItemFromInventory(next.inventory, cost.itemId, needed);
     }
 
-    const microPrepMultiplier = placement?.status === 'preparation_required' ? 1.25 : 1;
     building = {
       id: `bld_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       buildingId,
       condition: 100,
       isBuilt: false,
       buildProgressSeconds: 0,
-      totalBuildSeconds: Math.round(blueprint.buildTimeSeconds * microPrepMultiplier * 10) / 10,
+      totalBuildSeconds: blueprint.buildTimeSeconds,
       areaId,
-      clusterId,
-      placement: placement?.allocations,
-      footprintAreaM2: placement?.footprintAreaM2,
-      placementScore: placement?.score,
     };
     next.buildings.push(building);
   }
 
-  if (building.isBuilt) return state;
   survivor.currentAction = {
     type: 'building',
     description: `Đang thi công: ${blueprint.name}`,
@@ -267,12 +251,11 @@ export function startConstructionTask(
     totalSeconds: building.totalBuildSeconds,
   };
 
-  const locationName = cluster?.name || AREAS_DATABASE[areaId]?.name || 'khu vực';
   next.logs.unshift({
     id: `bld_${Date.now()}`,
     day: next.gameTime.day,
     timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
-    text: `${survivor.name} đã bắt đầu xây dựng ${blueprint.name} tại ${locationName}.`,
+    text: `${survivor.name} đã bắt đầu xây dựng ${blueprint.name} tại ${AREAS_DATABASE[areaId]?.name || 'khu vực'}.`,
     type: 'info',
   });
   return next;
