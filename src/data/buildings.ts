@@ -38,7 +38,6 @@ export interface BuildingPreviewAtlas {
   cells: Array<{ x: number; y: number; w: number; h: number }>;
 }
 
-/** Shared atlases. Add another atlas here only when you actually need one. */
 export const BUILDING_PREVIEW_ATLASES: Record<string, BuildingPreviewAtlas> = {
   BUILDING_CARDS_01: {
     src: '/ui/buildings/building-cards.png',
@@ -53,10 +52,6 @@ export const BUILDING_PREVIEW_ATLASES: Record<string, BuildingPreviewAtlas> = {
   },
 };
 
-/**
- * Friendly labels for the category filter. Unknown/new categories still work and
- * automatically fall back to a title-cased version of their category id.
- */
 export const BUILDING_CATEGORY_LABELS: Record<string, string> = {
   food: 'Nấu nướng',
   shelter: 'Nơi trú',
@@ -84,18 +79,7 @@ export const BUILDINGS_DATABASE: Record<string, BuildingRecipeDefinition> = {
       'Cho phép nấu thức ăn, đun sôi nước và cung cấp ánh sáng cùng hơi ấm vào ban đêm.',
     ui: {
       sortOrder: 10,
-      tags: [
-        'lửa',
-        'lửa trại',
-        'nấu ăn',
-        'đun nước',
-        'sưởi ấm',
-        'đầu game',
-        'fire',
-        'cooking',
-        'boil water',
-        'warmth',
-      ],
+      tags: ['lửa', 'lửa trại', 'nấu ăn', 'đun nước', 'sưởi ấm', 'đầu game', 'fire', 'cooking', 'boil water', 'warmth'],
       preview: { type: 'atlas', atlasId: 'BUILDING_CARDS_01', cell: 0 },
     },
   },
@@ -116,18 +100,7 @@ export const BUILDINGS_DATABASE: Record<string, BuildingRecipeDefinition> = {
       'Tạo chỗ nghỉ có mái che, giúp hồi phục mệt mỏi nhanh hơn và giảm ảnh hưởng của mưa khi nghỉ tại trại.',
     ui: {
       sortOrder: 20,
-      tags: [
-        'lều',
-        'nơi trú',
-        'ngủ',
-        'nghỉ',
-        'mưa',
-        'lá cọ',
-        'shelter',
-        'sleep',
-        'rest',
-        'rain',
-      ],
+      tags: ['lều', 'nơi trú', 'ngủ', 'nghỉ', 'mưa', 'lá cọ', 'shelter', 'sleep', 'rest', 'rain'],
       preview: { type: 'atlas', atlasId: 'BUILDING_CARDS_01', cell: 1 },
     },
   },
@@ -145,27 +118,82 @@ export const BUILDINGS_DATABASE: Record<string, BuildingRecipeDefinition> = {
     ],
     buildTimeSeconds: 30,
     benefitsDescription:
-      'Tăng sức chứa kho của trại thêm +30 kg và +50 L, đồng thời giúp vật tư tránh mưa trực tiếp và độ ẩm từ mặt đất.',
-    maxCapacityIncrease: {
-      weightKg: 30,
-      volumeL: 50,
-    },
+      'Kho thông thoáng cho vật tư nhẹ, tăng +30 kg / +50 L dung lượng vật lý.',
+    maxCapacityIncrease: { weightKg: 30, volumeL: 50 },
     ui: {
       sortOrder: 30,
-      tags: [
-        'kệ',
-        'kệ chứa đồ',
-        'kho',
-        'lưu trữ',
-        'tre',
-        'mái lá',
-        'storage',
-        'inventory',
-        'capacity',
-        'bamboo',
-      ],
+      tags: ['kệ', 'kho', 'lưu trữ', 'tre', 'mái lá', 'storage', 'inventory', 'capacity', 'bamboo'],
       preview: { type: 'atlas', atlasId: 'BUILDING_CARDS_01', cell: 2 },
     },
+  },
+
+  BUILDING_BAMBOO_SUPPLY_CRATE: {
+    id: 'BUILDING_BAMBOO_SUPPLY_CRATE',
+    name: 'Thùng vật tư tre đan kín',
+    description:
+      'Thùng tre chẻ đan dày có nắp buộc, được kê khỏi mặt đất. Phù hợp cho nguyên liệu, linh kiện và đồ nghề nhỏ cần tránh mưa trực tiếp.',
+    category: 'storage',
+    cost: [
+      { itemId: 'ITEM_BAMBOO_SPLIT', quantity: 10 },
+      { itemId: 'ITEM_CORD_ROPE', quantity: 4 },
+      { itemId: 'ITEM_PALM_LEAF', quantity: 2 },
+    ],
+    buildTimeSeconds: 34,
+    benefitsDescription: 'Kho đa dụng kín hơn rack, tăng +35 kg / +55 L và bảo vệ tốt hơn khỏi ẩm, bẩn và sinh vật nhỏ.',
+    maxCapacityIncrease: { weightKg: 35, volumeL: 55 },
+    ui: { sortOrder: 31, tags: ['crate', 'storage', 'materials', 'tools', 'thùng', 'kho', 'vật tư', 'tre'] },
+  },
+
+  BUILDING_BULK_MATERIAL_RACK: {
+    id: 'BUILDING_BULK_MATERIAL_RACK',
+    name: 'Giá vật liệu dài & cồng kềnh',
+    description:
+      'Khung tre dài có chặn ngang dùng để xếp gỗ, cọc, thân tre và vật liệu cồng kềnh. Không phù hợp cho đồ nhỏ nhưng tận dụng không gian rất tốt.',
+    category: 'storage',
+    cost: [
+      { itemId: 'ITEM_BAMBOO_STALK', quantity: 6 },
+      { itemId: 'ITEM_CORD_ROPE', quantity: 3 },
+      { itemId: 'ITEM_DRIFTWOOD_BRANCH', quantity: 3 },
+    ],
+    buildTimeSeconds: 30,
+    benefitsDescription: 'Chứa vật liệu dài/bulk hiệu quả: +90 kg / +80 L với khả năng tiếp cận cao.',
+    maxCapacityIncrease: { weightKg: 90, volumeL: 80 },
+    ui: { sortOrder: 32, tags: ['bulk', 'logs', 'bamboo', 'storage', 'rack', 'gỗ', 'tre', 'vật liệu dài'] },
+  },
+
+  BUILDING_MEDICINE_STORAGE_CHEST: {
+    id: 'BUILDING_MEDICINE_STORAGE_CHEST',
+    name: 'Hòm thuốc tre lót lá khô',
+    description:
+      'Hòm nhỏ đan dày, kê cao và có lớp lót khô để tách thuốc, băng gạc và dược liệu khỏi bụi bẩn cùng hơi ẩm của nền đất.',
+    category: 'storage',
+    cost: [
+      { itemId: 'ITEM_BAMBOO_SPLIT', quantity: 8 },
+      { itemId: 'ITEM_PALM_LEAF', quantity: 4 },
+      { itemId: 'ITEM_CORD_ROPE', quantity: 3 },
+    ],
+    buildTimeSeconds: 32,
+    benefitsDescription: 'Kho chuyên dụng nhỏ +15 kg / +25 L, ưu tiên thuốc với bảo vệ ẩm và nhiễm bẩn cao.',
+    maxCapacityIncrease: { weightKg: 15, volumeL: 25 },
+    ui: { sortOrder: 33, tags: ['medicine', 'herbs', 'storage', 'medical', 'thuốc', 'thảo dược', 'hòm'] },
+  },
+
+  BUILDING_BAMBOO_WATER_TANK: {
+    id: 'BUILDING_BAMBOO_WATER_TANK',
+    name: 'Bồn nước tre ghép kín',
+    description:
+      'Cụm ống tre lớn ghép sát, buộc đai và che nắp lá. Dùng riêng cho vật chứa nước và nước dự trữ, tránh trộn với vật tư khô.',
+    category: 'storage',
+    cost: [
+      { itemId: 'ITEM_BAMBOO_STALK', quantity: 8 },
+      { itemId: 'ITEM_BAMBOO_SPLIT', quantity: 6 },
+      { itemId: 'ITEM_CORD_ROPE', quantity: 5 },
+      { itemId: 'ITEM_PALM_LEAF', quantity: 4 },
+    ],
+    buildTimeSeconds: 42,
+    benefitsDescription: 'Kho nước chuyên dụng +70 kg / +70 L, chỉ nhận dạng liquid/water và giảm nguy cơ nhiễm bẩn.',
+    maxCapacityIncrease: { weightKg: 70, volumeL: 70 },
+    ui: { sortOrder: 34, tags: ['water', 'liquid', 'storage', 'tank', 'nước', 'bồn', 'tre'] },
   },
 
   BUILDING_RAIN_COLLECTOR: {
@@ -184,17 +212,7 @@ export const BUILDINGS_DATABASE: Record<string, BuildingRecipeDefinition> = {
       'Tự động thu gom nước khi trời mưa, tạo nguồn nước mưa tương đối sạch để dự trữ tại trại.',
     ui: {
       sortOrder: 40,
-      tags: [
-        'nước',
-        'nước mưa',
-        'hứng nước',
-        'máng nước',
-        'lá cọ',
-        'water',
-        'rain',
-        'rainwater',
-        'collector',
-      ],
+      tags: ['nước', 'nước mưa', 'hứng nước', 'máng nước', 'lá cọ', 'water', 'rain', 'rainwater', 'collector'],
       preview: { type: 'atlas', atlasId: 'BUILDING_CARDS_01', cell: 3 },
     },
   },
@@ -215,23 +233,11 @@ export const BUILDINGS_DATABASE: Record<string, BuildingRecipeDefinition> = {
       'Tăng tốc chế tạo dụng cụ và xử lý linh kiện tại trại thêm 30%.',
     ui: {
       sortOrder: 50,
-      tags: [
-        'bàn chế tác',
-        'chế tạo',
-        'dụng cụ',
-        'gia công gỗ',
-        'production',
-        'crafting',
-        'tools',
-        'woodworking',
-        'workbench',
-      ],
-      // No preview yet: BuildingsView automatically falls back to the category icon.
+      tags: ['bàn chế tác', 'chế tạo', 'dụng cụ', 'gia công gỗ', 'production', 'crafting', 'tools', 'woodworking', 'workbench'],
     },
   },
 };
 
-/** Canonical browser order. Hidden recipes stay valid gameplay data but are omitted from UI. */
 export const getBuildingRecipes = (): BuildingRecipeDefinition[] =>
   Object.values(BUILDINGS_DATABASE)
     .filter((recipe) => recipe.ui?.hidden !== true)
@@ -241,7 +247,6 @@ export const getBuildingRecipes = (): BuildingRecipeDefinition[] =>
       return orderA - orderB || a.name.localeCompare(b.name);
     });
 
-/** Categories are discovered from the data, so new categories automatically appear in filters. */
 export const getBuildingCategories = (): string[] =>
   Array.from(new Set(getBuildingRecipes().map((recipe) => String(recipe.category)))).sort((a, b) =>
     (BUILDING_CATEGORY_LABELS[a] ?? a).localeCompare(BUILDING_CATEGORY_LABELS[b] ?? b),
