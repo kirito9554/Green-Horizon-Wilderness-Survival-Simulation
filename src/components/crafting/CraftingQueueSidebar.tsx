@@ -1,31 +1,9 @@
 import React from 'react';
-import {
-  Clock3,
-  Pause,
-  Play,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
-  ArrowRight,
-  Sparkles,
-  Lock,
-  History,
-  RotateCcw,
-  Zap,
-} from 'lucide-react';
+import { Clock3, Trash2, ChevronUp, ChevronDown, Hammer, BookOpen, Users, Zap, ArrowRight, Plus } from 'lucide-react';
 import { CraftingQueueItem, RecipeDefinition, SurvivorState } from '../../types';
+import { CraftingStatsSummary } from '../../types/crafting';
 import { RECIPES_DATABASE } from '../../data/recipes';
 import { CraftedItemArt } from './CraftedItemArt';
-import { ItemIcon } from '../common/ItemIcon';
-
-interface RecentlyCraftedItem {
-  id: string;
-  recipeId: string;
-  name: string;
-  quantity: number;
-  timestamp: number;
-  timeAgoText?: string;
-}
 
 interface CraftingQueueSidebarProps {
   queue: CraftingQueueItem[];
@@ -35,9 +13,19 @@ interface CraftingQueueSidebarProps {
   onCancelQueueItem?: (id: string) => void;
   onTogglePauseQueueItem?: (id: string) => void;
   onReorderQueue?: (id: string, direction: 'up' | 'down') => void;
-  recentlyCrafted?: RecentlyCraftedItem[];
-  onCraftAgain?: (recipeId: string) => void;
+  onAddSelectedToQueue?: () => void;
+  stats?: CraftingStatsSummary;
 }
+
+const formatTime = (seconds: number) => {
+  const value = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(value / 3600);
+  const m = Math.floor((value % 3600) / 60);
+  const s = value % 60;
+  return h > 0
+    ? `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
 
 export const CraftingQueueSidebar: React.FC<CraftingQueueSidebarProps> = ({
   queue,
@@ -45,312 +33,95 @@ export const CraftingQueueSidebar: React.FC<CraftingQueueSidebarProps> = ({
   selectedRecipe,
   onSelectRecipe,
   onCancelQueueItem,
-  onTogglePauseQueueItem,
   onReorderQueue,
-  recentlyCrafted = [],
-  onCraftAgain,
+  onAddSelectedToQueue,
+  stats,
 }) => {
-  const activeItem = queue.find((q) => q.status === 'in_progress');
-  const pendingItems = queue.filter((q) => q.id !== activeItem?.id);
-
-  // Progression branch for currently selected recipe
   const progression = selectedRecipe.progression;
   const nextRecipe = progression ? RECIPES_DATABASE[progression.nextRecipeId] : null;
+  const visibleQueue = queue.slice(0, 3);
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-b from-[#11231c]/95 via-[#0c1a14]/95 to-[#08130f]/98 rounded-xl border border-[#274b39]/80 p-3.5 shadow-xl select-none overflow-y-auto scrollbar-thin scrollbar-thumb-[#2f5540] scrollbar-track-[#091410] space-y-3.5">
-      {/* ========================================================================= */}
-      {/* 1. ACTIVE CRAFTING / PRODUCTION JOB                                       */}
-      {/* ========================================================================= */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-[11px] font-bold tracking-wider text-[#a0b8aa] uppercase">
-          <div className="flex items-center gap-1.5">
-            <Zap className="w-3.5 h-3.5 text-[#fbbf24]" />
-            <span>ACTIVE CRAFTING</span>
-          </div>
-          {activeItem && (
-            <span className="text-[10px] text-[#4ade80] font-mono font-semibold animate-pulse">
-              IN PROGRESS
-            </span>
-          )}
+    <aside className="h-full min-h-0 flex flex-col gap-2 bg-[#061510]">
+      <section className="shrink-0 border border-[#40503d] bg-[#0b201a]">
+        <div className="h-10 px-3 flex items-center gap-2 border-b border-[#3c4d3b] bg-[#0d2721] text-[#f0e7d5]">
+          <Hammer className="w-4 h-4 text-[#e5d574]" />
+          <h3 className="text-[13px] font-black tracking-wide">CRAFTING INFO</h3>
+        </div>
+        <div className="px-3 py-2.5 grid grid-cols-1 gap-1.5 text-[11px]">
+          <InfoRow icon={<BookOpen className="w-3.5 h-3.5" />} label="Total Known Recipes" value={`${stats?.totalKnownRecipes ?? 0} / ${stats?.maxRecipes ?? 18}`} />
+          <InfoRow icon={<Clock3 className="w-3.5 h-3.5" />} label="Queued Crafts" value={`${queue.length} / ${stats?.maxQueueSlots ?? 3}`} />
+          <InfoRow icon={<Users className="w-3.5 h-3.5" />} label="Idle Survivors" value={`${stats?.idleSurvivors ?? survivors.filter((s) => s.currentAction.type === 'idle').length}`} />
+          <InfoRow icon={<Zap className="w-3.5 h-3.5" />} label="Crafting Speed" value={`+${stats?.craftingSpeedBonusPct ?? 0}%`} />
+        </div>
+      </section>
+
+      <section className="min-h-0 flex-[1.05] border border-[#40503d] bg-[#0b201a] flex flex-col">
+        <div className="h-10 shrink-0 px-3 flex items-center justify-between border-b border-[#3c4d3b] bg-[#0d2721]">
+          <div className="flex items-center gap-2 text-[#f0e7d5]"><Clock3 className="w-4 h-4 text-[#e5d574]" /><h3 className="text-[13px] font-black tracking-wide">CRAFTING QUEUE</h3></div>
+          <span className="text-[12px] font-bold text-[#e5d574]">{queue.length} / {stats?.maxQueueSlots ?? 3}</span>
         </div>
 
-        {activeItem ? (
-          (() => {
-            const recipe = RECIPES_DATABASE[activeItem.recipeId];
-            const survivor = survivors.find((s) => s.id === activeItem.assignedSurvivorId);
-            const totalSec = activeItem.totalSeconds || recipe?.craftTimeSeconds || 15;
-            const progressSec = activeItem.progressSeconds || 0;
-            const progressPct = Math.min(100, Math.round((progressSec / totalSec) * 100));
-            const remainingSec = Math.max(0, Math.ceil(totalSec - progressSec));
-
-            return (
-              <div className="p-2.5 rounded-lg bg-[#07130f] border border-[#25503b] space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="shrink-0 w-8 h-8 rounded bg-[#0f241a] border border-[#315a44] flex items-center justify-center">
-                      <CraftedItemArt
-                        itemId={recipe?.outputs[0]?.itemId || ''}
-                        recipeId={recipe?.id}
-                        size={28}
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-[#f0fdf4] truncate">
-                        {recipe?.name || activeItem.recipeId}
-                      </div>
-                      <div className="text-[10px] text-[#7ea08c]">
-                        Artisan: <strong className="text-[#a7f3d0]">{survivor?.name || 'Unassigned'}</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => onTogglePauseQueueItem?.(activeItem.id)}
-                      className="p-1 rounded bg-[#132c20] hover:bg-[#1a3c2c] text-[#86e2ab] cursor-pointer"
-                      title={activeItem.status === 'paused' ? 'Resume' : 'Pause'}
-                    >
-                      {activeItem.status === 'paused' ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onCancelQueueItem?.(activeItem.id)}
-                      className="p-1 rounded bg-[#2b1414] hover:bg-[#3d1a1a] text-[#f87171] cursor-pointer"
-                      title="Cancel craft"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Progress Bar */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px] text-[#869b8e] font-mono">
-                    <span>{progressPct}% completed</span>
-                    <span>{remainingSec}s left</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-[#0d1f17] overflow-hidden border border-[#1f3f2f]">
-                    <div
-                      className="h-full bg-gradient-to-r from-[#16a34a] to-[#4ade80] transition-all duration-300 rounded-full"
-                      style={{ width: `${progressPct}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })()
-        ) : (
-          <div className="p-3 rounded-lg bg-[#07130f]/60 border border-[#1b3628]/40 text-center text-xs text-[#6e8577] italic">
-            No active crafting job. Select a recipe and click &apos;Craft Now&apos; or &apos;Add to Queue&apos;.
-          </div>
-        )}
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 2. QUEUED CRAFTING SLOTS                                                  */}
-      {/* ========================================================================= */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-[11px] font-bold tracking-wider text-[#a0b8aa] uppercase">
-          <div className="flex items-center gap-1.5">
-            <Clock3 className="w-3.5 h-3.5 text-[#5eead4]" />
-            <span>QUEUED ITEMS ({pendingItems.length}/5)</span>
-          </div>
-        </div>
-
-        {pendingItems.length === 0 ? (
-          <div className="p-2.5 rounded-lg bg-[#07130f]/40 border border-[#1b3628]/30 text-center text-[11px] text-[#607769]">
-            Queue is empty.
-          </div>
-        ) : (
-          <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-[#2f5540]">
-            {pendingItems.map((item, index) => {
+        <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar px-2 py-2 space-y-1.5">
+          {visibleQueue.length === 0 ? (
+            <div className="h-full min-h-[84px] flex items-center justify-center text-[11px] italic text-[#718275] border border-dashed border-[#355040] bg-[#07150f]">Queue is empty</div>
+          ) : (
+            visibleQueue.map((item, index) => {
               const recipe = RECIPES_DATABASE[item.recipeId];
-              const survivor = survivors.find((s) => s.id === item.assignedSurvivorId);
-
+              const total = item.totalSeconds || recipe?.craftTimeSeconds || 1;
+              const progress = Math.min(100, Math.round(((item.progressSeconds || 0) / total) * 100));
+              const remaining = Math.max(0, total - (item.progressSeconds || 0));
               return (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between p-2 rounded-lg bg-[#081510] border border-[#1e3b2b] text-xs"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-4 text-[10px] font-mono text-[#668071] font-bold">
-                      #{index + 1}
-                    </span>
-                    <div className="shrink-0 w-6 h-6 rounded bg-[#0d2016] flex items-center justify-center">
-                      <CraftedItemArt
-                        itemId={recipe?.outputs[0]?.itemId || ''}
-                        recipeId={recipe?.id}
-                        size={20}
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-bold text-[#e5ede8] truncate leading-tight">
-                        {recipe?.name || item.recipeId}
-                      </div>
-                      <div className="text-[10px] text-[#718a7c]">
-                        {item.quantity}x • {survivor?.name || 'Auto'}
-                      </div>
+                <div key={item.id} className="h-[66px] px-2 flex items-center gap-2 border border-[#355040] bg-[#081914]">
+                  <div className="w-10 h-10 shrink-0 rounded-[4px] border border-[#405546] bg-[#07120e] flex items-center justify-center">
+                    <CraftedItemArt itemId={recipe?.outputs[0]?.itemId || ''} recipeId={recipe?.id} size={34} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2"><span className="text-[11px] font-bold text-[#eee7d8] truncate">{recipe?.name || item.recipeId}</span><span className="text-[9px] text-[#8d998e]">x{item.quantity}</span></div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <div className="h-1.5 min-w-0 flex-1 rounded-full bg-[#17271f] overflow-hidden border border-[#2b4134]"><div className="h-full bg-[#3bc1c9]" style={{ width: `${Math.max(8, progress)}%` }} /></div>
+                      <span className="text-[9px] font-mono text-[#cdc4b1]">{formatTime(remaining)}</span>
                     </div>
                   </div>
-
-                  {/* Move Up/Down & Cancel */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    {index > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => onReorderQueue?.(item.id, 'up')}
-                        className="p-1 rounded text-[#809a8c] hover:text-[#e0eee5] cursor-pointer"
-                        title="Move Up"
-                      >
-                        <ChevronUp className="w-3 h-3" />
-                      </button>
-                    )}
-                    {index < pendingItems.length - 1 && (
-                      <button
-                        type="button"
-                        onClick={() => onReorderQueue?.(item.id, 'down')}
-                        className="p-1 rounded text-[#809a8c] hover:text-[#e0eee5] cursor-pointer"
-                        title="Move Down"
-                      >
-                        <ChevronDown className="w-3 h-3" />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => onCancelQueueItem?.(item.id)}
-                      className="p-1 rounded text-[#b91c1c] hover:text-[#ef4444] cursor-pointer"
-                      title="Remove from queue"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                  <div className="flex flex-col gap-0.5 shrink-0">
+                    {index > 0 && <button type="button" onClick={() => onReorderQueue?.(item.id, 'up')} className="w-6 h-5 flex items-center justify-center border border-[#50634e] text-[#d7d0bd] hover:text-white cursor-pointer"><ChevronUp className="w-3 h-3" /></button>}
+                    <button type="button" onClick={() => onCancelQueueItem?.(item.id)} className="w-6 h-5 flex items-center justify-center border border-[#8b493c] text-[#ef6b59] hover:text-red-300 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                    {index < visibleQueue.length - 1 && <button type="button" onClick={() => onReorderQueue?.(item.id, 'down')} className="w-6 h-5 flex items-center justify-center border border-[#50634e] text-[#d7d0bd] hover:text-white cursor-pointer"><ChevronDown className="w-3 h-3" /></button>}
                   </div>
                 </div>
               );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 3. UPGRADE PATH / PROGRESSION TREE                                        */}
-      {/* ========================================================================= */}
-      {progression && nextRecipe && (
-        <div className="space-y-1.5 pt-2 border-t border-[rgba(90,125,102,0.22)]">
-          <div className="flex items-center justify-between text-[11px] font-bold tracking-wider text-[#a0b8aa] uppercase">
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-[#a78bfa]" />
-              <span>UPGRADE PATH</span>
-            </div>
-            <span className="text-[10px] text-[#c084fc] font-semibold">EVOLUTION</span>
-          </div>
-
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => onSelectRecipe(nextRecipe.id)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onSelectRecipe(nextRecipe.id);
-              }
-            }}
-            className="p-2.5 rounded-lg bg-gradient-to-r from-[#17142b]/90 to-[#0e171b]/90 border border-[#4c3a70] hover:border-[#8b5cf6] transition-all cursor-pointer group space-y-2"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <div className="shrink-0 w-8 h-8 rounded bg-[#201738] border border-[#5b4282] flex items-center justify-center p-0.5">
-                  <CraftedItemArt
-                    itemId={nextRecipe.outputs[0]?.itemId || ''}
-                    recipeId={nextRecipe.id}
-                    size={28}
-                  />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-[#ede9fe] group-hover:text-[#ffffff] flex items-center gap-1">
-                    <span>{nextRecipe.name}</span>
-                    <ArrowRight className="w-3 h-3 text-[#a78bfa] group-hover:translate-x-0.5 transition-transform" />
-                  </div>
-                  <div className="text-[10px] text-[#a78bfa]">
-                    Tier: <strong className="text-[#ddd6fe]">{nextRecipe.tier || 'Basic'}</strong>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Next Stats Preview */}
-            {progression.nextStats && (
-              <div className="grid grid-cols-2 gap-1 text-[10px] pt-1 border-t border-[#3d2f5a]">
-                {progression.nextStats.durability && (
-                  <div className="text-[#c4b5fd]">
-                    Durability: <strong>{progression.nextStats.durability}</strong>
-                  </div>
-                )}
-                {progression.nextStats.cutting && (
-                  <div className="text-[#c4b5fd]">
-                    Efficiency: <strong>{progression.nextStats.cutting}</strong>
-                  </div>
-                )}
-                {progression.nextStats.feature && (
-                  <div className="col-span-2 text-[#a7f3d0] italic">
-                    ★ {progression.nextStats.feature}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+            })
+          )}
         </div>
-      )}
 
-      {/* ========================================================================= */}
-      {/* 4. RECENTLY CRAFTED HISTORY FEED                                          */}
-      {/* ========================================================================= */}
-      {recentlyCrafted.length > 0 && (
-        <div className="space-y-1.5 pt-2 border-t border-[rgba(90,125,102,0.22)]">
-          <div className="flex items-center justify-between text-[11px] font-bold tracking-wider text-[#a0b8aa] uppercase">
-            <div className="flex items-center gap-1.5">
-              <History className="w-3.5 h-3.5 text-[#38bdf8]" />
-              <span>RECENTLY CRAFTED</span>
-            </div>
-          </div>
+        <button type="button" onClick={onAddSelectedToQueue} className="h-11 shrink-0 m-2 mt-0 border border-dashed border-[#50705b] bg-[#0b251e] hover:bg-[#103027] text-[#d9d2c0] flex items-center justify-center gap-2 text-[12px] cursor-pointer"><Plus className="w-4 h-4" /> Add to Queue</button>
+      </section>
 
-          <div className="space-y-1">
-            {recentlyCrafted.slice(0, 3).map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between p-1.5 rounded bg-[#091410] border border-[#1b3426] text-xs"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="shrink-0 w-6 h-6 rounded bg-[#07100d] flex items-center justify-center">
-                    <CraftedItemArt recipeId={item.recipeId} size={18} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold text-[#dce7e1] truncate leading-tight">
-                      {item.name}
-                    </div>
-                    <div className="text-[10px] text-[#6b8577]">
-                      {item.quantity}x made • {item.timeAgoText || 'Just now'}
-                    </div>
-                  </div>
-                </div>
-
-                {onCraftAgain && (
-                  <button
-                    type="button"
-                    onClick={() => onCraftAgain(item.recipeId)}
-                    className="p-1 rounded text-[#5eead4] hover:text-[#a7f3d0] hover:bg-[#132d22] cursor-pointer"
-                    title="Craft again"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                  </button>
-                )}
+      <section className="min-h-0 flex-[.95] border border-[#40503d] bg-[#0b201a] flex flex-col">
+        <div className="h-10 shrink-0 px-3 flex items-center gap-2 border-b border-[#3c4d3b] bg-[#0d2721] text-[#f0e7d5]"><Zap className="w-4 h-4 text-[#e5d574]" /><h3 className="text-[13px] font-black tracking-wide">RECIPE PROGRESSION</h3></div>
+        <div className="min-h-0 flex-1 p-3">
+          {progression && nextRecipe ? (
+            <button type="button" onClick={() => onSelectRecipe(nextRecipe.id)} className="w-full h-full min-h-[110px] border border-[#405644] bg-[#081914] hover:border-[#d0c650] cursor-pointer flex flex-col items-center justify-center p-2">
+              <div className="flex items-center justify-center gap-3">
+                <div className="text-center"><div className="w-14 h-14 mx-auto border border-[#3d5645] bg-[#07120e] flex items-center justify-center"><CraftedItemArt itemId={selectedRecipe.outputs[0]?.itemId || ''} recipeId={selectedRecipe.id} size={48} /></div><div className="mt-1 text-[10px] font-bold text-[#e9e3d5] max-w-[90px] truncate">{selectedRecipe.name}</div></div>
+                <ArrowRight className="w-5 h-5 text-[#e2d471] shrink-0" />
+                <div className="text-center"><div className="w-14 h-14 mx-auto border border-[#4b5d4d] bg-[#07120e] flex items-center justify-center"><CraftedItemArt itemId={nextRecipe.outputs[0]?.itemId || ''} recipeId={nextRecipe.id} size={48} /></div><div className="mt-1 text-[10px] font-bold text-[#e9e3d5] max-w-[90px] truncate">{nextRecipe.name}</div></div>
               </div>
-            ))}
-          </div>
+              <div className="mt-2 text-[9.5px] text-[#929e91] text-center">Discover and craft higher-tier variants through research and upgrades.</div>
+            </button>
+          ) : (
+            <div className="h-full min-h-[110px] flex items-center justify-center text-center text-[10.5px] text-[#78877b] border border-dashed border-[#354a3d] bg-[#07150f] px-5">No known progression for this recipe yet.</div>
+          )}
         </div>
-      )}
-    </div>
+      </section>
+    </aside>
   );
 };
+
+const InfoRow: React.FC<{ icon: React.ReactNode; label: string; value: string }> = ({ icon, label, value }) => (
+  <div className="h-6 flex items-center gap-2 border-b border-[#25392e] last:border-0">
+    <span className="text-[#ddd2ad] shrink-0">{icon}</span>
+    <span className="min-w-0 flex-1 text-[#b7b9ae] truncate">{label}</span>
+    <strong className="text-[#e5d15d] font-mono text-[12px] shrink-0">{value}</strong>
+  </div>
+);
