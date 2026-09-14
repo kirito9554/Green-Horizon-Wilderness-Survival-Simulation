@@ -1,4 +1,4 @@
-import type { GameState } from '../types';
+import type { GameState, SurvivorState } from '../types';
 import '../types/buildingSimulation';
 import { ensureBuildingSimulation } from './buildGridSystem';
 import { completeSitePreparationJob } from './buildingClusterSystem';
@@ -15,11 +15,20 @@ const PREP_LABELS = {
   compact_ground: 'Đầm nền',
 } as const;
 
+function setIdle(worker: SurvivorState): void {
+  worker.currentAction = {
+    type: 'idle',
+    description: 'Ready for new assignment',
+    progressSeconds: 0,
+    totalSeconds: 0,
+  };
+}
+
 /**
  * Site preparation deliberately reuses the legacy `building` survivor action
  * so existing survivor/assignment UI needs no special case. The action gets a
  * very large sentinel duration; this runtime owns the real job duration and
- * completes/reset it before SurvivorSystem can mistake the preparation job for
+ * completes/resets it before SurvivorSystem can mistake the preparation job for
  * a ConstructedBuilding id.
  */
 export function tickBuildingPreparationRuntime(state: GameState): void {
@@ -44,6 +53,7 @@ export function tickBuildingPreparationRuntime(state: GameState): void {
       job.progressSeconds = Math.min(job.totalSeconds, worker.currentAction.progressSeconds);
       if (job.progressSeconds >= job.totalSeconds) {
         completeSitePreparationJob(state, job.id, worker.id);
+        setIdle(worker);
       }
       continue;
     }
