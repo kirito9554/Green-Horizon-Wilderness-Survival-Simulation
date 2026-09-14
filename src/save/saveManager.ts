@@ -1,5 +1,6 @@
 import { GameState } from '../types';
 import { INITIAL_GAME_STATE } from '../simulation/simEngine';
+import { createBuildingSimulationState } from '../simulation/buildGridSystem';
 import { LATEST_SAVE_VERSION, migrateGameState } from './migrations';
 
 const SAVE_KEY_PREFIX = 'canopy_save_slot_';
@@ -166,6 +167,10 @@ export const saveManager = {
       console.warn('Failed to clear autosave during reset', e);
     }
     const fresh: GameState = JSON.parse(JSON.stringify(INITIAL_GAME_STATE));
+    // INITIAL_GAME_STATE is created once when the module is loaded. A reset must
+    // not clone its old spatial seed, otherwise a "new run" would reproduce the
+    // exact same hidden POI build grids inside the same browser session.
+    fresh.buildingSimulation = createBuildingSimulationState();
     return migrateGameState(fresh);
   },
 };
