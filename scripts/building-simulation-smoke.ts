@@ -203,7 +203,8 @@ function testConstructionReservationHaulingAndPhases(): void {
 
   assert.equal(physicalQuantity(state, 'ITEM_DRIFTWOOD_BRANCH'), branchBeforePlan, 'planning must not physically consume branches');
   assert.equal(physicalQuantity(state, 'ITEM_COCONUT_HUSK'), huskBeforePlan, 'planning must not physically consume husk');
-  assert.ok(getAvailableInventoryStock(storage, 'ITEM_COCONUT_HUSK') < 2, 'reserved material must be unavailable to competing jobs');
+  const plannedStorage = getOrCreatePoiStorage(state, 'AREA_CAMP_CLEARING');
+  assert.ok(getAvailableInventoryStock(plannedStorage, 'ITEM_COCONUT_HUSK') < 2, 'reserved material must be unavailable to competing jobs');
 
   tickBuildingConstructionRuntime(state);
   assert.equal(job.status, 'hauling', 'an idle builder should begin hauling reserved material');
@@ -219,8 +220,6 @@ function testConstructionReservationHaulingAndPhases(): void {
   assert.equal(getAvailableInventoryStock(building.stagingInventory!, 'ITEM_DRIFTWOOD_BRANCH'), 6);
   assert.equal(getAvailableInventoryStock(building.stagingInventory!, 'ITEM_COCONUT_HUSK'), 2);
 
-  // Run the phase state machine to completion. We advance the sentinel worker
-  // action directly because SurvivorSystem's clock behavior is tested elsewhere.
   for (let guard = 0; guard < 30 && !building.isBuilt; guard++) {
     state.weather.current = 'clear';
     tickBuildingConstructionRuntime(state);
