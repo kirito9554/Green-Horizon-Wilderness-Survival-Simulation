@@ -1,3 +1,4 @@
+import type { ItemQuality } from './index';
 import type { MaterialReservation } from './craftingSimulation';
 
 export type MaintenanceMode = 'maintenance' | 'repair' | 'replace' | 'quick_patch';
@@ -16,6 +17,7 @@ export interface MaintenanceJob {
   createdAt: number;
   materialReservations: MaterialReservation[];
   materialsConsumed: boolean;
+  consumedMaterialQualities?: ItemQuality[];
   blockedReasons: string[];
   deterministicSeed: number;
 }
