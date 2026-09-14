@@ -1,8 +1,8 @@
 import type { ItemQuality } from './index';
-import type { MaterialReservation } from './craftingSimulation';
+import type { MaterialReservation, WorkstationKind } from './craftingSimulation';
 
 export type MaintenanceMode = 'maintenance' | 'repair' | 'replace' | 'quick_patch';
-export type MaintenanceJobStatus = 'waiting_materials' | 'waiting_worker' | 'pending' | 'in_progress' | 'paused';
+export type MaintenanceJobStatus = 'waiting_materials' | 'waiting_worker' | 'waiting_workstation' | 'pending' | 'in_progress' | 'paused';
 
 export interface MaintenanceJob {
   id: string;
@@ -11,6 +11,11 @@ export interface MaintenanceJob {
   targetComponentInstanceId?: string;
   mode: MaintenanceMode;
   assignedSurvivorId?: string;
+  assignedWorkstationId?: string;
+  assignedWorkstationKind?: WorkstationKind;
+  workstationSpeedMultiplier?: number;
+  workstationPrecisionBonus?: number;
+  workstationWeatherProtection?: number;
   progressSeconds: number;
   totalSeconds: number;
   status: MaintenanceJobStatus;
