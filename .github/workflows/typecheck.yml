@@ -35,5 +35,8 @@ jobs:
       - name: Structure lifecycle smoke test
         run: npm run test:structure
 
+      - name: Structure repair and modification smoke test
+        run: npm run test:structure-work
+
       - name: Production build
         run: npm run build
