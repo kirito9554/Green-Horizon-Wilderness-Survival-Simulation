@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { GameState, RecipeDefinition, InventoryItem } from '../../types';
+import { GameState, RecipeDefinition } from '../../types';
 import {
   CraftingMainTab,
   CraftingCategoryFilter,
@@ -43,11 +43,7 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
   onReorderQueue,
 }) => {
   const { inventory, survivors, craftingQueue = [] } = state;
-
-  // Active Main SubTab: 'craft' | 'research' | 'upgrade'
   const [activeTab, setActiveTab] = useState<CraftingMainTab>('craft');
-
-  // Craft sub-tab state
   const [selectedCategory, setSelectedCategory] = useState<CraftingCategoryFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortMode, setSortMode] = useState<CraftingSortMode>('default');
@@ -57,57 +53,13 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
   const [selectedRecipeId, setSelectedRecipeId] = useState<string>('RECIPE_ASSEMBLE_STONE_KNIFE');
   const [selectedSurvivorId, setSelectedSurvivorId] = useState<string>(survivors[0]?.id || '');
   const [recentlyCrafted, setRecentlyCrafted] = useState<RecentlyCraftedEntry[]>([
-    {
-      id: 'rc_1',
-      recipeId: 'RECIPE_ASSEMBLE_STONE_KNIFE',
-      name: 'Stone Knife',
-      quantity: 2,
-      timestamp: Date.now() - 120000,
-      timeAgoText: '2m ago',
-    },
-    {
-      id: 'rc_2',
-      recipeId: 'RECIPE_CRAFT_ROPE',
-      name: 'Rope',
-      quantity: 4,
-      timestamp: Date.now() - 300000,
-      timeAgoText: '5m ago',
-    },
-    {
-      id: 'rc_3',
-      recipeId: 'RECIPE_TORCH',
-      name: 'Torch',
-      quantity: 1,
-      timestamp: Date.now() - 720000,
-      timeAgoText: '12m ago',
-    },
-    {
-      id: 'rc_4',
-      recipeId: 'RECIPE_CRAFT_BANDAGE',
-      name: 'Bandage',
-      quantity: 5,
-      timestamp: Date.now() - 1680000,
-      timeAgoText: '28m ago',
-    },
-    {
-      id: 'rc_5',
-      recipeId: 'RECIPE_CAMPFIRE_KIT',
-      name: 'Campfire Kit',
-      quantity: 1,
-      timestamp: Date.now() - 3600000,
-      timeAgoText: '1h ago',
-    },
-    {
-      id: 'rc_6',
-      recipeId: 'RECIPE_WOODEN_SPEAR',
-      name: 'Wooden Spear',
-      quantity: 2,
-      timestamp: Date.now() - 7200000,
-      timeAgoText: '2h ago',
-    },
+    { id: 'rc_1', recipeId: 'RECIPE_ASSEMBLE_STONE_KNIFE', name: 'Stone Knife', quantity: 2, timestamp: Date.now() - 120000, timeAgoText: '2m ago' },
+    { id: 'rc_2', recipeId: 'RECIPE_CRAFT_ROPE', name: 'Rope', quantity: 4, timestamp: Date.now() - 300000, timeAgoText: '5m ago' },
+    { id: 'rc_3', recipeId: 'RECIPE_TORCH', name: 'Torch', quantity: 1, timestamp: Date.now() - 720000, timeAgoText: '12m ago' },
+    { id: 'rc_4', recipeId: 'RECIPE_CRAFT_BANDAGE', name: 'Bandage', quantity: 5, timestamp: Date.now() - 1680000, timeAgoText: '28m ago' },
+    { id: 'rc_5', recipeId: 'RECIPE_CAMPFIRE_KIT', name: 'Campfire Kit', quantity: 1, timestamp: Date.now() - 3600000, timeAgoText: '1h ago' },
   ]);
 
-  // Auto-select first idle survivor if available
   useEffect(() => {
     if (!selectedSurvivorId || !survivors.some((s) => s.id === selectedSurvivorId)) {
       const idle = survivors.find((s) => s.currentAction.type === 'idle') || survivors[0];
@@ -115,227 +67,131 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
     }
   }, [survivors, selectedSurvivorId]);
 
-  // All valid crafting recipes
-  const allCraftingRecipes = useMemo(() => {
-    return Object.values(RECIPES_DATABASE).filter(
-      (r) => r.type === 'crafting' || r.type === undefined
-    );
-  }, []);
+  const allCraftingRecipes = useMemo(
+    () => Object.values(RECIPES_DATABASE).filter((recipe) => recipe.type === 'crafting' || recipe.type === undefined),
+    []
+  );
 
-  // Category counts
   const categoryCounts = useMemo(() => {
-    const counts: Record<CraftingCategoryFilter, number> = {
-      all: allCraftingRecipes.length,
-      tools: 0,
-      weapons: 0,
-      survival: 0,
-      shelter: 0,
-      food: 0,
-      medicine: 0,
-      utility: 0,
-    };
-
-    allCraftingRecipes.forEach((r) => {
-      const cat = r.category as CraftingCategoryFilter;
-      if (counts[cat] !== undefined) {
-        counts[cat]++;
-      }
-      if (r.id.includes('BOW') || r.id.includes('SPEAR') || r.id.includes('CLUB')) {
-        counts.weapons++;
-      }
-      if (r.id.includes('BED') || r.id.includes('SHELTER')) {
-        counts.shelter++;
-      }
+    const counts: Record<CraftingCategoryFilter, number> = { all: allCraftingRecipes.length, tools: 0, weapons: 0, survival: 0, shelter: 0, food: 0, medicine: 0, utility: 0 };
+    allCraftingRecipes.forEach((recipe) => {
+      const category = recipe.category as CraftingCategoryFilter;
+      if (counts[category] !== undefined) counts[category] += 1;
+      if (recipe.id.includes('BOW') || recipe.id.includes('SPEAR') || recipe.id.includes('CLUB')) counts.weapons += 1;
+      if (recipe.id.includes('BED') || recipe.id.includes('SHELTER')) counts.shelter += 1;
     });
-
     return counts;
   }, [allCraftingRecipes]);
 
-  // Check craft readiness for a recipe
   const getRecipeStatus = (recipe: RecipeDefinition) => {
     let maxCraft = Infinity;
-    const missing: string[] = [];
-
-    recipe.ingredients.forEach((ing) => {
-      const owned = inventory.items
-        .filter((i) => i.itemId === ing.itemId)
-        .reduce((sum, i) => sum + i.quantity, 0);
-
-      const possibleWithThis = Math.floor(owned / ing.quantity);
-      if (possibleWithThis < maxCraft) {
-        maxCraft = possibleWithThis;
-      }
-      if (owned < ing.quantity) {
-        missing.push(ing.itemId);
-      }
+    const missingIngredients: string[] = [];
+    recipe.ingredients.forEach((ingredient) => {
+      const owned = inventory.items.filter((item) => item.itemId === ingredient.itemId).reduce((sum, item) => sum + item.quantity, 0);
+      maxCraft = Math.min(maxCraft, Math.floor(owned / ingredient.quantity));
+      if (owned < ingredient.quantity) missingIngredients.push(ingredient.itemId);
     });
-
-    const isCraftable = missing.length === 0 && maxCraft > 0;
-    const isPinned = pinnedIds.has(recipe.id);
-
     return {
       recipe,
-      isCraftable,
+      canCraft: missingIngredients.length === 0 && maxCraft > 0,
       maxCraftable: maxCraft === Infinity ? 0 : maxCraft,
-      isPinned,
-      missingIngredients: missing,
+      missingIngredients,
+      isPinned: pinnedIds.has(recipe.id),
+      isUnlocked: true,
     };
   };
 
-  // Processed recipes with filtering and sorting
   const processedRecipes = useMemo(() => {
     return allCraftingRecipes
       .map(getRecipeStatus)
       .filter(({ recipe, isPinned }) => {
-        // Category filter
         if (selectedCategory !== 'all') {
           if (selectedCategory === 'weapons') {
-            const isWeapon =
-              recipe.category === 'weapons' ||
-              recipe.id.includes('BOW') ||
-              recipe.id.includes('SPEAR') ||
-              recipe.id.includes('CLUB');
-            if (!isWeapon) return false;
+            if (!(recipe.category === 'weapons' || recipe.id.includes('BOW') || recipe.id.includes('SPEAR') || recipe.id.includes('CLUB'))) return false;
           } else if (selectedCategory === 'shelter') {
-            const isShelter =
-              recipe.category === 'shelter' ||
-              recipe.id.includes('BED') ||
-              recipe.id.includes('SHELTER');
-            if (!isShelter) return false;
-          } else if (recipe.category !== selectedCategory) {
-            return false;
-          }
+            if (!(recipe.category === 'shelter' || recipe.id.includes('BED') || recipe.id.includes('SHELTER'))) return false;
+          } else if (recipe.category !== selectedCategory) return false;
         }
-
-        // Pinned only filter
-        if (onlyPinned && !isPinned) {
-          return false;
-        }
-
-        // Search query
+        if (onlyPinned && !isPinned) return false;
         if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          const matchName = recipe.name.toLowerCase().includes(q);
-          const matchDesc = recipe.description.toLowerCase().includes(q);
-          const matchCat = recipe.category.toLowerCase().includes(q);
-          if (!matchName && !matchDesc && !matchCat) return false;
+          const query = searchQuery.toLowerCase();
+          if (!recipe.name.toLowerCase().includes(query) && !recipe.description.toLowerCase().includes(query) && !recipe.category.toLowerCase().includes(query)) return false;
         }
-
         return true;
       })
       .sort((a, b) => {
-        // Pinned recipes always on top
-        if (a.isPinned !== b.isPinned) {
-          return a.isPinned ? -1 : 1;
+        if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+        if (sortMode === 'name') return a.recipe.name.localeCompare(b.recipe.name);
+        if (sortMode === 'craftable') return Number(b.canCraft) - Number(a.canCraft) || b.maxCraftable - a.maxCraftable;
+        if (sortMode === 'tier') {
+          const weight: Record<string, number> = { Primitive: 1, Basic: 2, Advanced: 3 };
+          return (weight[a.recipe.tier || 'Primitive'] || 1) - (weight[b.recipe.tier || 'Primitive'] || 1);
         }
-
-        switch (sortMode) {
-          case 'name':
-            return a.recipe.name.localeCompare(b.recipe.name);
-          case 'tier': {
-            const tierWeight: Record<string, number> = { Primitive: 1, Basic: 2, Advanced: 3 };
-            const aTier = tierWeight[a.recipe.tier || 'Primitive'] || 1;
-            const bTier = tierWeight[b.recipe.tier || 'Primitive'] || 1;
-            return aTier - bTier;
-          }
-          case 'craftable':
-            if (a.isCraftable !== b.isCraftable) {
-              return a.isCraftable ? -1 : 1;
-            }
-            return b.maxCraftable - a.maxCraftable;
-          case 'default':
-          default:
-            return 0;
-        }
+        return 0;
       });
-  }, [allCraftingRecipes, selectedCategory, onlyPinned, searchQuery, sortMode, pinnedIds, inventory]);
+  }, [allCraftingRecipes, inventory, selectedCategory, onlyPinned, searchQuery, sortMode, pinnedIds]);
 
-  // Active recipe object
-  const activeRecipe = useMemo(() => {
-    return (
-      allCraftingRecipes.find((r) => r.id === selectedRecipeId) ||
-      processedRecipes[0]?.recipe ||
-      allCraftingRecipes[0] ||
-      null
-    );
-  }, [allCraftingRecipes, selectedRecipeId, processedRecipes]);
+  const activeRecipe = useMemo(
+    () => allCraftingRecipes.find((recipe) => recipe.id === selectedRecipeId) || processedRecipes[0]?.recipe || allCraftingRecipes[0] || null,
+    [allCraftingRecipes, selectedRecipeId, processedRecipes]
+  );
 
-  // Crafting Stats Summary
   const stats: CraftingStatsSummary = useMemo(() => {
-    const idleCount = survivors.filter((s) => s.currentAction.type === 'idle').length;
-    const speedBonus = idleCount > 1 ? (idleCount - 1) * 15 : 0;
-
+    const idleCount = survivors.filter((survivor) => survivor.currentAction.type === 'idle').length;
     return {
       totalKnownRecipes: allCraftingRecipes.length,
-      maxRecipes: 18,
+      maxRecipes: Math.max(18, allCraftingRecipes.length),
       queuedCrafts: craftingQueue.length,
       maxQueueSlots: 3,
       idleSurvivors: idleCount,
-      craftingSpeedBonusPct: speedBonus,
+      craftingSpeedBonusPct: idleCount > 1 ? (idleCount - 1) * 15 : 0,
     };
   }, [allCraftingRecipes.length, craftingQueue.length, survivors]);
 
-  // Handlers
-  const handleTogglePin = (recipeId: string) => {
-    setPinnedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(recipeId)) {
-        next.delete(recipeId);
-      } else {
-        next.add(recipeId);
-      }
+  const togglePin = (recipeId: string) => {
+    setPinnedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(recipeId)) next.delete(recipeId);
+      else next.add(recipeId);
       return next;
     });
   };
 
   const handleCraftNow = (recipeId: string, quantity: number, survivorId: string) => {
-    if (onStartCrafting) {
-      onStartCrafting(survivorId, recipeId);
-    } else if (onAddToCraftingQueue) {
-      onAddToCraftingQueue(recipeId, quantity, survivorId);
-    }
-
+    if (onStartCrafting) onStartCrafting(survivorId, recipeId);
+    else onAddToCraftingQueue?.(recipeId, quantity, survivorId);
     const recipe = RECIPES_DATABASE[recipeId];
     if (recipe) {
-      setRecentlyCrafted((prev) => [
-        {
-          id: `rc_${Date.now()}`,
-          recipeId,
-          name: recipe.name,
-          quantity,
-          timestamp: Date.now(),
-          timeAgoText: 'Just now',
-        },
-        ...prev.slice(0, 5),
+      setRecentlyCrafted((previous) => [
+        { id: `rc_${Date.now()}`, recipeId, name: recipe.name, quantity, timestamp: Date.now(), timeAgoText: 'Just now' },
+        ...previous.slice(0, 6),
       ]);
     }
   };
 
   const handleAddToQueue = (recipeId: string, quantity: number, survivorId: string) => {
-    if (onAddToCraftingQueue) {
-      onAddToCraftingQueue(recipeId, quantity, survivorId);
-    }
+    onAddToCraftingQueue?.(recipeId, quantity, survivorId);
   };
+
+  const minuteOfDay = state.gameTime.minuteOfDay || 0;
+  const timeText = `${String(Math.floor(minuteOfDay / 60)).padStart(2, '0')}:${String(Math.floor(minuteOfDay % 60)).padStart(2, '0')}`;
 
   return (
     <div
-      className="w-full h-full flex flex-col p-3.5 bg-gradient-to-b from-[#091511] to-[#050c09] text-[#e6ece8] select-none overflow-hidden"
-      style={{ fontFamily: UI_FONT }}
+      className="w-full h-full min-h-0 flex flex-col overflow-hidden bg-[#06130f] text-[#e8e2d4] select-none"
+      style={{ fontFamily: UI_FONT, containerType: 'size' }}
     >
-      {/* MASTER TOP BAR: Title, Time/Island Info & 3 Sub-tabs (Craft, Research, Upgrade) */}
       <CraftingMasterHeader
         activeTab={activeTab}
         onSelectTab={setActiveTab}
-        day={state.day || 7}
-        timeText="14:26"
+        day={state.gameTime.day || 1}
+        timeText={timeText}
         islandName="GREENHAVEN ISLAND"
       />
 
-      {/* SUB-VIEW RENDERING */}
-      <div className="flex-1 flex flex-col min-h-0 pt-2.5 overflow-hidden">
-        {activeTab === 'craft' && (
-          <div className="flex-1 flex flex-col gap-2.5 min-h-0 overflow-hidden">
-            {/* Craft Header with Category pills, search, sort */}
+      {activeTab === 'craft' && activeRecipe && (
+        <div className="min-h-0 flex-1 grid grid-cols-[minmax(0,2.55fr)_minmax(300px,.95fr)] gap-2 p-2 overflow-hidden">
+          <div className="min-w-0 min-h-0 flex flex-col border border-[#40503d] bg-[#071711] overflow-hidden">
             <CraftingHeader
               category={selectedCategory}
               onSelectCategory={setSelectedCategory}
@@ -345,105 +201,64 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
               sortMode={sortMode}
               onSortChange={setSortMode}
               viewMode={viewMode}
-              onToggleViewMode={() => setViewMode((prev) => (prev === 'grid' ? 'list' : 'grid'))}
+              onToggleViewMode={() => setViewMode((previous) => previous === 'grid' ? 'list' : 'grid')}
               onlyPinned={onlyPinned}
-              onToggleOnlyPinned={() => setOnlyPinned((prev) => !prev)}
+              onToggleOnlyPinned={() => setOnlyPinned((previous) => !previous)}
               stats={stats}
             />
 
-            {/* Catalog & Details / Queue Grid */}
-            <div className="flex-1 flex gap-3 min-h-0 overflow-hidden">
-              {/* Left Column: RECIPE CATALOG (Zone 1) */}
-              <div className="w-[58%] flex flex-col min-h-0 bg-[#07130f]/60 rounded-xl border border-[#1d3a2b]/70 p-2.5 shadow-inner">
-                <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-[rgba(90,125,102,0.18)]">
-                  <span className="text-xs font-black tracking-widest text-[#a8c2b3] uppercase">
-                    RECIPE CATALOG ({processedRecipes.length})
-                  </span>
-                  <span className="text-[11px] text-[#698574]">
-                    Select to forge or queue
-                  </span>
+            <div className="min-h-0 flex-1 grid grid-cols-[1.08fr_.92fr] gap-2 p-2 overflow-hidden">
+              <section className="min-w-0 min-h-0 border border-[#354a3b] bg-[#081813] p-2 flex flex-col overflow-hidden">
+                <div className="h-7 shrink-0 flex items-center justify-between px-1 mb-1.5"><span className="text-[11px] font-black uppercase tracking-wide text-[#e1d9c6]">Recipe Catalog</span><span className="text-[9.5px] text-[#7f8e81]">{processedRecipes.length} recipes</span></div>
+                <div className="min-h-0 flex-1">
+                  <CraftingCatalogGrid
+                    recipes={processedRecipes}
+                    selectedRecipeId={activeRecipe.id}
+                    onSelectRecipe={setSelectedRecipeId}
+                    onTogglePin={(recipeId) => togglePin(recipeId)}
+                    viewMode={viewMode}
+                  />
                 </div>
+              </section>
 
-                <CraftingCatalogGrid
-                  recipes={processedRecipes}
-                  selectedRecipeId={activeRecipe?.id || ''}
-                  onSelectRecipe={setSelectedRecipeId}
-                  onTogglePin={handleTogglePin}
-                  viewMode={viewMode}
-                />
-              </div>
-
-              {/* Right Column: Split into DETAILS & QUEUE */}
-              <div className="w-[42%] flex flex-col gap-2.5 min-h-0">
-                {/* Top Half: Detail Card */}
-                <div className="h-[56%] min-h-0">
-                  {activeRecipe && (
-                    <CraftingDetailCard
-                      recipe={activeRecipe}
-                      inventoryItems={inventory.items}
-                      survivors={survivors}
-                      selectedSurvivorId={selectedSurvivorId}
-                      onSelectSurvivor={setSelectedSurvivorId}
-                      onCraftNow={handleCraftNow}
-                      onAddToQueue={handleAddToQueue}
-                      isPinned={pinnedIds.has(activeRecipe.id)}
-                      onTogglePin={handleTogglePin}
-                    />
-                  )}
-                </div>
-
-                {/* Bottom Half: Queue Sidebar */}
-                <div className="h-[44%] min-h-0">
-                  {activeRecipe && (
-                    <CraftingQueueSidebar
-                      queue={craftingQueue}
-                      survivors={survivors}
-                      selectedRecipe={activeRecipe}
-                      onSelectRecipe={setSelectedRecipeId}
-                      onCancelQueueItem={onCancelQueueItem}
-                      onTogglePauseQueueItem={onTogglePauseQueueItem}
-                      onReorderQueue={onReorderQueue}
-                      recentlyCrafted={recentlyCrafted}
-                      onCraftAgain={(recipeId) => handleCraftNow(recipeId, 1, selectedSurvivorId)}
-                    />
-                  )}
-                </div>
-              </div>
+              <CraftingDetailCard
+                recipe={activeRecipe}
+                inventoryItems={inventory.items}
+                survivors={survivors}
+                selectedSurvivorId={selectedSurvivorId}
+                onSelectSurvivor={setSelectedSurvivorId}
+                onCraftNow={handleCraftNow}
+                onAddToQueue={handleAddToQueue}
+                isPinned={pinnedIds.has(activeRecipe.id)}
+                onTogglePin={togglePin}
+              />
             </div>
 
-            {/* Bottom Bar: Recently Crafted + Favorites (Matching Image 1) */}
             <CraftingFavoritesAndHistory
               recentHistory={recentlyCrafted}
               favoriteRecipeIds={Array.from(pinnedIds)}
               allRecipes={allCraftingRecipes}
-              onSelectRecipe={(r) => setSelectedRecipeId(r.id)}
+              onSelectRecipe={(recipe) => setSelectedRecipeId(recipe.id)}
             />
           </div>
-        )}
 
-        {activeTab === 'research' && (
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <ResearchView
-              onUnlockRecipe={(candidateId) => {
-                // Unlock recipe in state if matching
-                console.log('Unlocked candidate:', candidateId);
-              }}
-            />
-          </div>
-        )}
+          <CraftingQueueSidebar
+            queue={craftingQueue}
+            survivors={survivors}
+            selectedRecipe={activeRecipe}
+            onSelectRecipe={setSelectedRecipeId}
+            onCancelQueueItem={onCancelQueueItem}
+            onTogglePauseQueueItem={onTogglePauseQueueItem}
+            onReorderQueue={onReorderQueue}
+            stats={stats}
+            onAddSelectedToQueue={() => handleAddToQueue(activeRecipe.id, 1, selectedSurvivorId)}
+          />
+        </div>
+      )}
 
-        {activeTab === 'repair' && (
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <RepairView />
-          </div>
-        )}
-
-        {activeTab === 'upgrade' && (
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <UpgradeView />
-          </div>
-        )}
-      </div>
+      {activeTab === 'research' && <div className="min-h-0 flex-1 p-2 overflow-hidden"><ResearchView onUnlockRecipe={(candidateId) => console.log('Unlocked candidate:', candidateId)} /></div>}
+      {activeTab === 'repair' && <div className="min-h-0 flex-1 p-2 overflow-hidden"><RepairView /></div>}
+      {activeTab === 'upgrade' && <div className="min-h-0 flex-1 p-2 overflow-hidden"><UpgradeView /></div>}
     </div>
   );
 };
