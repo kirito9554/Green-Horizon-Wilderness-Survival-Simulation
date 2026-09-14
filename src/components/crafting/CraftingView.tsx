@@ -23,6 +23,7 @@ import './CraftingReference.css';
 
 interface CraftingViewProps {
   state: GameState;
+  /** Legacy callback retained for parent compatibility; queue scheduler is authoritative. */
   onStartCrafting?: (survivorId: string, recipeId: string) => void;
   onStartResearch?: (recipeId: string, survivorId: string) => void;
   onPauseResearch?: (recipeId: string) => void;
@@ -37,7 +38,6 @@ const UI_FONT = '"Roboto Condensed", "Be Vietnam Pro", -apple-system, BlinkMacSy
 
 export const CraftingView: React.FC<CraftingViewProps> = ({
   state,
-  onStartCrafting,
   onAddToCraftingQueue,
   onCancelQueueItem,
   onTogglePauseQueueItem,
@@ -50,16 +50,11 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
   const [sortMode, setSortMode] = useState<CraftingSortMode>('default');
   const [viewMode, setViewMode] = useState<CraftingViewMode>('grid');
   const [onlyPinned, setOnlyPinned] = useState(false);
-  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set(state.pinnedRecipeIds || ['RECIPE_ASSEMBLE_STONE_KNIFE', 'RECIPE_TORCH', 'RECIPE_CRAFT_BANDAGE']));
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(
+    new Set(state.pinnedRecipeIds || ['RECIPE_ASSEMBLE_STONE_KNIFE', 'RECIPE_TORCH', 'RECIPE_CRAFT_BANDAGE'])
+  );
   const [selectedRecipeId, setSelectedRecipeId] = useState<string>('RECIPE_ASSEMBLE_STONE_KNIFE');
   const [selectedSurvivorId, setSelectedSurvivorId] = useState<string>(survivors[0]?.id || '');
-  const [recentlyCrafted, setRecentlyCrafted] = useState<RecentlyCraftedEntry[]>([
-    { id: 'rc_1', recipeId: 'RECIPE_ASSEMBLE_STONE_KNIFE', name: 'Stone Knife', quantity: 2, timestamp: Date.now() - 120000, timeAgoText: '2m ago' },
-    { id: 'rc_2', recipeId: 'RECIPE_CRAFT_ROPE', name: 'Rope', quantity: 4, timestamp: Date.now() - 300000, timeAgoText: '5m ago' },
-    { id: 'rc_3', recipeId: 'RECIPE_TORCH', name: 'Torch', quantity: 1, timestamp: Date.now() - 720000, timeAgoText: '12m ago' },
-    { id: 'rc_4', recipeId: 'RECIPE_CRAFT_BANDAGE', name: 'Bandage', quantity: 5, timestamp: Date.now() - 1680000, timeAgoText: '28m ago' },
-    { id: 'rc_5', recipeId: 'RECIPE_CAMPFIRE_KIT', name: 'Campfire Kit', quantity: 1, timestamp: Date.now() - 3600000, timeAgoText: '1h ago' },
-  ]);
 
   useEffect(() => {
     if (!selectedSurvivorId || !survivors.some((survivor) => survivor.id === selectedSurvivorId)) {
@@ -74,7 +69,16 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
   );
 
   const categoryCounts = useMemo(() => {
-    const counts: Record<CraftingCategoryFilter, number> = { all: allCraftingRecipes.length, tools: 0, weapons: 0, survival: 0, shelter: 0, food: 0, medicine: 0, utility: 0 };
+    const counts: Record<CraftingCategoryFilter, number> = {
+      all: allCraftingRecipes.length,
+      tools: 0,
+      weapons: 0,
+      survival: 0,
+      shelter: 0,
+      food: 0,
+      medicine: 0,
+      utility: 0,
+    };
     allCraftingRecipes.forEach((recipe) => {
       const category = recipe.category as CraftingCategoryFilter;
       if (counts[category] !== undefined) counts[category] += 1;
@@ -87,18 +91,25 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
   const getRecipeStatus = (recipe: RecipeDefinition) => {
     let maxCraft = Infinity;
     const missingIngredients: string[] = [];
+
     recipe.ingredients.forEach((ingredient) => {
-      const owned = inventory.items.filter((item) => item.itemId === ingredient.itemId).reduce((sum, item) => sum + item.quantity, 0);
-      maxCraft = Math.min(maxCraft, Math.floor(owned / ingredient.quantity));
-      if (owned < ingredient.quantity) missingIngredients.push(ingredient.itemId);
+      const ownedAvailable = inventory.items
+        .filter((item) => item.itemId === ingredient.itemId)
+        .reduce((sum, item) => sum + Math.max(0, item.quantity - (item.reservedQuantity || 0)), 0);
+      maxCraft = Math.min(maxCraft, Math.floor(ownedAvailable / ingredient.quantity));
+      if (ownedAvailable < ingredient.quantity) missingIngredients.push(ingredient.itemId);
     });
+
+    const research = state.researches?.[recipe.id];
+    const isUnlocked = recipe.unlockedByDefault || recipe.type !== 'crafting' || research?.status === 'completed';
+
     return {
       recipe,
-      canCraft: missingIngredients.length === 0 && maxCraft > 0,
+      canCraft: isUnlocked && missingIngredients.length === 0 && maxCraft > 0,
       maxCraftable: maxCraft === Infinity ? 0 : maxCraft,
       missingIngredients,
       isPinned: pinnedIds.has(recipe.id),
-      isUnlocked: true,
+      isUnlocked,
     };
   };
 
@@ -130,7 +141,7 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
         }
         return 0;
       });
-  }, [allCraftingRecipes, inventory, selectedCategory, onlyPinned, searchQuery, sortMode, pinnedIds]);
+  }, [allCraftingRecipes, inventory, selectedCategory, onlyPinned, searchQuery, sortMode, pinnedIds, state.researches]);
 
   const activeRecipe = useMemo(
     () => allCraftingRecipes.find((recipe) => recipe.id === selectedRecipeId) || processedRecipes[0]?.recipe || allCraftingRecipes[0] || null,
@@ -139,15 +150,26 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
 
   const stats: CraftingStatsSummary = useMemo(() => {
     const idleCount = survivors.filter((survivor) => survivor.currentAction.type === 'idle').length;
+    const skilled = survivors.filter((survivor) => (survivor.skills.crafting || 0) > 1);
+    const avgSkill = skilled.length > 0
+      ? skilled.reduce((sum, survivor) => sum + (survivor.skills.crafting || 1), 0) / skilled.length
+      : 1;
     return {
-      totalKnownRecipes: allCraftingRecipes.length,
+      totalKnownRecipes: allCraftingRecipes.filter((recipe) => recipe.unlockedByDefault || state.researches?.[recipe.id]?.status === 'completed').length,
       maxRecipes: Math.max(18, allCraftingRecipes.length),
       queuedCrafts: craftingQueue.length,
       maxQueueSlots: 3,
       idleSurvivors: idleCount,
-      craftingSpeedBonusPct: idleCount > 1 ? (idleCount - 1) * 15 : 0,
+      craftingSpeedBonusPct: Math.max(0, Math.round((avgSkill - 1) * 10)),
     };
-  }, [allCraftingRecipes.length, craftingQueue.length, survivors]);
+  }, [allCraftingRecipes, craftingQueue.length, survivors, state.researches]);
+
+  const recentHistory = useMemo<RecentlyCraftedEntry[]>(() => {
+    return (state.recentlyCrafted || []).map((entry) => ({
+      ...entry,
+      timeAgoText: entry.timeAgoText || 'Recently',
+    }));
+  }, [state.recentlyCrafted]);
 
   const togglePin = (recipeId: string) => {
     setPinnedIds((previous) => {
@@ -158,20 +180,16 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
     });
   };
 
+  /**
+   * Craft is authoritative through the queue scheduler even for x1. This is
+   * required for material reservation, deterministic quality and pause/cancel.
+   */
   const handleCraftNow = (recipeId: string, quantity: number, survivorId: string) => {
-    if (onStartCrafting) onStartCrafting(survivorId, recipeId);
-    else onAddToCraftingQueue?.(recipeId, quantity, survivorId);
-    const recipe = RECIPES_DATABASE[recipeId];
-    if (recipe) {
-      setRecentlyCrafted((previous) => [
-        { id: `rc_${Date.now()}`, recipeId, name: recipe.name, quantity, timestamp: Date.now(), timeAgoText: 'Just now' },
-        ...previous.slice(0, 6),
-      ]);
-    }
+    onAddToCraftingQueue?.(recipeId, quantity, survivorId || undefined);
   };
 
   const handleAddToQueue = (recipeId: string, quantity: number, survivorId: string) => {
-    onAddToCraftingQueue?.(recipeId, quantity, survivorId);
+    onAddToCraftingQueue?.(recipeId, quantity, survivorId || undefined);
   };
 
   const minuteOfDay = state.gameTime.minuteOfDay || 0;
@@ -210,7 +228,10 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
 
             <div className="min-h-0 flex-1 grid grid-cols-[1.08fr_.92fr] gap-2 p-2 overflow-hidden">
               <section className="min-w-0 min-h-0 border border-[#354a3b] bg-[#081813] p-2 flex flex-col overflow-hidden">
-                <div className="h-7 shrink-0 flex items-center justify-between px-1 mb-1.5"><span className="text-[11px] font-black uppercase tracking-wide text-[#e1d9c6]">Recipe Catalog</span><span className="text-[9.5px] text-[#7f8e81]">{processedRecipes.length} recipes</span></div>
+                <div className="h-7 shrink-0 flex items-center justify-between px-1 mb-1.5">
+                  <span className="text-[11px] font-black uppercase tracking-wide text-[#e1d9c6]">Recipe Catalog</span>
+                  <span className="text-[9.5px] text-[#7f8e81]">{processedRecipes.length} recipes</span>
+                </div>
                 <div className="min-h-0 flex-1">
                   <CraftingCatalogGrid
                     recipes={processedRecipes}
@@ -236,7 +257,7 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
             </div>
 
             <CraftingFavoritesAndHistory
-              recentHistory={recentlyCrafted}
+              recentHistory={recentHistory}
               favoriteRecipeIds={Array.from(pinnedIds)}
               allRecipes={allCraftingRecipes}
               onSelectRecipe={(recipe) => setSelectedRecipeId(recipe.id)}
