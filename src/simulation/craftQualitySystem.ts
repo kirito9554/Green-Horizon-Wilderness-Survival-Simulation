@@ -40,6 +40,10 @@ export function deriveCraftQuality(
   crafter: SurvivorState,
   seed: number,
   unitIndex: number,
+  context: {
+    workstationPrecisionBonus?: number;
+    environmentPenalty?: number;
+  } = {},
 ): {
   quality: ItemQuality;
   profile: CraftQualityProfile;
@@ -57,16 +61,18 @@ export function deriveCraftQuality(
     Math.max(0, crafter.thirst - 60) * 0.16 +
     Math.max(0, 45 - crafter.health) * 0.16;
   const moraleModifier = (crafter.morale - 50) * 0.08;
+  const workstationPrecision = Math.max(0, context.workstationPrecisionBonus || 0);
+  const environmentPenalty = Math.max(0, context.environmentPenalty || 0);
 
   const workNoise = (deterministicRoll(seed, unitIndex, 0) - 0.5) * 10;
   const fitNoise = (deterministicRoll(seed, unitIndex, 1) - 0.5) * 12;
   const finishNoise = (deterministicRoll(seed, unitIndex, 2) - 0.5) * 14;
   const structuralNoise = (deterministicRoll(seed, unitIndex, 3) - 0.5) * 8;
 
-  const workmanship = clamp(skill * 0.72 + material * 0.20 + moraleModifier - physicalPenalty + workNoise);
-  const fit = clamp(skill * 0.62 + material * 0.28 - physicalPenalty * 0.8 + fitNoise);
-  const finish = clamp(skill * 0.55 + material * 0.24 + moraleModifier - physicalPenalty * 0.55 + finishNoise);
-  const structuralIntegrity = clamp(material * 0.48 + workmanship * 0.30 + fit * 0.22 - physicalPenalty * 0.45 + structuralNoise);
+  const workmanship = clamp(skill * 0.72 + material * 0.20 + moraleModifier + workstationPrecision * 0.75 - physicalPenalty - environmentPenalty + workNoise);
+  const fit = clamp(skill * 0.62 + material * 0.28 + workstationPrecision - physicalPenalty * 0.8 - environmentPenalty * 0.8 + fitNoise);
+  const finish = clamp(skill * 0.55 + material * 0.24 + moraleModifier + workstationPrecision * 0.35 - physicalPenalty * 0.55 - environmentPenalty * 0.45 + finishNoise);
+  const structuralIntegrity = clamp(material * 0.48 + workmanship * 0.30 + fit * 0.22 - physicalPenalty * 0.45 - environmentPenalty * 0.35 + structuralNoise);
 
   const profile: CraftQualityProfile = {
     material: Math.round(material * 10) / 10,
