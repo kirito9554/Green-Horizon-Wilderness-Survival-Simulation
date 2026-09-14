@@ -1,9 +1,9 @@
 import type { ItemQuality } from './index';
-import type { MaterialReservation, ToolComponentSlot } from './craftingSimulation';
+import type { MaterialReservation, ToolComponentSlot, WorkstationKind } from './craftingSimulation';
 
 export type UpgradeMode = 'tier' | 'component';
 export type ComponentModification = 'sharpen' | 'reinforce' | 'rebalance' | 'weatherproof';
-export type UpgradeJobStatus = 'waiting_materials' | 'waiting_worker' | 'pending' | 'in_progress' | 'paused';
+export type UpgradeJobStatus = 'waiting_materials' | 'waiting_worker' | 'waiting_workstation' | 'pending' | 'in_progress' | 'paused';
 
 export interface UpgradeJob {
   id: string;
@@ -16,6 +16,11 @@ export interface UpgradeJob {
   targetComponentSlot?: ToolComponentSlot;
   modification?: ComponentModification;
   assignedSurvivorId?: string;
+  assignedWorkstationId?: string;
+  assignedWorkstationKind?: WorkstationKind;
+  workstationSpeedMultiplier?: number;
+  workstationPrecisionBonus?: number;
+  workstationWeatherProtection?: number;
   progressSeconds: number;
   totalSeconds: number;
   status: UpgradeJobStatus;
