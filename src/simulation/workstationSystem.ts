@@ -1,5 +1,7 @@
 import type { CraftingQueueItem, GameState, RecipeDefinition } from '../types';
 import type { WorkstationKind } from '../types/craftingSimulation';
+import '../types/maintenanceSimulation';
+import '../types/upgradeSimulation';
 
 export interface WorkstationDescriptor {
   kind: WorkstationKind;
@@ -16,6 +18,14 @@ export interface WorkstationAssignment {
   speedMultiplier: number;
   precisionBonus: number;
   weatherProtection: number;
+}
+
+export interface WorkstationAssignable {
+  assignedWorkstationId?: string;
+  assignedWorkstationKind?: WorkstationKind;
+  workstationSpeedMultiplier?: number;
+  workstationPrecisionBonus?: number;
+  workstationWeatherProtection?: number;
 }
 
 const WORKSTATION_BY_BUILDING_ID: Record<string, WorkstationDescriptor> = {
@@ -65,44 +75,57 @@ function descriptorForKind(kind: WorkstationKind): WorkstationDescriptor {
   };
 }
 
-function queueOccupancyForBuilding(state: GameState, buildingInstanceId: string, excludingQueueId: string): number {
-  return (state.craftingQueue || []).filter(queueItem =>
-    queueItem.id !== excludingQueueId &&
-    queueItem.status === 'in_progress' &&
-    queueItem.assignedWorkstationId === buildingInstanceId
+function queueOccupancyForBuilding(state: GameState, buildingInstanceId: string, excludingJobId: string): number {
+  const crafting = (state.craftingQueue || []).filter(job =>
+    job.id !== excludingJobId &&
+    job.status === 'in_progress' &&
+    job.assignedWorkstationId === buildingInstanceId
   ).length;
+
+  const maintenance = (state.maintenanceSystem?.queue || []).filter(job =>
+    job.id !== excludingJobId &&
+    job.status === 'in_progress' &&
+    job.assignedWorkstationId === buildingInstanceId
+  ).length;
+
+  const upgrades = (state.upgradeSystem?.queue || []).filter(job =>
+    job.id !== excludingJobId &&
+    job.status === 'in_progress' &&
+    job.assignedWorkstationId === buildingInstanceId
+  ).length;
+
+  return crafting + maintenance + upgrades;
 }
 
-export function findAvailableWorkstation(
+function handcraftAssignment(state: GameState): WorkstationAssignment {
+  const sheltered = state.buildings.some(building =>
+    building.isBuilt &&
+    building.condition > 0 &&
+    building.buildingId === 'BUILDING_LEAF_SHELTER'
+  );
+  return {
+    kind: 'handcraft',
+    speedMultiplier: 1,
+    precisionBonus: 0,
+    weatherProtection: sheltered ? 0.55 : 0,
+  };
+}
+
+function findPhysicalWorkstation(
   state: GameState,
-  recipe: RecipeDefinition,
-  queueItemId: string,
+  kind: WorkstationKind,
+  jobId: string,
+  requiredBuildingId?: string,
 ): { assignment: WorkstationAssignment | null; reason?: string } {
-  const kind = inferKindFromRecipe(recipe);
+  if (kind === 'handcraft') return { assignment: handcraftAssignment(state) };
 
-  if (kind === 'handcraft') {
-    const sheltered = state.buildings.some(building =>
-      building.isBuilt &&
-      building.condition > 0 &&
-      building.buildingId === 'BUILDING_LEAF_SHELTER'
-    );
-    return {
-      assignment: {
-        kind,
-        speedMultiplier: 1,
-        precisionBonus: 0,
-        weatherProtection: sheltered ? 0.55 : 0,
-      },
-    };
-  }
-
-  const descriptor = recipe.requiredBuildingId
-    ? WORKSTATION_BY_BUILDING_ID[recipe.requiredBuildingId] || descriptorForKind(kind)
+  const descriptor = requiredBuildingId
+    ? WORKSTATION_BY_BUILDING_ID[requiredBuildingId] || descriptorForKind(kind)
     : descriptorForKind(kind);
 
   const candidates = state.buildings.filter(building => {
     if (!building.isBuilt || building.condition <= 0) return false;
-    if (recipe.requiredBuildingId) return building.buildingId === recipe.requiredBuildingId;
+    if (requiredBuildingId) return building.buildingId === requiredBuildingId;
     const known = WORKSTATION_BY_BUILDING_ID[building.buildingId];
     return known?.kind === kind;
   });
@@ -110,27 +133,22 @@ export function findAvailableWorkstation(
   if (candidates.length === 0) {
     return {
       assignment: null,
-      reason: recipe.requiredBuildingId
-        ? `Requires ${recipe.requiredBuildingId}`
-        : `Requires ${kind}`,
+      reason: requiredBuildingId ? `Requires ${requiredBuildingId}` : `Requires ${kind}`,
     };
   }
 
   for (const building of candidates) {
     const buildingDescriptor = WORKSTATION_BY_BUILDING_ID[building.buildingId] || descriptor;
-    const occupied = queueOccupancyForBuilding(state, building.id, queueItemId);
+    const occupied = queueOccupancyForBuilding(state, building.id, jobId);
     if (occupied >= buildingDescriptor.capacity) continue;
 
     const conditionRatio = Math.max(0.2, Math.min(1, building.condition / 100));
-    const speedMultiplier = 1 + (buildingDescriptor.speedMultiplier - 1) * conditionRatio;
-    const precisionBonus = buildingDescriptor.precisionBonus * conditionRatio;
-
     return {
       assignment: {
         workstationId: building.id,
         kind: buildingDescriptor.kind,
-        speedMultiplier,
-        precisionBonus,
+        speedMultiplier: 1 + (buildingDescriptor.speedMultiplier - 1) * conditionRatio,
+        precisionBonus: buildingDescriptor.precisionBonus * conditionRatio,
         weatherProtection: buildingDescriptor.weatherProtection * conditionRatio,
       },
     };
@@ -142,18 +160,46 @@ export function findAvailableWorkstation(
   };
 }
 
-export function assignWorkstation(queueItem: CraftingQueueItem, assignment: WorkstationAssignment): void {
-  queueItem.assignedWorkstationId = assignment.workstationId;
-  queueItem.assignedWorkstationKind = assignment.kind;
-  queueItem.workstationSpeedMultiplier = assignment.speedMultiplier;
-  queueItem.workstationPrecisionBonus = assignment.precisionBonus;
-  queueItem.workstationWeatherProtection = assignment.weatherProtection;
+export function findAvailableWorkstationByKind(
+  state: GameState,
+  kind: WorkstationKind,
+  jobId: string,
+): { assignment: WorkstationAssignment | null; reason?: string } {
+  return findPhysicalWorkstation(state, kind, jobId);
 }
 
-export function releaseWorkstation(queueItem: CraftingQueueItem): void {
-  queueItem.assignedWorkstationId = undefined;
-  queueItem.assignedWorkstationKind = undefined;
-  queueItem.workstationSpeedMultiplier = undefined;
-  queueItem.workstationPrecisionBonus = undefined;
-  queueItem.workstationWeatherProtection = undefined;
+export function findAvailableWorkstation(
+  state: GameState,
+  recipe: RecipeDefinition,
+  queueItemId: string,
+): { assignment: WorkstationAssignment | null; reason?: string } {
+  const kind = inferKindFromRecipe(recipe);
+  return findPhysicalWorkstation(state, kind, queueItemId, recipe.requiredBuildingId);
+}
+
+export function assignWorkstation(target: WorkstationAssignable, assignment: WorkstationAssignment): void {
+  target.assignedWorkstationId = assignment.workstationId;
+  target.assignedWorkstationKind = assignment.kind;
+  target.workstationSpeedMultiplier = assignment.speedMultiplier;
+  target.workstationPrecisionBonus = assignment.precisionBonus;
+  target.workstationWeatherProtection = assignment.weatherProtection;
+}
+
+export function releaseWorkstation(target: WorkstationAssignable): void {
+  target.assignedWorkstationId = undefined;
+  target.assignedWorkstationKind = undefined;
+  target.workstationSpeedMultiplier = undefined;
+  target.workstationPrecisionBonus = undefined;
+  target.workstationWeatherProtection = undefined;
+}
+
+export function isAssignedWorkstationOperational(state: GameState, target: WorkstationAssignable): boolean {
+  if (!target.assignedWorkstationId) return target.assignedWorkstationKind === undefined || target.assignedWorkstationKind === 'handcraft';
+  const building = state.buildings.find(candidate => candidate.id === target.assignedWorkstationId);
+  return Boolean(building?.isBuilt && building.condition > 0);
+}
+
+/** Retained for older call-sites that explicitly type the queue item. */
+export function assignCraftingWorkstation(queueItem: CraftingQueueItem, assignment: WorkstationAssignment): void {
+  assignWorkstation(queueItem, assignment);
 }
