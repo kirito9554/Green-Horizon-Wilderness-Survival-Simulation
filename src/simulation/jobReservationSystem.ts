@@ -68,6 +68,11 @@ function resolveInventory(state: GameState, source: MaterialReservationSource) {
   return source.areaId ? state.poiStorages?.[source.areaId] || null : null;
 }
 
+function matchesReservationSource(item: InventoryItem, source: MaterialReservationSource): boolean {
+  if (!source.storageLocationId) return true;
+  return item.storageLocationId === source.storageLocationId;
+}
+
 function availableQuantity(item: InventoryItem): number {
   return Math.max(0, item.quantity - (item.reservedQuantity || 0));
 }
@@ -97,7 +102,7 @@ export function reserveJobMaterials(
   for (const requirement of requirements) {
     let needed = requirement.quantity;
     for (const item of inventory.items) {
-      if (item.itemId !== requirement.itemId || needed <= 0) continue;
+      if (item.itemId !== requirement.itemId || needed <= 0 || !matchesReservationSource(item, source)) continue;
       const take = Math.min(needed, availableQuantity(item));
       if (take <= 0) continue;
       const qualityBreakdown = allocateSlice(item, take);
@@ -173,7 +178,7 @@ export function consumeJobReservations(
 
 /**
  * Craft reservations are rebuilt first. This function then reapplies persistent
- * reservations owned by maintenance/upgrade jobs without resetting existing
+ * reservations owned by maintenance/upgrade/storage jobs without resetting existing
  * counters. Invalid slices are dropped so corrupted saves never create phantom locks.
  */
 export function rebuildJobReservationCounters(
@@ -185,6 +190,7 @@ export function rebuildJobReservationCounters(
     const inventory = resolveInventory(state, reservation.source);
     const item = inventory?.items.find(candidate => candidate.instanceId === reservation.instanceId);
     if (!item || item.itemId !== reservation.itemId || reservation.quantity <= 0) continue;
+    if (!matchesReservationSource(item, reservation.source)) continue;
     if (availableQuantity(item) < reservation.quantity) continue;
 
     const availableBreakdown = subtractBreakdown(normalizedPhysicalBreakdown(item), item.reservedQualityBreakdown);
