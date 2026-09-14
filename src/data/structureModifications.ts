@@ -30,7 +30,10 @@ export const STRUCTURE_MODIFICATIONS: Record<string, StructureModificationDefini
       { itemId: 'ITEM_VINE_FIBER', quantity: 2 },
     ],
     durationSeconds: 18,
-    effects: { frameReinforcement: 18, windProtection: 14 },
+    // Cross bracing protects against wind by physically strengthening the frame.
+    // `windProtection` is reserved for actual wind barriers because the runtime
+    // materializes that effect as a separate Windbreak fixture component.
+    effects: { frameReinforcement: 18 },
   },
   MOD_DOUBLE_ROOF: {
     id: 'MOD_DOUBLE_ROOF',
