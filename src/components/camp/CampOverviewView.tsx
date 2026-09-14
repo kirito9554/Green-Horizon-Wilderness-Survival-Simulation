@@ -236,19 +236,14 @@ export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
 
   return (
     <div
-      className={`absolute inset-0 flex flex-col justify-between text-[#e8dfce] select-none pointer-events-auto ${CAMP_OVERVIEW_CONFIG.frame.rowGap}`}
+      className={`w-full h-full flex flex-col justify-between text-[#e8dfce] select-none pointer-events-auto ${CAMP_OVERVIEW_CONFIG.frame.rowGap}`}
       style={{
-        left: CAMP_OVERVIEW_CONFIG.frame.left,
-        top: CAMP_OVERVIEW_CONFIG.frame.top,
-        width: CAMP_OVERVIEW_CONFIG.frame.width,
-        height: CAMP_OVERVIEW_CONFIG.frame.height,
         fontFamily: UI_FONT,
       }}
     >
       {/* 1. TOP MAIN ROW (Camp Banner + Campsite Artwork on Left, Status + Queue on Right) */}
       <div 
-        className={`w-full flex ${CAMP_OVERVIEW_CONFIG.topRow.gap}`}
-        style={{ height: CAMP_OVERVIEW_CONFIG.topRow.height }}
+        className={`w-full flex ${CAMP_OVERVIEW_CONFIG.topRow.gap} min-h-0 flex-1`}
       >
         {/* LEFT COLUMN: Header Banner + Atmospheric Campsite Art */}
         <div className={`flex-1 flex flex-col ${CAMP_OVERVIEW_CONFIG.topRow.leftColumn.gap} h-full min-w-0`}>

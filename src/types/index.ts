@@ -22,7 +22,7 @@ export interface Nutrition {
 }
 
 export interface ToolProperties {
-  type: 'axe' | 'knife' | 'spear' | 'hammer' | 'container' | 'canteen';
+  type: 'axe' | 'knife' | 'spear' | 'hammer' | 'container' | 'canteen' | 'bow';
   tier: number;
   durabilityMax: number;
   efficiency: number;
@@ -106,12 +106,27 @@ export interface RecipeDefinition {
   name: string;
   description: string;
   type?: 'crafting' | 'processing'; // 'crafting' (kết hợp/lắp ráp đa thành phần) vs 'processing' (sơ chế/tinh luyện đơn tầng)
-  category: 'tools' | 'processing' | 'food' | 'water' | 'materials' | 'shelter' | 'medicine';
+  category: 'tools' | 'processing' | 'food' | 'water' | 'materials' | 'shelter' | 'medicine' | 'survival' | 'utility';
   ingredients: RecipeIngredient[];
   outputs: RecipeOutput[];
   craftTimeSeconds: number; // base time at 1x speed
   researchTimeSeconds?: number; // Thời gian nghiên cứu bản vẽ (giây) nếu là loại 'crafting'
   unlockedByDefault?: boolean; // Mở khoá sẵn từ đầu (không cần nghiên cứu)
+  tier?: 'Primitive' | 'Basic' | 'Advanced';
+  workstationName?: string; // 'None (Handcraft)' | 'Campfire' | 'Workbench' | 'Kiln'
+  durabilityLevel?: 'Low' | 'Medium' | 'High' | 'Indestructible' | 'One-time';
+  weightKg?: number;
+  useCases?: string;
+  ingredientClues?: Record<string, string>; // itemId -> text clue e.g. "Found on beaches and rocky areas"
+  progression?: {
+    nextRecipeId: string;
+    nextName: string;
+    nextStats?: {
+      durability?: string;
+      cutting?: string;
+      feature?: string;
+    };
+  };
   requiredSkill?: {
     skill: string;
     level: number;
@@ -341,6 +356,16 @@ export interface GameState {
   researches?: Record<string, RecipeResearchState>;
   craftingQueue?: CraftingQueueItem[];
   discoveredRecipeIds?: string[];
+  pinnedRecipeIds?: string[];
+  favoriteRecipeIds?: string[];
+  recentlyCrafted?: Array<{
+    id: string;
+    recipeId: string;
+    name: string;
+    quantity: number;
+    timestamp: number;
+    timeAgoText?: string;
+  }>;
   logs: LogMessage[];
   settings: GameSettings;
 }

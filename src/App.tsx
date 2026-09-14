@@ -648,7 +648,7 @@ export default function App() {
         onRecruitSurvivor={handleRecruitSurvivor}
       />
 
-      {/* 4. Inspect Location Modal (Dual storage, outpost buildings, ecological pools, expeditions) */}
+      {/* 4. Inspect Location Modal (Field Recon Dossier: Ecology, natural resource nodes, field operations) */}
       <InspectLocationModal
         isOpen={isInspectLocationModalOpen}
         onClose={() => setIsInspectLocationModalOpen(false)}
@@ -659,6 +659,10 @@ export default function App() {
         onTransferItem={handleTransferItem}
         onTransferAll={handleTransferAllItems}
         onStartPoiConstruction={handleStartPoiConstruction}
+        onOpenManageCamp={() => {
+          setIsInspectLocationModalOpen(false);
+          setIsManageCampModalOpen(true);
+        }}
       />
 
       {/* 5. Save/Load Modal */}

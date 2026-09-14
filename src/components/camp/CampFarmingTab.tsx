@@ -64,12 +64,8 @@ export const CampFarmingTab: React.FC<CampFarmingTabProps> = ({
 
   return (
     <div
-      className="absolute inset-0 flex flex-col justify-between text-[#e8dfce] select-none pointer-events-auto"
+      className="w-full h-full flex flex-col justify-between text-[#e8dfce] select-none pointer-events-auto"
       style={{
-        left: '4.5%',
-        top: '16.2%',
-        width: '91.0%',
-        height: '77.2%',
         fontFamily: UI_FONT,
       }}
     >

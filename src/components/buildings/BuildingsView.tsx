@@ -35,7 +35,6 @@ interface BuildingsViewProps {
   onStartConstruction: (survivorId: string, buildingId: string, plotId?: string) => void;
 }
 
-type UiBox = { x: number; y: number; w: number; h: number; radiusPx?: number };
 type PlotSize = 'small' | 'medium' | 'large';
 
 type CampPlot = {
@@ -50,46 +49,12 @@ type CampPlot = {
 const UI_FONT =
   '"Roboto Condensed", "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
-/**
- * ============================================================================
- * BUILDING MANAGEMENT — MAP PROTOTYPE
- * ============================================================================
- * Asset strategy for now:
- * - CAMP_BASE_MAP_SRC = null -> CSS terrain placeholder.
- * - BUILDING_MAP_SPRITES is empty -> each building uses a DOM/icon placeholder.
- *
- * Later, adding real art only requires filling the map source and sprite table.
- * ============================================================================
- */
-
 const CAMP_BASE_MAP_SRC: string | null = null;
 
 const BUILDING_MAP_SPRITES: Record<
   string,
   { src: string; objectPosition?: string; scale?: number }
-> = {
-  // BUILDING_CAMPFIRE_HEARTH: {
-  //   src: '/ui/buildings/map/campfire.webp',
-  //   scale: 1,
-  // },
-};
-
-const BUILD_UI = {
-  reference: { width: 1448, height: 1086 },
-
-  header: { x: 72, y: 190, w: 986, h: 72 },
-  categoryTabs: { x: 72, y: 267, w: 986, h: 42 },
-  blueprintRail: { x: 72, y: 315, w: 986, h: 142 },
-
-  mapPanel: { x: 72, y: 466, w: 610, h: 482, radiusPx: 8 },
-  detailPanel: { x: 692, y: 466, w: 366, h: 482, radiusPx: 8 },
-
-  rightColumn: { x: 1070, y: 190, w: 304, h: 758 },
-  campInfo: { x: 1070, y: 190, w: 304, h: 170, radiusPx: 8 },
-  queue: { x: 1070, y: 369, w: 304, h: 243, radiusPx: 8 },
-  resources: { x: 1070, y: 621, w: 304, h: 172, radiusPx: 8 },
-  workers: { x: 1070, y: 802, w: 304, h: 146, radiusPx: 8 },
-} as const;
+> = {};
 
 const CAMP_PLOTS: CampPlot[] = [
   { id: 'PLOT_NW_01', x: 18, y: 23, w: 14, h: 14, size: 'medium' },
@@ -105,16 +70,6 @@ const CAMP_PLOTS: CampPlot[] = [
   { id: 'PLOT_INNER_11', x: 33, y: 34, w: 11, h: 11, size: 'small' },
   { id: 'PLOT_INNER_12', x: 61, y: 64, w: 11, h: 11, size: 'small' },
 ];
-
-const rootBoxStyle = (box: UiBox): React.CSSProperties => ({
-  left: `${(box.x / BUILD_UI.reference.width) * 100}%`,
-  top: `${(box.y / BUILD_UI.reference.height) * 100}%`,
-  width: `${(box.w / BUILD_UI.reference.width) * 100}%`,
-  height: `${(box.h / BUILD_UI.reference.height) * 100}%`,
-  borderRadius: box.radiusPx ?? 0,
-});
-
-const uiPx = (px: number) => `${(px / BUILD_UI.reference.width) * 100}cqw`;
 
 const getCategoryIcon = (category: string) => {
   switch (category) {
@@ -195,11 +150,6 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({
     survivors[0]?.id ?? '',
   );
 
-  /**
-   * Prototype-only placement memory.
-   * This lets the selected plot survive while state updates after pressing Build.
-   * The final system should move this to ConstructedBuilding.plotId in GameState.
-   */
   const [plannedPlotByBuildingId, setPlannedPlotByBuildingId] = useState<
     Record<string, string>
   >({});
@@ -267,10 +217,6 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({
   );
   const chosenSurvivorIdle = chosenSurvivor?.currentAction.type === 'idle';
 
-  /**
-   * Existing saves do not contain plotId yet, so buildings are assigned to the
-   * first free prototype plot. A locally planned plot wins when available.
-   */
   const buildingPlacements = useMemo(() => {
     const used = new Set<string>();
     const placement = new Map<string, CampPlot>();
@@ -402,22 +348,17 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({
   const SelectedCategoryIcon = getCategoryIcon(selectedCategory);
   const selectedCategoryColor = getCategoryColor(selectedCategory);
 
-  const selectedBuildingProgress = selectedBuilding
-    ? selectedBuilding.totalBuildSeconds > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (selectedBuilding.buildProgressSeconds /
-              selectedBuilding.totalBuildSeconds) *
-              100,
-          ),
-        )
-      : 0
-    : 0;
+  const activeBuildingName = selectedBuilding
+    ? (allBlueprints.find((b) => b.id === selectedBuilding.buildingId)?.name ?? selectedBuilding.buildingId)
+    : (selectedBlueprint?.name ?? '');
+
+  const activeBuildingDescription = selectedBuilding
+    ? (allBlueprints.find((b) => b.id === selectedBuilding.buildingId)?.description ?? '')
+    : (selectedBlueprint?.description ?? '');
 
   return (
     <div
-      className="absolute inset-0 pointer-events-none select-none"
+      className="w-full h-full flex gap-3 text-[#e6ede4] select-none pointer-events-auto"
       style={{ fontFamily: UI_FONT }}
     >
       <style>{`
@@ -425,7 +366,7 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({
           scrollbar-width: thin;
           scrollbar-color: rgba(104, 145, 115, 0.80) rgba(2, 18, 18, 0.40);
         }
-        .build-ui-scroll::-webkit-scrollbar { width: 7px; height: 7px; }
+        .build-ui-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
         .build-ui-scroll::-webkit-scrollbar-track {
           background: rgba(2, 18, 18, 0.40);
           border-radius: 999px;
@@ -440,589 +381,318 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({
         }
       `}</style>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* LEFT / CENTER: HEADER                                               */}
-      {/* ------------------------------------------------------------------ */}
-      <div
-        className="absolute pointer-events-auto flex items-center justify-between px-4"
-        style={{ ...rootBoxStyle(BUILD_UI.header), ...panelStyle }}
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="shrink-0 flex items-center justify-center rounded-md"
-            style={{
-              width: uiPx(44),
-              height: uiPx(44),
-              ...sunkenStyle,
-            }}
-          >
-            <Hammer
-              style={{ width: uiPx(25), height: uiPx(25), color: '#74d79b' }}
-            />
-          </div>
-          <div className="min-w-0">
-            <div
-              className="uppercase font-extrabold tracking-wide text-[#f1eadb]"
-              style={{ fontSize: uiPx(23), lineHeight: 1 }}
-            >
-              Quản lý xây dựng
-            </div>
-            <div
-              className="text-[#a9b8ad] truncate"
-              style={{ fontSize: uiPx(11.5), marginTop: uiPx(7) }}
-            >
-              Chọn công trình, bố trí vào khu trại và quản lý tiến độ thi công.
-            </div>
-          </div>
-        </div>
-
-        <div
-          className="text-right text-[#7f9989] italic hidden lg:block"
-          style={{ fontSize: uiPx(11) }}
-        >
-          Prototype layout — map và model sẽ thay bằng asset thật sau.
-        </div>
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* CATEGORY TABS                                                       */}
-      {/* ------------------------------------------------------------------ */}
-      <div
-        className="absolute pointer-events-auto flex gap-1.5"
-        style={rootBoxStyle(BUILD_UI.categoryTabs)}
-      >
-        {['all', ...categories].map((category) => {
-          const active = categoryFilter === category;
-          const Icon = category === 'all' ? Box : getCategoryIcon(category);
-          return (
-            <button
-              key={category}
-              type="button"
-              onClick={() => setCategoryFilter(category)}
-              className="flex-1 min-w-0 flex items-center justify-center gap-2 rounded-md transition-all"
-              style={{
-                background: active
-                  ? 'linear-gradient(180deg, rgba(30,84,57,0.82), rgba(18,56,42,0.88))'
-                  : 'linear-gradient(180deg, rgba(5,31,30,0.82), rgba(3,24,24,0.88))',
-                border: active
-                  ? '1px solid rgba(111,174,112,0.68)'
-                  : '1px solid rgba(57,91,75,0.48)',
-                boxShadow: active
-                  ? 'inset 0 1px 0 rgba(255,255,255,0.05), 0 0 8px rgba(69,177,103,0.10)'
-                  : 'inset 0 3px 7px rgba(0,0,0,0.28)',
-                color: active ? '#e6eddc' : '#a9b6ac',
-                fontSize: uiPx(11),
-                fontWeight: active ? 700 : 600,
-              }}
-            >
-              <Icon style={{ width: uiPx(14), height: uiPx(14) }} />
-              <span className="truncate">
-                {category === 'all' ? 'Tất cả' : getCategoryLabel(category)}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* BLUEPRINT SELECTOR RAIL                                             */}
-      {/* ------------------------------------------------------------------ */}
-      <div
-        className="absolute pointer-events-auto build-ui-scroll overflow-x-auto overflow-y-hidden p-2"
-        style={{ ...rootBoxStyle(BUILD_UI.blueprintRail), ...sunkenStyle }}
-      >
-        <div className="flex gap-2 h-full min-w-max">
-          {visibleBlueprints.map((blueprint) => {
-            const category = String(blueprint.category);
-            const Icon = getCategoryIcon(category);
-            const color = getCategoryColor(category);
-            const selected = selectedBlueprintId === blueprint.id && !selectedBuildingId;
-            const matchingBuildings = buildings.filter(
-              (building) => building.buildingId === blueprint.id,
-            );
-            const built = matchingBuildings.some((building) => building.isBuilt);
-            const building = matchingBuildings[0];
-            const inProgress = !!building && !building.isBuilt;
-
+      {/* ================================================================== */}
+      {/* LEFT & CENTER: MAIN BUILDING CANVAS                                */}
+      {/* ================================================================== */}
+      <div className="flex-1 flex flex-col gap-2.5 min-w-0 h-full">
+        {/* Category Tabs */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {['all', ...categories].map((category) => {
+            const active = categoryFilter === category;
+            const Icon = category === 'all' ? Box : getCategoryIcon(category);
             return (
               <button
-                key={blueprint.id}
+                key={category}
                 type="button"
-                onClick={() => handleBlueprintSelect(blueprint)}
-                className="relative shrink-0 h-full rounded-md flex flex-col items-center justify-between px-2 py-2 transition-all"
-                style={{
-                  width: uiPx(142),
-                  background: selected
-                    ? 'linear-gradient(180deg, rgba(31,73,52,0.94), rgba(12,42,35,0.96))'
-                    : 'linear-gradient(180deg, rgba(5,31,30,0.92), rgba(3,22,22,0.95))',
-                  border: selected
-                    ? '1px solid rgba(231,188,74,0.92)'
-                    : '1px solid rgba(73,104,85,0.50)',
-                  boxShadow: selected
-                    ? '0 0 11px rgba(236,184,56,0.15), inset 0 0 0 1px rgba(246,211,112,0.08)'
-                    : 'inset 0 3px 8px rgba(0,0,0,0.35)',
-                }}
+                onClick={() => setCategoryFilter(category)}
+                className={`flex-1 min-w-0 py-1.5 px-2 flex items-center justify-center gap-2 rounded-lg transition-all text-xs cursor-pointer ${
+                  active
+                    ? 'bg-gradient-to-b from-[#1e5439] to-[#12382a] border border-[#6fae70] text-[#eef6ea] font-bold shadow-[0_0_10px_rgba(111,174,112,0.2)]'
+                    : 'bg-[#051f1e]/85 hover:bg-[#0d2e27] border border-[#395b4b]/50 text-[#a9b6ac] hover:text-[#e4ede5]'
+                }`}
               >
-                <div
-                  className="flex items-center justify-center rounded-md"
-                  style={{
-                    width: uiPx(68),
-                    height: uiPx(61),
-                    background:
-                      'radial-gradient(circle at 50% 35%, rgba(74,115,79,0.34), rgba(4,24,23,0.80) 70%)',
-                    border: '1px solid rgba(74,103,84,0.34)',
-                  }}
-                >
-                  <Icon
-                    style={{ width: uiPx(38), height: uiPx(38), color, strokeWidth: 1.45 }}
-                  />
-                </div>
-
-                <div className="w-full text-center min-w-0">
-                  <div
-                    className="truncate font-bold text-[#e9e1d1]"
-                    style={{ fontSize: uiPx(10.4), lineHeight: 1.1 }}
-                    title={blueprint.name}
-                  >
-                    {blueprint.name}
-                  </div>
-                  <div
-                    className="truncate text-[#859a8d]"
-                    style={{ fontSize: uiPx(8.8), marginTop: uiPx(3) }}
-                  >
-                    {getCategoryLabel(category)}
-                  </div>
-                </div>
-
-                {(built || inProgress) && (
-                  <div
-                    className="absolute top-1.5 right-1.5 rounded-full flex items-center justify-center"
-                    style={{
-                      width: uiPx(18),
-                      height: uiPx(18),
-                      background: built ? '#17613b' : '#735b18',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                    }}
-                    title={built ? 'Đã xây' : 'Đang thi công'}
-                  >
-                    {built ? (
-                      <CheckCircle2
-                        style={{ width: uiPx(12), height: uiPx(12), color: '#8ae5a7' }}
-                      />
-                    ) : (
-                      <Clock3
-                        style={{ width: uiPx(11), height: uiPx(11), color: '#f2cb61' }}
-                      />
-                    )}
-                  </div>
-                )}
+                <Icon className="w-4 h-4 shrink-0 text-emerald-400" />
+                <span className="truncate">
+                  {category === 'all' ? 'Tất cả' : getCategoryLabel(category)}
+                </span>
               </button>
             );
           })}
         </div>
-      </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* CAMP LAYOUT MAP                                                     */}
-      {/* ------------------------------------------------------------------ */}
-      <div
-        className="absolute pointer-events-auto overflow-hidden"
-        style={{ ...rootBoxStyle(BUILD_UI.mapPanel), ...panelStyle }}
-      >
+        {/* Blueprint Selector Rail */}
         <div
-          className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-3"
-          style={{
-            height: uiPx(42),
-            background:
-              'linear-gradient(180deg, rgba(3,26,25,0.97), rgba(3,26,25,0.72), transparent)',
-          }}
+          className="build-ui-scroll overflow-x-auto overflow-y-hidden p-2 rounded-xl shrink-0"
+          style={sunkenStyle}
         >
-          <div className="flex items-center gap-2">
-            <MapPin
-              style={{ width: uiPx(15), height: uiPx(15), color: '#e8d08a' }}
-            />
-            <span
-              className="uppercase font-bold tracking-wide text-[#e9e3d7]"
-              style={{ fontSize: uiPx(11.5) }}
-            >
-              Camp Layout
-            </span>
-          </div>
-          <div
-            className="flex items-center gap-3 text-[#aab9ad]"
-            style={{ fontSize: uiPx(9.5) }}
-          >
-            <span>{builtCount} công trình</span>
-            <span>{CAMP_PLOTS.length - buildingByPlotId.size} ô trống</span>
+          <div className="flex gap-2 min-w-max h-[100px]">
+            {visibleBlueprints.map((blueprint) => {
+              const category = String(blueprint.category);
+              const Icon = getCategoryIcon(category);
+              const color = getCategoryColor(category);
+              const selected = selectedBlueprintId === blueprint.id && !selectedBuildingId;
+              const matchingBuildings = buildings.filter(
+                (building) => building.buildingId === blueprint.id,
+              );
+              const built = matchingBuildings.some((building) => building.isBuilt);
+              const building = matchingBuildings[0];
+              const inProgress = !!building && !building.isBuilt;
+
+              return (
+                <button
+                  key={blueprint.id}
+                  type="button"
+                  onClick={() => handleBlueprintSelect(blueprint)}
+                  className={`relative shrink-0 w-[140px] h-full rounded-xl flex flex-col items-center justify-between p-2 transition-all cursor-pointer ${
+                    selected
+                      ? 'bg-gradient-to-b from-[#1f4934] to-[#0c2a23] border-2 border-[#e7bc4a] text-[#f7f0e1] shadow-[0_0_12px_rgba(231,188,74,0.25)]'
+                      : 'bg-[#051f1e]/85 hover:bg-[#0c2a23] border border-[#375545] text-[#b8c9bd] hover:text-white'
+                  }`}
+                >
+                  <div
+                    className="flex items-center justify-center rounded-lg w-12 h-11"
+                    style={{
+                      background:
+                        'radial-gradient(circle at 50% 35%, rgba(74,115,79,0.34), rgba(4,24,23,0.80) 70%)',
+                      border: '1px solid rgba(74,103,84,0.34)',
+                    }}
+                  >
+                    <Icon className="w-6 h-6" style={{ color, strokeWidth: 1.6 }} />
+                  </div>
+
+                  <div className="w-full text-center min-w-0">
+                    <div
+                      className="truncate font-bold text-[11.5px] leading-tight text-[#f3ebde]"
+                      title={blueprint.name}
+                    >
+                      {blueprint.name}
+                    </div>
+                    <div className="truncate text-[9.5px] text-[#859a8d] mt-0.5">
+                      {getCategoryLabel(category)}
+                    </div>
+                  </div>
+
+                  {(built || inProgress) && (
+                    <div
+                      className={`absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center border border-white/20 ${
+                        built ? 'bg-emerald-600' : 'bg-amber-600'
+                      }`}
+                      title={built ? 'Đã xây' : 'Đang thi công'}
+                    >
+                      {built ? (
+                        <CheckCircle2 className="w-3 h-3 text-emerald-100" />
+                      ) : (
+                        <Clock3 className="w-3 h-3 text-amber-100" />
+                      )}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Replace this entire background layer with the final base-camp image later. */}
-        {CAMP_BASE_MAP_SRC ? (
-          <img
-            src={CAMP_BASE_MAP_SRC}
-            alt="Camp base layout"
-            className="absolute inset-0 w-full h-full object-cover"
-            draggable={false}
-          />
-        ) : (
+        {/* Center Workspace: Map (Left) + Building Details (Right) */}
+        <div className="flex-1 flex gap-2.5 min-h-0">
+          {/* Map Layout Panel */}
           <div
-            className="absolute inset-0"
-            style={{
-              background: `
-                radial-gradient(ellipse at 50% 53%, rgba(132,111,66,0.70) 0%, rgba(94,79,48,0.68) 30%, rgba(42,68,42,0.62) 56%, transparent 72%),
-                radial-gradient(circle at 12% 18%, rgba(34,92,48,0.75) 0 9%, transparent 10%),
-                radial-gradient(circle at 85% 22%, rgba(28,85,43,0.78) 0 10%, transparent 11%),
-                radial-gradient(circle at 10% 78%, rgba(30,83,42,0.78) 0 12%, transparent 13%),
-                radial-gradient(circle at 90% 76%, rgba(25,78,39,0.80) 0 13%, transparent 14%),
-                linear-gradient(155deg, #183d2c 0%, #244b32 42%, #173426 100%)
-              `,
-            }}
+            className="flex-1 rounded-xl overflow-hidden relative border border-[#3b5c49]/60 shadow-lg flex flex-col"
+            style={panelStyle}
           >
-            <div
-              className="absolute rounded-full opacity-30"
-              style={{
-                left: '9%',
-                top: '14%',
-                width: '82%',
-                height: '74%',
-                border: '1px dashed rgba(221,194,106,0.60)',
-                boxShadow: 'inset 0 0 40px rgba(197,167,87,0.07)',
-              }}
-            />
-            <div
-              className="absolute left-[8%] right-[8%] bottom-[7%] text-center text-[#d4c694]/55 uppercase tracking-[0.25em]"
-              style={{ fontSize: uiPx(8.5) }}
-            >
-              Base map placeholder
+            {/* Map Top Header Overlay */}
+            <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-3 py-2 bg-gradient-to-b from-[#031a19]/95 via-[#031a19]/70 to-transparent">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-[#e8d08a]" />
+                <span className="uppercase font-bold tracking-wide text-xs text-[#e9e3d7]">
+                  Mặt bằng bãi trại (Camp Layout)
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-[#aab9ad]">
+                <span>{builtCount} công trình</span>
+                <span>{CAMP_PLOTS.length - buildingByPlotId.size} ô trống</span>
+              </div>
             </div>
-          </div>
-        )}
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-black/15 pointer-events-none" />
-
-        {/* Fixed prototype plots */}
-        {CAMP_PLOTS.map((plot) => {
-          const building = buildingByPlotId.get(plot.id);
-          const isSelectedPlot = selectedPlotId === plot.id;
-          const isBuildTarget = !building && !!selectedBlueprint && !selectedBuildingId;
-
-          const buildingDef = building
-            ? allBlueprints.find((blueprint) => blueprint.id === building.buildingId)
-            : undefined;
-          const category = buildingDef ? String(buildingDef.category) : 'production';
-          const Icon = getCategoryIcon(category);
-          const categoryColor = getCategoryColor(category);
-          const sprite = building ? BUILDING_MAP_SPRITES[building.buildingId] : undefined;
-
-          const progress = building
-            ? building.totalBuildSeconds > 0
-              ? Math.min(
-                  100,
-                  Math.round(
-                    (building.buildProgressSeconds / building.totalBuildSeconds) * 100,
-                  ),
-                )
-              : 0
-            : 0;
-
-          return (
-            <button
-              key={plot.id}
-              type="button"
-              onClick={() => handlePlotClick(plot)}
-              className="absolute -translate-x-1/2 -translate-y-1/2 rounded-md transition-all group"
-              style={{
-                left: `${plot.x}%`,
-                top: `${plot.y}%`,
-                width: `${plot.w}%`,
-                height: `${plot.h}%`,
-                border: building
-                  ? isSelectedPlot
-                    ? '2px solid rgba(248,203,77,0.92)'
-                    : '1px solid rgba(255,255,255,0.04)'
-                  : isSelectedPlot
-                    ? '2px solid rgba(248,203,77,0.95)'
-                    : isBuildTarget
-                      ? '1px dashed rgba(226,225,207,0.78)'
-                      : '1px dashed rgba(214,215,198,0.30)',
-                background: building
-                  ? 'rgba(5,24,19,0.18)'
-                  : isSelectedPlot
-                    ? 'rgba(224,181,55,0.14)'
-                    : isBuildTarget
-                      ? 'rgba(238,240,220,0.05)'
-                      : 'rgba(0,0,0,0.05)',
-                boxShadow: isSelectedPlot
-                  ? '0 0 12px rgba(239,188,53,0.28)'
-                  : 'none',
-              }}
-              title={
-                building
-                  ? buildingDef?.name ?? building.buildingId
-                  : `${plot.id} • ${plot.size}`
-              }
-            >
-              {building ? (
-                sprite ? (
-                  <img
-                    src={sprite.src}
-                    alt={buildingDef?.name ?? building.buildingId}
-                    className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                    style={{
-                      objectPosition: sprite.objectPosition ?? 'center',
-                      transform: `scale(${sprite.scale ?? 1})`,
-                      opacity: building.isBuilt ? 1 : 0.55,
-                    }}
-                    draggable={false}
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <div
-                      className="rounded-full flex items-center justify-center"
-                      style={{
-                        width: '58%',
-                        aspectRatio: '1 / 1',
-                        maxHeight: '68%',
-                        background:
-                          'radial-gradient(circle at 45% 35%, rgba(96,126,86,0.92), rgba(18,46,35,0.96) 72%)',
-                        border: '1px solid rgba(214,204,156,0.32)',
-                        boxShadow:
-                          '0 4px 8px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.04)',
-                        opacity: building.isBuilt ? 1 : 0.55,
-                      }}
-                    >
-                      <Icon
-                        style={{
-                          width: '52%',
-                          height: '52%',
-                          color: categoryColor,
-                          strokeWidth: 1.5,
-                        }}
-                      />
-                    </div>
-                    <div
-                      className="absolute -bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-1.5 py-0.5 text-[#eee8db]"
-                      style={{
-                        fontSize: uiPx(8.2),
-                        background: 'rgba(1,15,14,0.86)',
-                        border: '1px solid rgba(80,107,87,0.55)',
-                      }}
-                    >
-                      {buildingDef?.name ?? 'Công trình'}
-                    </div>
-                  </div>
-                )
+            {/* Base Map Canvas */}
+            <div className="relative flex-1 w-full h-full overflow-hidden">
+              {CAMP_BASE_MAP_SRC ? (
+                <img
+                  src={CAMP_BASE_MAP_SRC}
+                  alt="Camp base layout"
+                  className="absolute inset-0 w-full h-full object-cover"
+                  draggable={false}
+                />
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <Plus
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background: `
+                      radial-gradient(ellipse at 50% 53%, rgba(132,111,66,0.70) 0%, rgba(94,79,48,0.68) 30%, rgba(42,68,42,0.62) 56%, transparent 72%),
+                      radial-gradient(circle at 12% 18%, rgba(34,92,48,0.75) 0 9%, transparent 10%),
+                      radial-gradient(circle at 85% 22%, rgba(28,85,43,0.78) 0 10%, transparent 11%),
+                      radial-gradient(circle at 10% 78%, rgba(30,83,42,0.78) 0 12%, transparent 13%),
+                      radial-gradient(circle at 90% 76%, rgba(25,78,39,0.80) 0 13%, transparent 14%),
+                      linear-gradient(155deg, #183d2c 0%, #244b32 42%, #173426 100%)
+                    `,
+                  }}
+                >
+                  <div
+                    className="absolute rounded-full opacity-30"
                     style={{
-                      width: '28%',
-                      height: '28%',
-                      color: isSelectedPlot
-                        ? '#f2cf62'
-                        : isBuildTarget
-                          ? 'rgba(230,230,215,0.82)'
-                          : 'rgba(210,214,201,0.38)',
+                      left: '9%',
+                      top: '14%',
+                      width: '82%',
+                      height: '74%',
+                      border: '1px dashed rgba(221,194,106,0.60)',
+                      boxShadow: 'inset 0 0 40px rgba(197,167,87,0.07)',
                     }}
                   />
                 </div>
               )}
 
-              {building && !building.isBuilt && (
-                <div className="absolute left-[12%] right-[12%] bottom-[5%] h-[6px] rounded-full overflow-hidden bg-black/55 border border-white/10 pointer-events-none">
-                  <div
-                    className="h-full bg-amber-400/80"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-black/15 pointer-events-none" />
 
-      {/* ------------------------------------------------------------------ */}
-      {/* BUILDING DETAILS                                                    */}
-      {/* ------------------------------------------------------------------ */}
-      <div
-        className="absolute pointer-events-auto overflow-hidden flex flex-col"
-        style={{ ...rootBoxStyle(BUILD_UI.detailPanel), ...panelStyle }}
-      >
-        {selectedBlueprint ? (
-          <>
-            <div
-              className="px-3 flex items-center justify-between shrink-0"
-              style={{
-                height: uiPx(45),
-                borderBottom: '1px solid rgba(73,102,83,0.45)',
-              }}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <SelectedCategoryIcon
-                  style={{
-                    width: uiPx(19),
-                    height: uiPx(19),
-                    color: selectedCategoryColor,
-                  }}
-                />
-                <div
-                  className="font-extrabold uppercase text-[#f0eadf] truncate"
-                  style={{ fontSize: uiPx(14) }}
-                >
-                  {selectedBlueprint.name}
-                </div>
-              </div>
-              <div
-                className="rounded px-2 py-1 uppercase font-bold shrink-0"
-                style={{
-                  fontSize: uiPx(8.8),
-                  color: selectedCategoryColor,
-                  border: `1px solid ${selectedCategoryColor}55`,
-                  background: 'rgba(0,0,0,0.18)',
-                }}
-              >
-                {getCategoryLabel(selectedCategory)}
-              </div>
-            </div>
+              {/* Interactive Plots */}
+              {CAMP_PLOTS.map((plot) => {
+                const building = buildingByPlotId.get(plot.id);
+                const isSelectedPlot = selectedPlotId === plot.id;
+                const isBuildTarget = !building && !!selectedBlueprint && !selectedBuildingId;
 
-            <div className="flex-1 min-h-0 p-3 flex flex-col gap-2.5">
-              {/* Building/map-art placeholder */}
-              <div
-                className="relative shrink-0 rounded-md overflow-hidden flex items-center justify-center"
-                style={{ height: uiPx(112), ...sunkenStyle }}
-              >
-                <SelectedCategoryIcon
-                  style={{
-                    width: uiPx(62),
-                    height: uiPx(62),
-                    color: selectedCategoryColor,
-                    opacity: 0.76,
-                    strokeWidth: 1.35,
-                  }}
-                />
-                <div
-                  className="absolute bottom-2 right-2 uppercase tracking-wider text-[#9bad9f]"
-                  style={{ fontSize: uiPx(8.2) }}
-                >
-                  model placeholder
-                </div>
-              </div>
+                const buildingDef = building
+                  ? allBlueprints.find((blueprint) => blueprint.id === building.buildingId)
+                  : undefined;
+                const category = buildingDef ? String(buildingDef.category) : 'production';
+                const Icon = getCategoryIcon(category);
+                const categoryColor = getCategoryColor(category);
+                const sprite = building ? BUILDING_MAP_SPRITES[building.buildingId] : undefined;
 
-              <div
-                className="text-[#c2cec5] overflow-hidden"
-                style={{ fontSize: uiPx(10.3), lineHeight: 1.28, minHeight: uiPx(42) }}
-              >
-                {selectedBlueprint.description}
-              </div>
+                const progress = building
+                  ? building.totalBuildSeconds > 0
+                    ? Math.min(
+                        100,
+                        Math.round(
+                          (building.buildProgressSeconds / building.totalBuildSeconds) * 100,
+                        ),
+                      )
+                    : 0
+                  : 0;
 
-              <div className="grid grid-cols-2 gap-1.5 shrink-0">
-                <div
-                  className="rounded px-2 py-1.5 flex items-center justify-between"
-                  style={sunkenStyle}
-                >
-                  <span className="text-[#8fa398]" style={{ fontSize: uiPx(9) }}>
-                    Thời gian
-                  </span>
-                  <span className="text-amber-300 font-bold" style={{ fontSize: uiPx(9.5) }}>
-                    {selectedBlueprint.buildTimeSeconds}s
-                  </span>
-                </div>
-                <div
-                  className="rounded px-2 py-1.5 flex items-center justify-between"
-                  style={sunkenStyle}
-                >
-                  <span className="text-[#8fa398]" style={{ fontSize: uiPx(9) }}>
-                    Vị trí
-                  </span>
-                  <span
-                    className="text-[#e4ddcd] font-bold truncate ml-2"
-                    style={{ fontSize: uiPx(9.2) }}
+                return (
+                  <button
+                    key={plot.id}
+                    type="button"
+                    onClick={() => handlePlotClick(plot)}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 rounded-xl transition-all cursor-pointer group shadow-md"
+                    style={{
+                      left: `${plot.x}%`,
+                      top: `${plot.y}%`,
+                      width: `${plot.w}%`,
+                      height: `${plot.h}%`,
+                      border: building
+                        ? isSelectedPlot
+                          ? '2px solid rgba(248,203,77,0.92)'
+                          : '1px solid rgba(255,255,255,0.1)'
+                        : isSelectedPlot
+                          ? '2px solid rgba(248,203,77,0.95)'
+                          : isBuildTarget
+                            ? '1.5px dashed rgba(226,225,207,0.78)'
+                            : '1px dashed rgba(214,215,198,0.30)',
+                      background: building
+                        ? 'rgba(5,24,19,0.55)'
+                        : isSelectedPlot
+                          ? 'rgba(34,76,53,0.65)'
+                          : 'rgba(5,24,23,0.35)',
+                      boxShadow: isSelectedPlot
+                        ? '0 0 14px rgba(248,203,77,0.35)'
+                        : 'none',
+                    }}
                   >
-                    {selectedPlot?.id ?? 'Chưa chọn'}
-                  </span>
-                </div>
-              </div>
+                    {building ? (
+                      <div className="relative w-full h-full flex flex-col items-center justify-center p-1">
+                        {sprite ? (
+                          <img
+                            src={sprite.src}
+                            alt={buildingDef?.name ?? building.buildingId}
+                            className="w-full h-full object-contain"
+                            style={{
+                              transform: `scale(${sprite.scale ?? 1})`,
+                              objectPosition: sprite.objectPosition ?? 'center',
+                            }}
+                          />
+                        ) : (
+                          <Icon
+                            className="w-7 h-7"
+                            style={{
+                              color: categoryColor,
+                              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.6))',
+                            }}
+                          />
+                        )}
 
-              {selectedBuilding ? (
-                <>
-                  <div
-                    className="rounded p-2"
-                    style={{ ...sunkenStyle, minHeight: uiPx(62) }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[#9eafa4]" style={{ fontSize: uiPx(9) }}>
-                        Trạng thái
-                      </span>
-                      <span
-                        className="font-bold"
-                        style={{
-                          fontSize: uiPx(9.5),
-                          color: selectedBuilding.isBuilt ? '#7ae09b' : '#f1c75f',
-                        }}
-                      >
-                        {selectedBuilding.isBuilt ? 'Đã hoàn thiện' : 'Đang thi công'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="text-[#9eafa4]" style={{ fontSize: uiPx(9) }}>
-                        Độ bền
-                      </span>
-                      <span className="text-[#e8e2d4] font-bold" style={{ fontSize: uiPx(9.5) }}>
-                        {Math.round(selectedBuilding.condition)} / 100
-                      </span>
-                    </div>
-                    {!selectedBuilding.isBuilt && (
-                      <div className="mt-2 h-1.5 rounded-full bg-black/50 overflow-hidden border border-white/10">
-                        <div
-                          className="h-full bg-amber-400/85"
-                          style={{ width: `${selectedBuildingProgress}%` }}
-                        />
+                        <span className="text-[10px] font-bold text-[#f7eedf] truncate max-w-full leading-tight mt-0.5">
+                          {buildingDef?.name ?? building.buildingId}
+                        </span>
+
+                        {!building.isBuilt && (
+                          <div className="w-4/5 h-1.5 bg-black/60 rounded-full overflow-hidden mt-1 border border-white/20">
+                            <div
+                              className="h-full bg-emerald-400 rounded-full"
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center">
+                        <Plus className="w-4 h-4 text-[#d4cbb8] opacity-75 group-hover:scale-125 transition-transform" />
+                        <span className="text-[9px] text-[#c9bea8] font-mono mt-0.5">
+                          {plot.id.replace('PLOT_', '')}
+                        </span>
                       </div>
                     )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Building Details Panel */}
+          <div
+            className="w-[340px] xl:w-[370px] shrink-0 rounded-xl p-3 flex flex-col justify-between border border-[#3b5c49]/60 shadow-lg"
+            style={panelStyle}
+          >
+            {selectedBlueprint || selectedBuilding ? (
+              <>
+                <div className="flex flex-col gap-2 min-h-0">
+                  {/* Header Title */}
+                  <div className="flex items-center gap-2.5 pb-2 border-b border-[#284938]/70">
+                    <div
+                      className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 border"
+                      style={{
+                        background: 'rgba(9, 36, 28, 0.9)',
+                        borderColor: 'rgba(84, 215, 117, 0.45)',
+                      }}
+                    >
+                      <SelectedCategoryIcon
+                        className="w-5 h-5"
+                        style={{ color: selectedCategoryColor }}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-sm text-[#f5ecd8] truncate uppercase">
+                        {activeBuildingName}
+                      </h3>
+                      <span className="text-[10.5px] text-[#90a89a]">
+                        {getCategoryLabel(selectedCategory)}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="mt-auto grid grid-cols-2 gap-1.5">
-                    {[
-                      ['Nâng cấp', Wrench],
-                      ['Di chuyển', Move],
-                      ['Phân công', Users],
-                      ['Tháo dỡ', Trash2],
-                    ].map(([label, Icon]) => (
-                      <button
-                        key={String(label)}
-                        type="button"
-                        disabled
-                        className="rounded flex items-center justify-center gap-1.5 opacity-55 cursor-not-allowed"
-                        style={{
-                          height: uiPx(34),
-                          ...sunkenStyle,
-                          color: label === 'Tháo dỡ' ? '#e78080' : '#c9d3ca',
-                          fontSize: uiPx(9.5),
-                        }}
-                        title="Prototype — chức năng sẽ nối sau"
-                      >
-                        <Icon style={{ width: uiPx(13), height: uiPx(13) }} />
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="shrink-0">
-                    <div
-                      className="uppercase tracking-wider font-bold text-[#9aac9f] mb-1.5"
-                      style={{ fontSize: uiPx(8.7) }}
-                    >
-                      Vật tư yêu cầu
+                  {/* Description */}
+                  <p className="text-xs text-[#a9bcae] leading-relaxed line-clamp-3">
+                    {activeBuildingDescription}
+                  </p>
+
+                  {/* Materials / Construction Checklist */}
+                  <div className="mt-1">
+                    <div className="text-[11px] font-bold text-[#8ea797] uppercase tracking-wider mb-1.5">
+                      Vật tư yêu cầu (Required Materials)
                     </div>
-                    <div className="build-ui-scroll overflow-y-auto pr-1 flex flex-col gap-1"
-                      style={{ maxHeight: uiPx(126) }}>
+                    <div className="build-ui-scroll overflow-y-auto max-h-[140px] flex flex-col gap-1 pr-1">
                       {materialStatus.map((material) => (
                         <div
                           key={material.itemId}
-                          className="rounded px-2 py-1.5 flex items-center gap-2"
+                          className="rounded-lg px-2.5 py-1.5 flex items-center gap-2 border text-xs"
                           style={{
                             ...sunkenStyle,
                             borderColor: material.hasEnough
@@ -1035,16 +705,12 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({
                             size={18}
                             className="shrink-0 object-contain"
                           />
-                          <span
-                            className="truncate flex-1 text-[#cbd4cc]"
-                            style={{ fontSize: uiPx(9.2) }}
-                          >
+                          <span className="truncate flex-1 text-[#cbd4cc]">
                             {material.name}
                           </span>
                           <span
                             className="font-mono font-bold shrink-0"
                             style={{
-                              fontSize: uiPx(9.2),
                               color: material.hasEnough ? '#81dda0' : '#e58884',
                             }}
                           >
@@ -1054,304 +720,207 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({
                       ))}
                     </div>
                   </div>
+                </div>
 
-                  <div className="mt-auto flex flex-col gap-1.5">
+                {/* Worker Assignment & Build Action */}
+                <div className="pt-2 flex flex-col gap-2 border-t border-[#284938]/70">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10.5px] font-bold text-[#8fa697] uppercase tracking-wider">
+                      Phân công thợ xây:
+                    </label>
                     <select
                       value={assignedSurvivorId}
                       onChange={(e) => setAssignedSurvivorId(e.target.value)}
-                      className="w-full rounded outline-none cursor-pointer text-[#e6e2d7]"
-                      style={{
-                        height: uiPx(32),
-                        paddingLeft: uiPx(8),
-                        paddingRight: uiPx(8),
-                        background: 'rgba(3,25,24,0.92)',
-                        border: '1px solid rgba(73,105,85,0.62)',
-                        fontFamily: UI_FONT,
-                        fontSize: uiPx(9.4),
-                      }}
+                      className="w-full rounded-lg h-9 px-2.5 outline-none cursor-pointer text-xs text-[#e6e2d7] bg-[#031918] border border-[#496955]/70"
                     >
                       {survivors.map((survivor) => (
                         <option key={survivor.id} value={survivor.id}>
-                          {survivor.name} — {survivor.currentAction.type === 'idle' ? 'Rảnh' : 'Bận'}
+                          {survivor.name} — {survivor.currentAction.type === 'idle' ? 'Đang rảnh' : 'Đang bận'}
                         </option>
                       ))}
                     </select>
-
-                    <button
-                      type="button"
-                      disabled={!canBuild}
-                      onClick={handleBuild}
-                      className="w-full rounded-md flex items-center justify-center gap-2 font-bold transition-all"
-                      style={{
-                        height: uiPx(39),
-                        background: canBuild
-                          ? 'linear-gradient(180deg, rgba(65,112,60,0.94), rgba(31,76,48,0.96))'
-                          : 'linear-gradient(180deg, rgba(48,63,54,0.50), rgba(31,43,38,0.56))',
-                        border: canBuild
-                          ? '1px solid rgba(218,187,74,0.82)'
-                          : '1px solid rgba(77,91,82,0.52)',
-                        color: canBuild ? '#f0ead7' : '#77847d',
-                        cursor: canBuild ? 'pointer' : 'not-allowed',
-                        fontSize: uiPx(10.7),
-                        boxShadow: canBuild
-                          ? '0 0 9px rgba(192,151,52,0.12), inset 0 1px 0 rgba(255,255,255,0.04)'
-                          : 'none',
-                      }}
-                    >
-                      <Hammer style={{ width: uiPx(15), height: uiPx(15) }} />
-                      {selectedPlot
-                        ? canBuild
-                          ? 'Xây tại vị trí đã chọn'
-                          : !canAffordSelected
-                            ? 'Thiếu vật tư'
-                            : !chosenSurvivorIdle
-                              ? 'Thợ xây đang bận'
-                              : 'Không thể xây tại đây'
-                        : 'Chọn vị trí trên bản đồ'}
-                    </button>
                   </div>
-                </>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-[#819287]">
-            Chưa có công trình.
+
+                  <button
+                    type="button"
+                    disabled={!canBuild}
+                    onClick={handleBuild}
+                    className={`w-full h-10 rounded-xl flex items-center justify-center gap-2 font-bold text-xs uppercase tracking-wide transition-all cursor-pointer ${
+                      canBuild
+                        ? 'bg-gradient-to-b from-[#3b7847] to-[#1d5034] hover:from-[#499458] hover:to-[#246241] border border-[#dabb4a] text-[#f5eedf] shadow-[0_0_12px_rgba(218,187,74,0.3)] active:scale-98'
+                        : 'bg-[#1b2b23]/60 border border-[#394d41]/50 text-[#718278] cursor-not-allowed'
+                    }`}
+                  >
+                    <Hammer className="w-4 h-4" />
+                    {selectedPlot
+                      ? canBuild
+                        ? 'Tiến hành xây dựng'
+                        : !canAffordSelected
+                          ? 'Thiếu vật tư'
+                          : !chosenSurvivorIdle
+                            ? 'Thợ xây đang bận'
+                            : 'Không thể xây tại đây'
+                      : 'Chọn vị trí trên bản đồ'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="h-full flex items-center justify-center text-xs text-[#819287]">
+                Chọn bản vẽ hoặc vị trí công trình để xem chi tiết.
+              </div>
+            )}
           </div>
-        )}
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* RIGHT SIDEBAR: CAMP INFO                                            */}
-      {/* ------------------------------------------------------------------ */}
-      <div
-        className="absolute pointer-events-auto p-3"
-        style={{ ...rootBoxStyle(BUILD_UI.campInfo), ...panelStyle }}
-      >
-        <div className="flex items-center gap-2 pb-2 border-b border-[#345044]/60">
-          <Home style={{ width: uiPx(17), height: uiPx(17), color: '#e7d492' }} />
-          <span
-            className="uppercase font-extrabold text-[#ece6d8]"
-            style={{ fontSize: uiPx(11.5) }}
-          >
-            Camp Info
-          </span>
-        </div>
-        <div className="pt-2 flex flex-col gap-2">
-          {[
-            ['Tổng công trình', `${builtCount} / ${CAMP_PLOTS.length}`],
-            ['Thợ đang xây', `${buildingWorkers} / ${survivors.length}`],
-            ['Người đang rảnh', String(idleSurvivors)],
-            ['Khu trại', builtCount >= 6 ? 'Expanding' : 'Basic'],
-          ].map(([label, value]) => (
-            <div key={label} className="flex items-center justify-between gap-2">
-              <span className="text-[#abb9ae]" style={{ fontSize: uiPx(9.5) }}>
-                {label}
-              </span>
-              <span className="text-[#ead65e] font-bold" style={{ fontSize: uiPx(9.6) }}>
-                {value}
-              </span>
-            </div>
-          ))}
         </div>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* RIGHT SIDEBAR: CONSTRUCTION QUEUE                                   */}
-      {/* ------------------------------------------------------------------ */}
-      <div
-        className="absolute pointer-events-auto p-3 flex flex-col"
-        style={{ ...rootBoxStyle(BUILD_UI.queue), ...panelStyle }}
-      >
-        <div className="flex items-center justify-between pb-2 border-b border-[#345044]/60 shrink-0">
-          <div className="flex items-center gap-2">
-            <Hammer style={{ width: uiPx(16), height: uiPx(16), color: '#e3d4a0' }} />
-            <span
-              className="uppercase font-extrabold text-[#ece6d8]"
-              style={{ fontSize: uiPx(10.6) }}
-            >
-              Construction Queue
+      {/* ================================================================== */}
+      {/* RIGHT SIDEBAR: CAMP STATS & CONSTRUCTION QUEUE                     */}
+      {/* ================================================================== */}
+      <div className="w-[260px] xl:w-[280px] shrink-0 flex flex-col gap-2.5 h-full overflow-y-auto build-ui-scroll pr-0.5">
+        {/* Camp Info Card */}
+        <div className="p-3 rounded-xl border border-[#3b5c49]/60 shadow-md" style={panelStyle}>
+          <div className="flex items-center gap-2 pb-2 border-b border-[#345044]/60">
+            <Home className="w-4 h-4 text-[#e7d492]" />
+            <span className="uppercase font-extrabold text-xs text-[#ece6d8]">
+              Thông tin bãi trại
             </span>
           </div>
-          <span className="text-amber-300 font-bold" style={{ fontSize: uiPx(9.5) }}>
-            {constructionQueue.length} / 4
-          </span>
+          <div className="pt-2 flex flex-col gap-1.5 text-xs">
+            {[
+              ['Tổng công trình', `${builtCount} / ${CAMP_PLOTS.length}`],
+              ['Thợ đang xây', `${buildingWorkers} / ${survivors.length}`],
+              ['Người đang rảnh', String(idleSurvivors)],
+              ['Quy mô khu trại', builtCount >= 6 ? 'Đang mở rộng' : 'Cơ bản'],
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between">
+                <span className="text-[#abb9ae]">{label}</span>
+                <span className="text-[#ead65e] font-bold">{value}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="build-ui-scroll overflow-y-auto flex-1 min-h-0 py-2 flex flex-col gap-1.5 pr-1">
-          {constructionQueue.length > 0 ? (
-            constructionQueue.map((building) => {
-              const def = allBlueprints.find((blueprint) => blueprint.id === building.buildingId);
-              const progress =
-                building.totalBuildSeconds > 0
-                  ? Math.min(
-                      100,
-                      Math.round(
-                        (building.buildProgressSeconds / building.totalBuildSeconds) * 100,
-                      ),
-                    )
-                  : 0;
-              const remaining = Math.max(
-                0,
-                Math.round(building.totalBuildSeconds - building.buildProgressSeconds),
-              );
-              const Icon = getCategoryIcon(String(def?.category ?? 'production'));
+        {/* Construction Queue Card */}
+        <div className="p-3 rounded-xl border border-[#3b5c49]/60 shadow-md flex-1 flex flex-col min-h-[160px]" style={panelStyle}>
+          <div className="flex items-center justify-between pb-2 border-b border-[#345044]/60 shrink-0">
+            <div className="flex items-center gap-2">
+              <Hammer className="w-4 h-4 text-[#e3d4a0]" />
+              <span className="uppercase font-extrabold text-xs text-[#ece6d8]">
+                Hàng đợi thi công
+              </span>
+            </div>
+            <span className="text-amber-300 font-bold text-xs">
+              {constructionQueue.length} / 4
+            </span>
+          </div>
 
-              return (
-                <button
-                  key={building.id}
-                  type="button"
-                  onClick={() => {
-                    setCategoryFilter('all');
-                    setSelectedBuildingId(building.id);
-                    setSelectedBlueprintId(building.buildingId);
-                    const plot = buildingPlacements.get(building.id);
-                    if (plot) setSelectedPlotId(plot.id);
-                  }}
-                  className="rounded p-2 text-left"
-                  style={sunkenStyle}
-                >
-                  <div className="flex items-center gap-2">
-                    <Icon
-                      style={{ width: uiPx(18), height: uiPx(18), color: '#d4b86b' }}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <span
-                          className="truncate font-semibold text-[#e9e1d3]"
-                          style={{ fontSize: uiPx(9.2) }}
-                        >
-                          {def?.name ?? building.buildingId}
-                        </span>
-                        <span
-                          className="font-mono text-[#cfc5a2] shrink-0"
-                          style={{ fontSize: uiPx(8.5) }}
-                        >
-                          {remaining}s
-                        </span>
-                      </div>
-                      <div className="mt-1 h-1.5 rounded-full bg-black/55 overflow-hidden border border-white/10">
-                        <div
-                          className="h-full bg-emerald-500/80"
-                          style={{ width: `${progress}%` }}
-                        />
+          <div className="build-ui-scroll overflow-y-auto flex-1 py-2 flex flex-col gap-1.5">
+            {constructionQueue.length > 0 ? (
+              constructionQueue.map((building) => {
+                const def = allBlueprints.find((blueprint) => blueprint.id === building.buildingId);
+                const progress =
+                  building.totalBuildSeconds > 0
+                    ? Math.min(
+                        100,
+                        Math.round(
+                          (building.buildProgressSeconds / building.totalBuildSeconds) * 100,
+                        ),
+                      )
+                    : 0;
+                const remaining = Math.max(
+                  0,
+                  Math.round(building.totalBuildSeconds - building.buildProgressSeconds),
+                );
+                const Icon = getCategoryIcon(String(def?.category ?? 'production'));
+
+                return (
+                  <div
+                    key={building.id}
+                    className="rounded-lg p-2 text-left border border-[#274738]/60"
+                    style={sunkenStyle}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Icon className="w-4 h-4 text-[#d4b86b] shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="truncate font-semibold text-xs text-[#e9e1d3]">
+                            {def?.name ?? building.buildingId}
+                          </span>
+                          <span className="font-mono text-[10px] text-[#cfc5a2] shrink-0">
+                            {remaining}s
+                          </span>
+                        </div>
+                        <div className="mt-1 h-1.5 rounded-full bg-black/55 overflow-hidden border border-white/10">
+                          <div
+                            className="h-full bg-emerald-500"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
-                </button>
-              );
-            })
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center text-[#72867a]">
-              <Clock3 style={{ width: uiPx(20), height: uiPx(20), opacity: 0.65 }} />
-              <span style={{ fontSize: uiPx(9.2), marginTop: uiPx(6) }}>
-                Chưa có công trình đang thi công.
-              </span>
-            </div>
-          )}
+                );
+              })
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-center text-[#72867a] py-4">
+                <Clock3 className="w-5 h-5 opacity-60 mb-1" />
+                <span className="text-xs">Chưa có công trình đang xây.</span>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div
-          className="shrink-0 rounded flex items-center justify-center gap-1.5 text-[#95a89b]"
-          style={{
-            height: uiPx(31),
-            ...sunkenStyle,
-            fontSize: uiPx(9.2),
-          }}
-        >
-          <Plus style={{ width: uiPx(13), height: uiPx(13) }} />
-          Chọn blueprint và plot để thêm vào queue
-        </div>
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* RIGHT SIDEBAR: RESOURCES                                            */}
-      {/* ------------------------------------------------------------------ */}
-      <div
-        className="absolute pointer-events-auto p-3 flex flex-col"
-        style={{ ...rootBoxStyle(BUILD_UI.resources), ...panelStyle }}
-      >
-        <div className="flex items-center gap-2 pb-2 border-b border-[#345044]/60 shrink-0">
-          <Package style={{ width: uiPx(16), height: uiPx(16), color: '#e6d69e' }} />
-          <span
-            className="uppercase font-extrabold text-[#ece6d8]"
-            style={{ fontSize: uiPx(10.5) }}
-          >
-            Resource Summary
-          </span>
-        </div>
-
-        <div className="build-ui-scroll overflow-y-auto flex-1 min-h-0 pt-1.5 pr-1">
-          {resourceSummary.map((resource) => (
-            <div
-              key={resource.itemId}
-              className="flex items-center gap-2 py-1 border-b border-[#263f34]/55 last:border-b-0"
-            >
-              <ItemIcon
-                itemId={resource.itemId}
-                size={17}
-                className="shrink-0 object-contain"
-              />
-              <span
-                className="truncate flex-1 text-[#c9d2ca]"
-                style={{ fontSize: uiPx(9) }}
+        {/* Resources Summary Card */}
+        <div className="p-3 rounded-xl border border-[#3b5c49]/60 shadow-md max-h-[160px] flex flex-col" style={panelStyle}>
+          <div className="flex items-center gap-2 pb-2 border-b border-[#345044]/60 shrink-0">
+            <Package className="w-4 h-4 text-[#e6d69e]" />
+            <span className="uppercase font-extrabold text-xs text-[#ece6d8]">
+              Vật tư xây dựng
+            </span>
+          </div>
+          <div className="build-ui-scroll overflow-y-auto flex-1 pt-1.5 pr-1 flex flex-col gap-1">
+            {resourceSummary.map((resource) => (
+              <div
+                key={resource.itemId}
+                className="flex items-center gap-2 py-0.5 text-xs"
               >
-                {resource.name}
-              </span>
-              <span
-                className="font-mono font-bold text-[#e8cf63] shrink-0"
-                style={{ fontSize: uiPx(9) }}
-              >
-                {resource.quantity}
-              </span>
-            </div>
-          ))}
+                <ItemIcon
+                  itemId={resource.itemId}
+                  size={15}
+                  className="shrink-0 object-contain"
+                />
+                <span className="truncate flex-1 text-[#c9d2ca]">
+                  {resource.name}
+                </span>
+                <span className="font-mono font-bold text-[#e8cf63] shrink-0">
+                  {resource.quantity}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* RIGHT SIDEBAR: WORKERS                                              */}
-      {/* ------------------------------------------------------------------ */}
-      <div
-        className="absolute pointer-events-auto p-3"
-        style={{ ...rootBoxStyle(BUILD_UI.workers), ...panelStyle }}
-      >
-        <div className="flex items-center gap-2 pb-2 border-b border-[#345044]/60">
-          <Users style={{ width: uiPx(16), height: uiPx(16), color: '#e3d5a7' }} />
-          <span
-            className="uppercase font-extrabold text-[#ece6d8]"
-            style={{ fontSize: uiPx(10.4) }}
-          >
-            Assigned Workers
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 pt-2">
-          {[
-            ['Construction', buildingWorkers],
-            ['Gathering', gatheringWorkers],
-            ['Crafting', craftingWorkers],
-            ['Expedition', exploringWorkers],
-          ].map(([label, value]) => (
-            <div key={String(label)} className="flex items-center justify-between gap-2 min-w-0">
-              <span className="truncate text-[#a9b7ac]" style={{ fontSize: uiPx(8.5) }}>
-                {label}
-              </span>
-              <span className="text-[#e4d56f] font-bold" style={{ fontSize: uiPx(8.8) }}>
-                {String(value)}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div
-          className="mt-2 rounded flex items-center justify-center gap-1.5 text-[#b9c5bb]"
-          style={{
-            height: uiPx(27),
-            ...sunkenStyle,
-            fontSize: uiPx(8.7),
-          }}
-        >
-          <UserCheck style={{ width: uiPx(12), height: uiPx(12) }} />
-          Chọn thợ trong panel công trình
+        {/* Workers Status Card */}
+        <div className="p-3 rounded-xl border border-[#3b5c49]/60 shadow-md" style={panelStyle}>
+          <div className="flex items-center gap-2 pb-2 border-b border-[#345044]/60">
+            <Users className="w-4 h-4 text-[#e3d5a7]" />
+            <span className="uppercase font-extrabold text-xs text-[#ece6d8]">
+              Nhân lực bãi trại
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1 pt-2 text-xs">
+            {[
+              ['Xây dựng', buildingWorkers],
+              ['Thu lượm', gatheringWorkers],
+              ['Chế tác', craftingWorkers],
+              ['Thám hiểm', exploringWorkers],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="flex items-center justify-between">
+                <span className="text-[#a9b7ac] truncate">{label}</span>
+                <span className="text-[#e4d56f] font-bold">{String(value)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
