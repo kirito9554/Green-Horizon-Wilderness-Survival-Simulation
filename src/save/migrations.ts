@@ -13,7 +13,7 @@ import { ensureUpgradeSystem, rebuildUpgradeLocks } from '../simulation/upgradeS
 import { rebuildJobReservationCounters } from '../simulation/jobReservationSystem';
 import { ensureBuildingSimulation, getOrCreatePoiBuildGrid } from '../simulation/buildGridSystem';
 
-export const LATEST_SAVE_VERSION = 6;
+export const LATEST_SAVE_VERSION = 7;
 
 function stableStringSeed(value: string): number {
   let hash = 2166136261;
@@ -49,18 +49,14 @@ function migrateToV2(state: GameState): void {
   for (const storage of Object.values(state.poiStorages)) {
     for (const item of storage.items || []) normalizeInventoryItem(item);
   }
-  for (const building of state.buildings || []) {
-    if (!building.areaId) building.areaId = 'AREA_CAMP_CLEARING';
-  }
+  for (const building of state.buildings || []) if (!building.areaId) building.areaId = 'AREA_CAMP_CLEARING';
   state.craftingQueue = state.craftingQueue || [];
   for (const queueItem of state.craftingQueue) {
     queueItem.materialReservations = queueItem.materialReservations || [];
     queueItem.blockedReasons = queueItem.blockedReasons || [];
     queueItem.deterministicSeed = queueItem.deterministicSeed ?? stableStringSeed(queueItem.id);
     if (!queueItem.reservationStatus) {
-      queueItem.reservationStatus = (queueItem.activeIngredientQualities?.length || 0) > 0
-        ? 'legacy_consumed'
-        : 'unreserved';
+      queueItem.reservationStatus = (queueItem.activeIngredientQualities?.length || 0) > 0 ? 'legacy_consumed' : 'unreserved';
     }
   }
   state.saveVersion = 2;
@@ -105,10 +101,25 @@ function migrateToV6(state: GameState): void {
   simulation.clusters ||= [];
   simulation.preparationJobs ||= [];
   simulation.gridsByPoiId ||= {};
-  // Generate only the current camp lazily during migration. Other POIs receive
-  // their deterministic grid the first time the player plans construction there.
   getOrCreatePoiBuildGrid(state, 'AREA_CAMP_CLEARING');
   state.saveVersion = 6;
+}
+
+function migrateToV7(state: GameState): void {
+  const simulation = ensureBuildingSimulation(state);
+  simulation.version = 2;
+  simulation.constructionJobs ||= [];
+  for (const job of simulation.constructionJobs) {
+    job.materialReservations ||= [];
+    job.blockedReasons ||= [];
+    job.materialQualityByItemId ||= {};
+    job.phases ||= [];
+    job.currentPhaseIndex ||= 0;
+    job.haulProgressSeconds ||= 0;
+    job.haulTotalSeconds ||= 0;
+    job.materialsDelivered = Boolean(job.materialsDelivered);
+  }
+  state.saveVersion = 7;
 }
 
 export function migrateGameState(rawState: GameState): GameState {
@@ -120,6 +131,7 @@ export function migrateGameState(rawState: GameState): GameState {
   if (fromVersion < 4) migrateToV4(state);
   if (fromVersion < 5) migrateToV5(state);
   if (fromVersion < 6) migrateToV6(state);
+  if (fromVersion < 7) migrateToV7(state);
 
   state.poiStorages = state.poiStorages || {};
   state.craftingQueue = state.craftingQueue || [];
@@ -129,6 +141,9 @@ export function migrateGameState(rawState: GameState): GameState {
   }
   for (const building of state.buildings || []) {
     if (!building.areaId) building.areaId = 'AREA_CAMP_CLEARING';
+    if (building.stagingInventory) {
+      for (const item of building.stagingInventory.items || []) normalizeInventoryItem(item);
+    }
   }
   for (const queueItem of state.craftingQueue) {
     queueItem.materialReservations = queueItem.materialReservations || [];
@@ -141,32 +156,41 @@ export function migrateGameState(rawState: GameState): GameState {
   state.craftedRecipeCounts ||= {};
   const maintenance = ensureMaintenanceSystem(state);
   const upgrades = ensureUpgradeSystem(state);
-  ensureBuildingSimulation(state);
+  const buildingSimulation = ensureBuildingSimulation(state);
+  buildingSimulation.version = Math.max(2, buildingSimulation.version || 1);
+  buildingSimulation.constructionJobs ||= [];
   getOrCreatePoiBuildGrid(state, 'AREA_CAMP_CLEARING');
 
-  // Rebuild in deterministic order so every system sees the same canonical
-  // free stock after a load: Craft -> Repair -> Upgrade -> exclusive item locks.
+  // Rebuild reservations in deterministic ownership order. Later systems only
+  // see stock not already claimed by an earlier persistent job.
   rebuildReservationCounters(state);
 
   for (const job of maintenance.queue) {
     if (!job.materialsConsumed) {
       job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations || []);
-      if (job.materialReservations.length === 0 && job.status !== 'in_progress' && job.status !== 'paused') {
-        job.status = 'waiting_materials';
-      }
-    } else {
-      job.materialReservations = [];
-    }
+      if (job.materialReservations.length === 0 && job.status !== 'in_progress' && job.status !== 'paused') job.status = 'waiting_materials';
+    } else job.materialReservations = [];
   }
 
   for (const job of upgrades.queue) {
     if (!job.materialsConsumed) {
       job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations || []);
-      if (job.materialReservations.length === 0 && job.status !== 'in_progress' && job.status !== 'paused') {
-        job.status = 'waiting_materials';
-      }
-    } else {
+      if (job.materialReservations.length === 0 && job.status !== 'in_progress' && job.status !== 'paused') job.status = 'waiting_materials';
+    } else job.materialReservations = [];
+  }
+
+  for (const job of buildingSimulation.constructionJobs) {
+    job.materialReservations ||= [];
+    job.blockedReasons ||= [];
+    job.materialQualityByItemId ||= {};
+    if (job.materialsDelivered) {
       job.materialReservations = [];
+    } else {
+      job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations);
+      if (job.materialReservations.length === 0 && job.status !== 'paused') {
+        job.status = 'waiting_materials';
+        if (!job.blockedReasons.length) job.blockedReasons = ['Vật liệu đã thay đổi sau khi tải save'];
+      }
     }
   }
 
