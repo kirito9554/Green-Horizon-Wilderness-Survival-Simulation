@@ -25,6 +25,7 @@ import { tickBuildingConstructionRuntime } from './buildingConstructionSystem';
 import { tickStructureLifecycle } from './structureLifecycleSystem';
 import { tickStructureWorkRuntime } from './structureMaintenanceSystem';
 import { createStorageSystemState, tickStorageSimulation } from './storageSystem';
+import { tickStorageHauling } from './storageHaulSystem';
 import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
@@ -57,6 +58,7 @@ export * from './structureComponentSystem';
 export * from './structureLifecycleSystem';
 export * from './structureMaintenanceSystem';
 export * from './storageSystem';
+export * from './storageHaulSystem';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 
@@ -155,10 +157,8 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickStructureLifecycle(next, deltaGameMinutes);
   tickStructureWorkRuntime(next);
 
-  // Storage locations are physical views over canonical POI inventories. This
-  // pass registers newly completed storage structures and applies preservation
-  // physics without hiding stock from crafting/building reservation systems.
   tickStorageSimulation(next, deltaGameMinutes);
+  tickStorageHauling(next, deltaGameSeconds);
 
   prepareMaintenanceWorkstations(next);
   tickMaintenanceSystem(next, deltaGameSeconds);
