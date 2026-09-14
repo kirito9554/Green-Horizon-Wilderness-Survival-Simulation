@@ -1,3 +1,8 @@
+import {
+  MAIN_MAP_WATERFALL_IMPACTS,
+  MAIN_MAP_WATERFALLS,
+} from './MainMapGeometry';
+
 export type WaterfallPoint = readonly [number, number];
 
 export interface WaterfallDescriptor {
@@ -15,23 +20,13 @@ export interface WaterfallImpact {
 }
 
 /**
- * Hand-authored waterfall spines for the supplied center map.
- * Coordinates and widths are percentages of the source image.
+ * Main-map waterfall spines. Geometry is isolated in MainMapGeometry.ts so a
+ * future sector can provide its own calibration without rewriting the shader.
  */
-export const MAP_WATERFALLS: readonly WaterfallDescriptor[] = [
-  {id:'upper-left',points:[[13.1,5.5],[14,7.8]],widthTop:1.0,widthBottom:1.45,seed:.13},
-  {id:'middle-left',points:[[15.1,9.5],[16,15.5]],widthTop:1.25,widthBottom:1.95,seed:.37},
-  {id:'main-basin',points:[[11.3,12],[12.1,17],[13.7,20.5]],widthTop:1.75,widthBottom:3.0,seed:.61},
-  {id:'right-basin',points:[[27.4,16.6],[26.5,21.5]],widthTop:1.15,widthBottom:2.0,seed:.83},
-  {id:'cave-falls',points:[[67,76],[68.5,80],[70.5,84],[73,87]],widthTop:1.25,widthBottom:2.7,seed:.47},
-];
+export const MAP_WATERFALLS: readonly WaterfallDescriptor[] = MAIN_MAP_WATERFALLS;
 
 /** Impact ellipses: center.xy and radius.xy, in map percentages. */
-export const MAP_WATERFALL_IMPACTS: readonly WaterfallImpact[] = [
-  {center:[14.5,22.5],radius:[4.5,2.05],seed:.17},
-  {center:[26.6,22.6],radius:[3.15,1.55],seed:.53},
-  {center:[71.6,87.5],radius:[4.25,1.85],seed:.89},
-];
+export const MAP_WATERFALL_IMPACTS: readonly WaterfallImpact[] = MAIN_MAP_WATERFALL_IMPACTS;
 
 /**
  * Creates compact per-pixel waterfall metadata at runtime, so the package does
