@@ -6,6 +6,7 @@ import '../types/upgradeSimulation';
 import '../types/buildingSimulation';
 import '../types/structureSimulation';
 import '../types/structureMaintenanceSimulation';
+import '../types/storageSimulation';
 import { INITIAL_SURVIVORS } from '../data/survivors';
 import { getDefaultResourcePools } from './resourcePools';
 import { advanceTime } from './timeSystem';
@@ -23,6 +24,7 @@ import { tickBuildingPreparationRuntime } from './buildingPreparationRuntime';
 import { tickBuildingConstructionRuntime } from './buildingConstructionSystem';
 import { tickStructureLifecycle } from './structureLifecycleSystem';
 import { tickStructureWorkRuntime } from './structureMaintenanceSystem';
+import { createStorageSystemState, tickStorageSimulation } from './storageSystem';
 import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
@@ -54,9 +56,12 @@ export * from './buildingConstructionSystem';
 export * from './structureComponentSystem';
 export * from './structureLifecycleSystem';
 export * from './structureMaintenanceSystem';
+export * from './storageSystem';
+
+const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 
 export const INITIAL_GAME_STATE: GameState = {
-  saveVersion: 8,
+  saveVersion: 9,
   campName: 'Canopy Bay Settlement',
   gameTime: { day: 1, minuteOfDay: 510, speed: 1 },
   weather: {
@@ -93,17 +98,18 @@ export const INITIAL_GAME_STATE: GameState = {
     buildProgressSeconds: 0, totalBuildSeconds: 20, areaId: 'AREA_CAMP_CLEARING',
   }],
   buildingSimulation: createBuildingSimulationState(),
+  storageSystem: createStorageSystemState(),
   poiStorages: {
     AREA_CAMP_CLEARING: {
       maxWeightKg: 120, maxVolumeL: 180,
       items: [
-        { instanceId: 'poi_camp_1', itemId: 'ITEM_DRIFTWOOD_BRANCH', quantity: 12, quality: 'standard', qualityBreakdown: { crude: 4, standard: 8 } },
-        { instanceId: 'poi_camp_2', itemId: 'ITEM_RIVER_PEBBLE', quantity: 8, quality: 'standard', qualityBreakdown: { standard: 8 } },
-        { instanceId: 'poi_camp_3', itemId: 'ITEM_PALM_LEAF', quantity: 10, quality: 'standard', qualityBreakdown: { standard: 10 } },
+        { instanceId: 'poi_camp_1', itemId: 'ITEM_DRIFTWOOD_BRANCH', quantity: 12, quality: 'standard', qualityBreakdown: { crude: 4, standard: 8 }, storageLocationId: campGroundStorageId },
+        { instanceId: 'poi_camp_2', itemId: 'ITEM_RIVER_PEBBLE', quantity: 8, quality: 'standard', qualityBreakdown: { standard: 8 }, storageLocationId: campGroundStorageId },
+        { instanceId: 'poi_camp_3', itemId: 'ITEM_PALM_LEAF', quantity: 10, quality: 'standard', qualityBreakdown: { standard: 10 }, storageLocationId: campGroundStorageId },
       ],
     },
-    AREA_COASTAL_SHALLOWS: { maxWeightKg: 45, maxVolumeL: 70, items: [{ instanceId: 'poi_coast_1', itemId: 'ITEM_WILD_COCONUT', quantity: 4, quality: 'standard', qualityBreakdown: { standard: 4 } }] },
-    AREA_RIVERBANK: { maxWeightKg: 45, maxVolumeL: 70, items: [{ instanceId: 'poi_river_1', itemId: 'ITEM_RIVER_PEBBLE', quantity: 6, quality: 'standard', qualityBreakdown: { standard: 6 } }] },
+    AREA_COASTAL_SHALLOWS: { maxWeightKg: 45, maxVolumeL: 70, items: [{ instanceId: 'poi_coast_1', itemId: 'ITEM_WILD_COCONUT', quantity: 4, quality: 'standard', qualityBreakdown: { standard: 4 }, storageLocationId: 'storage_ground_AREA_COASTAL_SHALLOWS' }] },
+    AREA_RIVERBANK: { maxWeightKg: 45, maxVolumeL: 70, items: [{ instanceId: 'poi_river_1', itemId: 'ITEM_RIVER_PEBBLE', quantity: 6, quality: 'standard', qualityBreakdown: { standard: 6 }, storageLocationId: 'storage_ground_AREA_RIVERBANK' }] },
     AREA_BAMBOO_GROVE: { maxWeightKg: 45, maxVolumeL: 70, items: [] },
   },
   expeditions: [],
@@ -148,6 +154,11 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickBuildingConstructionRuntime(next);
   tickStructureLifecycle(next, deltaGameMinutes);
   tickStructureWorkRuntime(next);
+
+  // Storage locations are physical views over canonical POI inventories. This
+  // pass registers newly completed storage structures and applies preservation
+  // physics without hiding stock from crafting/building reservation systems.
+  tickStorageSimulation(next, deltaGameMinutes);
 
   prepareMaintenanceWorkstations(next);
   tickMaintenanceSystem(next, deltaGameSeconds);
