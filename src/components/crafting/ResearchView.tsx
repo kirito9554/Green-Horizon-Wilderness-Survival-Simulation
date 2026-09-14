@@ -98,7 +98,8 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
     onAnalyzeResearch?.(candidate.id, preferredResearcher?.id);
   };
 
-  const completedCount = Object.values(state.researches || {}).filter(research => research.status === 'completed').length;
+  const completedCount = (Object.values(state.researches || {}) as Array<{ status?: string }>)
+    .filter(research => research.status === 'completed').length;
   const allIngredientIds = new Set(
     Object.values(RECIPES_DATABASE)
       .filter(recipe => recipe.type === 'crafting')
