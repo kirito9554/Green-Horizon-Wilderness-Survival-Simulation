@@ -284,17 +284,18 @@ function testConstructionPauseAndCancel(): void {
   assert.equal(availableAtCamp(state, 'ITEM_COCONUT_HUSK'), huskAvailableBefore, 'cancel before hauling must release husk reservation');
 }
 
-function testV8MigrationCreatesSpatialAndStructureWorkState(): void {
+function testLatestMigrationCreatesSpatialAndStructureWorkState(): void {
   const legacy = JSON.parse(JSON.stringify(INITIAL_GAME_STATE)) as GameState;
   legacy.saveVersion = 5;
   delete legacy.buildingSimulation;
   const migrated = migrateGameState(legacy);
-  assert.equal(migrated.saveVersion, 8);
+  assert.equal(migrated.saveVersion, 9);
   assert.ok(migrated.buildingSimulation?.worldSeed, 'migration must create a persistent world seed');
   assert.ok(migrated.buildingSimulation?.gridsByPoiId.AREA_CAMP_CLEARING, 'migration should materialize the camp grid');
   assert.ok(Array.isArray(migrated.buildingSimulation?.constructionJobs), 'migration must initialize persistent construction queue');
   assert.ok(Array.isArray(migrated.buildingSimulation?.structureWorkJobs), 'migration must initialize structure work queue');
   assert.ok(Array.isArray(migrated.buildingSimulation?.structureWorkHistory), 'migration must initialize structure work history');
+  assert.ok(migrated.storageSystem?.locations.length, 'latest migration should also preserve the storage schema layered over POI stock');
 }
 
 function main(): void {
@@ -304,7 +305,7 @@ function main(): void {
   testPreparationRuntimeReleasesWorker();
   testConstructionReservationHaulingAndPhases();
   testConstructionPauseAndCancel();
-  testV8MigrationCreatesSpatialAndStructureWorkState();
+  testLatestMigrationCreatesSpatialAndStructureWorkState();
   console.log('Building simulation smoke tests passed.');
 }
 
