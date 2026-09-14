@@ -187,8 +187,10 @@ export function migrateGameState(rawState: GameState): GameState {
   buildingSimulation.structureWorkJobs ||= [];
   buildingSimulation.structureWorkHistory ||= [];
   getOrCreatePoiBuildGrid(state, 'AREA_CAMP_CLEARING');
-  ensureStorageSystem(state);
+  const storageSystem = ensureStorageSystem(state);
 
+  // Reservation rebuild order is deterministic. Crafting owns the first pass,
+  // followed by repair/upgrade/building and finally storage hauling.
   rebuildReservationCounters(state);
 
   for (const job of maintenance.queue) {
@@ -234,6 +236,27 @@ export function migrateGameState(rawState: GameState): GameState {
     if (job.materialReservations.length === 0 && job.status !== 'in_progress' && job.status !== 'paused') {
       job.status = 'waiting_materials';
       if (!job.blockedReasons.length) job.blockedReasons = ['Vật liệu đã thay đổi sau khi tải save'];
+    }
+  }
+
+  for (const job of storageSystem.haulJobs) {
+    job.materialReservations ||= [];
+    job.blockedReasons ||= [];
+    if (job.status === 'completed') {
+      job.materialReservations = [];
+      continue;
+    }
+    job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations);
+    job.quantity = job.materialReservations.reduce((sum, reservation) => sum + reservation.quantity, 0);
+    if (job.materialReservations.length === 0) {
+      job.status = 'blocked';
+      job.blockedReasons = ['Vật phẩm nguồn đã thay đổi sau khi tải save'];
+      job.assignedSurvivorId = undefined;
+    } else if (job.status === 'in_progress') {
+      // Re-acquire a worker action on the next haul scheduler tick rather than
+      // trusting stale action ownership from a serialized frame.
+      job.status = 'waiting_worker';
+      job.assignedSurvivorId = undefined;
     }
   }
 
