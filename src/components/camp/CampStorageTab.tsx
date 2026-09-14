@@ -2,19 +2,23 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Archive,
+  ArrowRightLeft,
   Box,
   ChevronRight,
   Droplets,
   Info,
   Package,
+  Pause,
+  Play,
   Search,
-  ShieldCheck,
-  Sprout,
+  Settings2,
+  Truck,
   Warehouse,
   Weight,
+  X,
 } from 'lucide-react';
 import type { GameState, InventoryItem } from '../../types';
-import type { StorageLocation } from '../../types/storageSimulation';
+import type { StorageLocation, StoragePriority } from '../../types/storageSimulation';
 import '../../types/storageSimulation';
 import { ITEMS_DATABASE } from '../../data/items';
 import { ItemIcon } from '../common/ItemIcon';
@@ -34,6 +38,7 @@ interface CampStorageTabProps {
 }
 
 type CategoryFilter = 'all' | 'food' | 'water' | 'materials' | 'tools' | 'medicine' | 'misc';
+type DetailSource = 'stored' | 'carried';
 
 const CAMP_POI_ID = 'AREA_CAMP_CLEARING';
 const UI_FONT = '"Roboto Condensed", "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -81,6 +86,14 @@ function capacityTone(percent: number) {
   return '#73d56a';
 }
 
+function haulStatusLabel(status: string): string {
+  if (status === 'waiting_worker') return 'Chờ người';
+  if (status === 'in_progress') return 'Đang vận chuyển';
+  if (status === 'blocked') return 'Bị chặn';
+  if (status === 'paused') return 'Tạm dừng';
+  return 'Hoàn tất';
+}
+
 export const CampStorageTab: React.FC<CampStorageTabProps> = ({ state, onNavigateTab, onStorageCommand }) => {
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,6 +104,10 @@ export const CampStorageTab: React.FC<CampStorageTabProps> = ({ state, onNavigat
   const [selectedLocationId, setSelectedLocationId] = useState<string>(campLocations[0]?.id || '');
   const [selectedStoredInstanceId, setSelectedStoredInstanceId] = useState<string | null>(null);
   const [selectedCarriedInstanceId, setSelectedCarriedInstanceId] = useState<string | null>(state.inventory.items[0]?.instanceId || null);
+  const [detailSource, setDetailSource] = useState<DetailSource>('stored');
+  const [transferTargetId, setTransferTargetId] = useState('');
+  const [policyMin, setPolicyMin] = useState('0');
+  const [policyMax, setPolicyMax] = useState('');
 
   useEffect(() => {
     if (!campLocations.some(location => location.id === selectedLocationId)) {
@@ -103,20 +120,18 @@ export const CampStorageTab: React.FC<CampStorageTabProps> = ({ state, onNavigat
   const locationItems = selectedLocation ? getStorageLocationItems(state, selectedLocation.id) : [];
   const summary = selectedLocation ? summarizeStorageLocation(state, selectedLocation.id) : null;
 
-  const filteredItems = useMemo(() => {
-    return locationItems.filter(item => {
-      const def = ITEMS_DATABASE[item.itemId];
-      if (!def) return false;
-      if (selectedCategory !== 'all' && categoryForItem(item) !== selectedCategory) return false;
-      if (!searchQuery.trim()) return true;
-      const query = searchQuery.toLowerCase();
-      return def.name.toLowerCase().includes(query) || def.category.toLowerCase().includes(query) || def.tags.some(tag => tag.toLowerCase().includes(query));
-    });
-  }, [locationItems, selectedCategory, searchQuery]);
+  const filteredItems = useMemo(() => locationItems.filter(item => {
+    const def = ITEMS_DATABASE[item.itemId];
+    if (!def) return false;
+    if (selectedCategory !== 'all' && categoryForItem(item) !== selectedCategory) return false;
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return def.name.toLowerCase().includes(query) || def.category.toLowerCase().includes(query) || def.tags.some(tag => tag.toLowerCase().includes(query));
+  }), [locationItems, selectedCategory, searchQuery]);
 
-  const selectedStoredItem = locationItems.find(item => item.instanceId === selectedStoredInstanceId) || filteredItems[0] || null;
+  const selectedStoredItem = locationItems.find(item => item.instanceId === selectedStoredInstanceId) || (detailSource === 'stored' ? filteredItems[0] : null) || null;
   const selectedCarriedItem = state.inventory.items.find(item => item.instanceId === selectedCarriedInstanceId) || state.inventory.items[0] || null;
-  const detailItem = selectedStoredItem || selectedCarriedItem;
+  const detailItem = detailSource === 'carried' ? selectedCarriedItem : selectedStoredItem;
   const detailDef = detailItem ? ITEMS_DATABASE[detailItem.itemId] : null;
   const carriedOccupancy = calculateInventoryOccupancy(state.inventory.items);
   const acceptance = selectedLocation && selectedCarriedItem
@@ -127,6 +142,26 @@ export const CampStorageTab: React.FC<CampStorageTabProps> = ({ state, onNavigat
   const slotCount = getDynamicStorageSlotCount(filteredItems.length, columns, summary?.isFull || false);
   const emptySlots = Math.max(0, slotCount - filteredItems.length);
   const alerts = (state.storageSystem?.alerts || []).filter(alert => !selectedLocation || alert.locationId === selectedLocation.id);
+  const activeHaulJobs = (state.storageSystem?.haulJobs || []).filter(job =>
+    job.status !== 'completed' && (!selectedLocation || job.sourceLocationId === selectedLocation.id || job.targetLocationId === selectedLocation.id),
+  );
+  const transferTargets = campLocations.filter(location => location.id !== selectedLocation?.id && !location.isGroundCache === false ? true : location.id !== selectedLocation?.id);
+
+  useEffect(() => {
+    const validTargets = campLocations.filter(location => location.id !== selectedLocation?.id);
+    if (!validTargets.some(location => location.id === transferTargetId)) setTransferTargetId(validTargets[0]?.id || '');
+  }, [campLocations, selectedLocation?.id, transferTargetId]);
+
+  useEffect(() => {
+    if (!selectedLocation || !detailItem) {
+      setPolicyMin('0');
+      setPolicyMax('');
+      return;
+    }
+    const rule = selectedLocation.policy.stockRules.find(entry => entry.itemId === detailItem.itemId);
+    setPolicyMin(String(rule?.minQuantity ?? 0));
+    setPolicyMax(rule?.maxQuantity === undefined ? '' : String(rule.maxQuantity));
+  }, [selectedLocation?.id, detailItem?.itemId, selectedLocation?.policy.stockRules]);
 
   const categories: Array<{ id: CategoryFilter; label: string }> = [
     { id: 'all', label: 'Tất cả' },
@@ -139,6 +174,7 @@ export const CampStorageTab: React.FC<CampStorageTabProps> = ({ state, onNavigat
   ];
 
   const send = (command: string) => onStorageCommand?.(command);
+  const setPriority = (priority: StoragePriority) => selectedLocation && send(`__storage_priority__:${selectedLocation.id}:${priority}`);
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col gap-2 text-[#e9dfcc] select-none" style={{ fontFamily: UI_FONT }}>
@@ -154,7 +190,7 @@ export const CampStorageTab: React.FC<CampStorageTabProps> = ({ state, onNavigat
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-[280px_minmax(0,1fr)_330px] gap-2">
+      <div className="flex-1 min-h-0 grid grid-cols-[280px_minmax(0,1fr)_340px] gap-2">
         <section className="min-h-0 rounded-lg p-2.5 flex flex-col" style={panelStyle}>
           <div className="flex items-center justify-between pb-2 border-b border-[#557061]/30">
             <div><div className="text-[12px] font-bold">STORAGE LOCATIONS</div><div className="text-[9px] text-[#769086]">Công trình & nội thất chứa đồ</div></div>
@@ -166,26 +202,26 @@ export const CampStorageTab: React.FC<CampStorageTabProps> = ({ state, onNavigat
               const rowSummary = summarizeStorageLocation(state, location.id);
               const selected = selectedLocation?.id === location.id;
               const pct = Math.min(100, rowSummary?.usedPercent || 0);
+              const incoming = (state.storageSystem?.haulJobs || []).filter(job => job.targetLocationId === location.id && job.status !== 'completed').length;
               return (
-                <button key={location.id} type="button" onClick={() => { setSelectedLocationId(location.id); setSelectedStoredInstanceId(null); }} className="w-full rounded-md p-2 text-left border transition-all" style={{ ...slotStyle, borderColor: selected ? '#d4bd50' : 'rgba(111,132,98,.35)', boxShadow: selected ? '0 0 12px rgba(197,177,59,.16), inset 0 4px 10px rgba(0,0,0,.36)' : slotStyle.boxShadow }}>
+                <button key={location.id} type="button" onClick={() => { setSelectedLocationId(location.id); setSelectedStoredInstanceId(null); setDetailSource('stored'); }} className="w-full rounded-md p-2 text-left border transition-all" style={{ ...slotStyle, borderColor: selected ? '#d4bd50' : 'rgba(111,132,98,.35)', boxShadow: selected ? '0 0 12px rgba(197,177,59,.16), inset 0 4px 10px rgba(0,0,0,.36)' : slotStyle.boxShadow }}>
                   <div className="flex items-center gap-2">
                     <div className="w-9 h-9 rounded flex items-center justify-center bg-black/20 border border-[#526b5d]/40"><Icon className="w-5 h-5 text-[#d6c898]" /></div>
-                    <div className="min-w-0 flex-1"><div className="text-[11px] font-semibold truncate">{location.name}</div><div className="text-[9px] text-[#789084]">{location.isGroundCache ? 'Unprotected stockpile' : location.kind}</div></div>
-                    <ChevronRight className="w-4 h-4 text-[#718b7c]" />
+                    <div className="min-w-0 flex-1"><div className="text-[11px] font-semibold truncate">{location.name}</div><div className="text-[9px] text-[#789084]">{location.isGroundCache ? 'Unprotected stockpile' : `${location.kind} · ${location.policy.priority}`}</div></div>
+                    {incoming > 0 ? <Truck className="w-4 h-4 text-[#e3bf5e]" /> : <ChevronRight className="w-4 h-4 text-[#718b7c]" />}
                   </div>
                   <div className="mt-2 h-1.5 bg-black/35 rounded overflow-hidden"><div className="h-full" style={{ width: `${pct}%`, background: capacityTone(pct) }} /></div>
                   <div className="mt-1 flex justify-between text-[9px] text-[#82978d]"><span>{rowSummary?.usedVolumeL.toFixed(1) || 0}/{location.capacity.maxVolumeL} L</span><span>{rowSummary?.usedWeightKg.toFixed(1) || 0}/{location.capacity.maxWeightKg} kg</span></div>
                 </button>
               );
             })}
-            {!campLocations.length && <div className="text-center text-[10px] text-[#778e84] py-6">Storage system chưa được khởi tạo.</div>}
           </div>
           {alerts.length > 0 && <div className="shrink-0 mt-1 rounded p-2 border border-amber-700/40 bg-amber-950/15 text-[9px] text-amber-200"><AlertTriangle className="w-3 h-3 inline mr-1" />{alerts[0].message}</div>}
         </section>
 
         <section className="min-h-0 rounded-lg p-2.5 flex flex-col" style={panelStyle}>
           <div className="shrink-0 flex items-center justify-between gap-3 pb-2 border-b border-[#557061]/30">
-            <div className="min-w-0"><div className="text-[14px] font-bold truncate">{selectedLocation?.name || 'Chưa chọn kho'}</div><div className="text-[9px] text-[#789084]">Slot tự sinh theo stack; dung tích vật lý quyết định giới hạn.</div></div>
+            <div className="min-w-0"><div className="text-[14px] font-bold truncate">{selectedLocation?.name || 'Chưa chọn kho'}</div><div className="text-[9px] text-[#789084]">Slot là vùng hiển thị; volume/weight mới là capacity thật.</div></div>
             <div className="relative w-[180px]"><Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#6e877a]" /><input value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="Tìm vật phẩm..." className="w-full rounded bg-[#061f1d] border border-[#456052]/50 pl-7 pr-2 py-1.5 text-[10px] outline-none" /></div>
           </div>
 
@@ -201,10 +237,10 @@ export const CampStorageTab: React.FC<CampStorageTabProps> = ({ state, onNavigat
             <div className="grid grid-cols-5 gap-2 auto-rows-[92px]">
               {filteredItems.map(item => {
                 const def = ITEMS_DATABASE[item.itemId];
-                const selected = selectedStoredItem?.instanceId === item.instanceId;
+                const selected = selectedStoredItem?.instanceId === item.instanceId && detailSource === 'stored';
                 const reserved = item.reservedQuantity || 0;
                 return (
-                  <button key={item.instanceId} type="button" onClick={() => setSelectedStoredInstanceId(item.instanceId)} className="relative rounded-md p-1.5 flex flex-col items-center justify-center border" style={{ ...slotStyle, borderColor: selected ? '#d6bc4b' : 'rgba(111,132,98,.35)' }}>
+                  <button key={item.instanceId} type="button" onClick={() => { setSelectedStoredInstanceId(item.instanceId); setDetailSource('stored'); }} className="relative rounded-md p-1.5 flex flex-col items-center justify-center border" style={{ ...slotStyle, borderColor: selected ? '#d6bc4b' : 'rgba(111,132,98,.35)' }}>
                     <ItemIcon itemId={item.itemId} className="w-9 h-9 object-contain" />
                     <div className="text-[9px] leading-tight mt-1 text-center w-full truncate">{def?.name || item.itemId}</div>
                     <div className="absolute right-1.5 bottom-1 text-[10px] font-bold text-[#e6ca6b]">×{item.quantity}</div>
@@ -214,27 +250,41 @@ export const CampStorageTab: React.FC<CampStorageTabProps> = ({ state, onNavigat
                 );
               })}
               {Array.from({ length: emptySlots }).map((_, index) => (
-                <div key={`empty_${index}`} className="rounded-md border border-dashed border-[#496255]/45 flex items-center justify-center text-[#425c50]" style={{ background: 'rgba(3,25,22,.35)' }} title={summary?.isFull ? 'Kho đã đầy' : 'Ô trống chỉ là vùng thả; không phải giới hạn slot'}><Package className="w-5 h-5 opacity-35" /></div>
+                <div key={`empty_${index}`} className="rounded-md border border-dashed border-[#496255]/45 flex items-center justify-center text-[#425c50]" style={{ background: 'rgba(3,25,22,.35)' }} title={summary?.isFull ? 'Kho đã đầy' : 'Drop target động; không phải slot capacity'}><Package className="w-5 h-5 opacity-35" /></div>
               ))}
             </div>
-            {!filteredItems.length && emptySlots === 0 && <div className="text-[10px] text-[#718a7f] text-center py-8">Kho đã đầy nhưng không có stack phù hợp bộ lọc hiện tại.</div>}
           </div>
         </section>
 
         <aside className="min-h-0 flex flex-col gap-2">
           {selectedLocation && summary && (
             <div className="rounded-lg p-2.5 shrink-0" style={panelStyle}>
-              <div className="text-[12px] font-bold pb-2 border-b border-[#557061]/30">STORAGE INFO</div>
-              <div className="mt-2 space-y-1.5 text-[10px]">
-                <div className="flex justify-between"><span className="text-[#7d9489]">Loại</span><span>{selectedLocation.kind}</span></div>
-                <div className="flex justify-between"><span className="text-[#7d9489]">Dung tích</span><span className="text-[#e5c85d]">{summary.usedVolumeL.toFixed(1)} / {selectedLocation.capacity.maxVolumeL} L</span></div>
-                <div className="flex justify-between"><span className="text-[#7d9489]">Tải trọng</span><span className="text-[#e5c85d]">{summary.usedWeightKg.toFixed(1)} / {selectedLocation.capacity.maxWeightKg} kg</span></div>
-                <div className="flex justify-between"><span className="text-[#7d9489]">Chống ẩm</span><span className="text-[#76d56e]">{meterLabel(selectedLocation.environment.moistureProtection)}</span></div>
-                <div className="flex justify-between"><span className="text-[#7d9489]">Chống côn trùng</span><span>{meterLabel(selectedLocation.environment.pestProtection)}</span></div>
-                <div className="flex justify-between"><span className="text-[#7d9489]">Thông khí</span><span>{meterLabel(selectedLocation.environment.ventilation)}</span></div>
-                <div className="flex justify-between"><span className="text-[#7d9489]">Tiếp cận</span><span>{meterLabel(selectedLocation.environment.accessibility)}</span></div>
-                <div className="flex justify-between"><span className="text-[#7d9489]">Tình trạng</span><span>{Math.round(selectedLocation.condition)}%</span></div>
+              <div className="flex items-center justify-between pb-2 border-b border-[#557061]/30"><div className="text-[12px] font-bold">STORAGE INFO</div><Settings2 className="w-4 h-4 text-[#81968b]" /></div>
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[9px]">
+                <div className="text-[#7d9489]">Chống ẩm</div><div className="text-right">{meterLabel(selectedLocation.environment.moistureProtection)}</div>
+                <div className="text-[#7d9489]">Pest protection</div><div className="text-right">{meterLabel(selectedLocation.environment.pestProtection)}</div>
+                <div className="text-[#7d9489]">Thông khí</div><div className="text-right">{meterLabel(selectedLocation.environment.ventilation)}</div>
+                <div className="text-[#7d9489]">Tình trạng</div><div className="text-right">{Math.round(selectedLocation.condition)}%</div>
               </div>
+              <div className="mt-2 pt-2 border-t border-[#557061]/25 grid grid-cols-[1fr_1fr] gap-1.5">
+                <select value={selectedLocation.policy.priority} onChange={event => setPriority(event.target.value as StoragePriority)} className="bg-[#061f1d] border border-[#4d6759]/55 rounded px-2 py-1.5 text-[9px] outline-none">
+                  <option value="low">Priority: Low</option><option value="normal">Priority: Normal</option><option value="high">Priority: High</option><option value="critical">Priority: Critical</option>
+                </select>
+                <button type="button" disabled={Boolean(selectedLocation.isGroundCache)} onClick={() => send(`__storage_autohaul__:${selectedLocation.id}:${selectedLocation.policy.autoHaul ? 0 : 1}`)} className="rounded border px-2 py-1.5 text-[9px] disabled:opacity-30" style={{ borderColor: selectedLocation.policy.autoHaul ? '#84a946' : '#50695b', background: selectedLocation.policy.autoHaul ? '#244a2a' : '#102e28', color: selectedLocation.policy.autoHaul ? '#e1e797' : '#9aaba1' }}>Auto Haul {selectedLocation.policy.autoHaul ? 'ON' : 'OFF'}</button>
+              </div>
+            </div>
+          )}
+
+          {activeHaulJobs.length > 0 && (
+            <div className="rounded-lg p-2.5 shrink-0 max-h-[128px] overflow-auto building-scroll" style={panelStyle}>
+              <div className="flex items-center gap-1.5 text-[11px] font-bold mb-1.5"><Truck className="w-3.5 h-3.5 text-[#ddbd61]" />LOGISTICS QUEUE</div>
+              {activeHaulJobs.map(job => {
+                const pct = job.totalSeconds > 0 ? Math.min(100, job.progressSeconds / job.totalSeconds * 100) : 0;
+                return <div key={job.id} className="py-1.5 border-t border-[#52685b]/20 first:border-0 text-[9px]">
+                  <div className="flex items-center gap-1"><span className="flex-1 truncate">{ITEMS_DATABASE[job.itemId]?.name || job.itemId} ×{job.quantity}</span><span className={job.status === 'blocked' ? 'text-[#ef7b69]' : 'text-[#c9b55f]'}>{haulStatusLabel(job.status)}</span></div>
+                  <div className="flex items-center gap-1 mt-1"><div className="flex-1 h-1 bg-black/40 rounded overflow-hidden"><div className="h-full bg-[#68c678]" style={{ width: `${pct}%` }} /></div><button type="button" onClick={() => send(`__storage_haul_pause__:${job.id}`)} className="p-0.5 text-[#c8b96d]">{job.status === 'paused' ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}</button><button type="button" onClick={() => send(`__storage_haul_cancel__:${job.id}`)} className="p-0.5 text-[#d86a5c]"><X className="w-3 h-3" /></button></div>
+                </div>;
+              })}
             </div>
           )}
 
@@ -242,17 +292,20 @@ export const CampStorageTab: React.FC<CampStorageTabProps> = ({ state, onNavigat
             <div className="text-[12px] font-bold pb-2 border-b border-[#557061]/30">ITEM DETAILS</div>
             {detailItem && detailDef ? (
               <div className="pt-2">
-                <div className="flex gap-2.5"><div className="w-16 h-16 rounded flex items-center justify-center" style={slotStyle}><ItemIcon itemId={detailItem.itemId} className="w-12 h-12 object-contain" /></div><div className="min-w-0"><div className="text-[14px] font-semibold">{detailDef.name}</div><div className="text-[9px] uppercase text-[#759084]">{detailDef.category}</div><p className="text-[9px] text-[#93a69b] leading-relaxed mt-1 line-clamp-3">{detailDef.description}</p></div></div>
-                <div className="mt-3 space-y-1.5 text-[10px]">
-                  <div className="flex justify-between"><span className="text-[#7d9489]">Số lượng</span><span>{detailItem.quantity}</span></div>
-                  <div className="flex justify-between"><span className="text-[#7d9489]">Khả dụng</span><span>{getAvailableInventoryItemQuantity(detailItem)}</span></div>
-                  <div className="flex justify-between"><span className="text-[#7d9489]">Reserved</span><span className={(detailItem.reservedQuantity || 0) > 0 ? 'text-[#e4bd58]' : ''}>{detailItem.reservedQuantity || 0}</span></div>
-                  <div className="flex justify-between"><span className="text-[#7d9489]">Khối lượng</span><span>{detailDef.weight} kg / đơn vị</span></div>
-                  <div className="flex justify-between"><span className="text-[#7d9489]">Thể tích</span><span>{detailDef.volume} L / đơn vị</span></div>
-                  {detailItem.freshness !== undefined && <div className="flex justify-between"><span className="text-[#7d9489]">Độ tươi</span><span className="text-[#78d46d]">{Math.round(detailItem.freshness)}%</span></div>}
-                  {detailItem.moisture !== undefined && <div className="flex justify-between"><span className="text-[#7d9489]">Độ ẩm vật phẩm</span><span>{Math.round(detailItem.moisture)}%</span></div>}
-                </div>
-                {selectedStoredItem && selectedLocation && <button type="button" disabled={getAvailableInventoryItemQuantity(selectedStoredItem) <= 0} onClick={() => send(`__storage_take__:${selectedLocation.id}:${selectedStoredItem.instanceId}`)} className="w-full mt-3 py-2 rounded border border-[#a88938] bg-[#3b471e] text-[#ffe38a] text-[10px] disabled:opacity-35">Lấy vật phẩm đã chọn</button>}
+                <div className="flex gap-2.5"><div className="w-14 h-14 rounded flex items-center justify-center" style={slotStyle}><ItemIcon itemId={detailItem.itemId} className="w-10 h-10 object-contain" /></div><div className="min-w-0"><div className="text-[13px] font-semibold">{detailDef.name}</div><div className="text-[9px] uppercase text-[#759084]">{detailDef.category}</div><p className="text-[9px] text-[#93a69b] leading-relaxed mt-1 line-clamp-2">{detailDef.description}</p></div></div>
+                <div className="mt-2 grid grid-cols-2 gap-y-1 text-[9px]"><span className="text-[#7d9489]">Số lượng</span><span className="text-right">{detailItem.quantity}</span><span className="text-[#7d9489]">Khả dụng</span><span className="text-right">{getAvailableInventoryItemQuantity(detailItem)}</span><span className="text-[#7d9489]">Reserved</span><span className="text-right">{detailItem.reservedQuantity || 0}</span><span className="text-[#7d9489]">Weight / Volume</span><span className="text-right">{detailDef.weight}kg / {detailDef.volume}L</span>{detailItem.moisture !== undefined && <><span className="text-[#7d9489]">Độ ẩm</span><span className="text-right">{Math.round(detailItem.moisture)}%</span></>}</div>
+
+                {selectedLocation && detailSource === 'stored' && selectedStoredItem && (
+                  <div className="mt-2 pt-2 border-t border-[#557061]/25 space-y-1.5">
+                    <div className="grid grid-cols-[1fr_1fr_auto] gap-1">
+                      <input type="number" min={0} value={policyMin} onChange={event => setPolicyMin(event.target.value)} className="bg-[#061f1d] border border-[#4d6759]/55 rounded px-1.5 py-1 text-[9px]" placeholder="Min" />
+                      <input type="number" min={0} value={policyMax} onChange={event => setPolicyMax(event.target.value)} className="bg-[#061f1d] border border-[#4d6759]/55 rounded px-1.5 py-1 text-[9px]" placeholder="Max ∞" />
+                      <button type="button" onClick={() => send(`__storage_stockrule__:${selectedLocation.id}:${selectedStoredItem.itemId}:${Number(policyMin || 0)}:${policyMax}`)} className="rounded border border-[#708447] px-2 text-[9px] text-[#d6d784]">Policy</button>
+                    </div>
+                    {transferTargets.length > 0 && <div className="grid grid-cols-[1fr_auto] gap-1"><select value={transferTargetId} onChange={event => setTransferTargetId(event.target.value)} className="bg-[#061f1d] border border-[#4d6759]/55 rounded px-1.5 py-1 text-[9px]">{transferTargets.map(location => <option key={location.id} value={location.id}>{location.name}</option>)}</select><button type="button" disabled={getAvailableInventoryItemQuantity(selectedStoredItem) <= 0 || !transferTargetId} onClick={() => send(`__storage_haul__:${selectedLocation.id}:${transferTargetId}:${selectedStoredItem.itemId}:${getAvailableInventoryItemQuantity(selectedStoredItem)}`)} className="rounded border border-[#a88938] bg-[#3b471e] text-[#ffe38a] px-2 text-[9px] disabled:opacity-35"><ArrowRightLeft className="w-3 h-3 inline mr-1" />Transfer</button></div>}
+                    <button type="button" disabled={getAvailableInventoryItemQuantity(selectedStoredItem) <= 0} onClick={() => send(`__storage_take__:${selectedLocation.id}:${selectedStoredItem.instanceId}`)} className="w-full py-1.5 rounded border border-[#a88938] bg-[#3b471e] text-[#ffe38a] text-[9px] disabled:opacity-35">Lấy vào Carrying Inventory</button>
+                  </div>
+                )}
               </div>
             ) : <div className="h-full flex flex-col items-center justify-center text-center text-[#71897e]"><Info className="w-7 h-7 mb-2 opacity-50" /><span className="text-[10px]">Chọn vật phẩm để xem chi tiết.</span></div>}
           </div>
@@ -264,8 +317,8 @@ export const CampStorageTab: React.FC<CampStorageTabProps> = ({ state, onNavigat
         <div className="flex gap-1.5 overflow-x-auto building-scroll pb-1">
           {state.inventory.items.map(item => {
             const def = ITEMS_DATABASE[item.itemId];
-            const selected = selectedCarriedItem?.instanceId === item.instanceId;
-            return <button key={item.instanceId} type="button" onClick={() => { setSelectedCarriedInstanceId(item.instanceId); setSelectedStoredInstanceId(null); }} className="relative w-[64px] h-[58px] shrink-0 rounded border flex flex-col items-center justify-center" style={{ ...slotStyle, borderColor: selected ? '#d4bd50' : 'rgba(111,132,98,.35)' }}><ItemIcon itemId={item.itemId} className="w-7 h-7 object-contain" /><span className="text-[8px] w-[56px] truncate">{def?.name || item.itemId}</span><span className="absolute right-1 bottom-0.5 text-[9px] text-[#e5c75f]">×{item.quantity}</span></button>;
+            const selected = selectedCarriedItem?.instanceId === item.instanceId && detailSource === 'carried';
+            return <button key={item.instanceId} type="button" onClick={() => { setSelectedCarriedInstanceId(item.instanceId); setDetailSource('carried'); }} className="relative w-[64px] h-[58px] shrink-0 rounded border flex flex-col items-center justify-center" style={{ ...slotStyle, borderColor: selected ? '#d4bd50' : 'rgba(111,132,98,.35)' }}><ItemIcon itemId={item.itemId} className="w-7 h-7 object-contain" /><span className="text-[8px] w-[56px] truncate">{def?.name || item.itemId}</span><span className="absolute right-1 bottom-0.5 text-[9px] text-[#e5c75f]">×{item.quantity}</span></button>;
           })}
         </div>
         <div className="grid grid-cols-2 gap-1.5">
