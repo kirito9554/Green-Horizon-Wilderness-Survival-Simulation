@@ -1,7 +1,7 @@
 import type { GameState, ItemQuality, SurvivorState } from '../types';
 import '../types/buildingSimulation';
 import { BUILDINGS_DATABASE } from '../data/buildings';
-import { addItemToInventory } from './inventorySystem';
+import { addItemToInventory, getOrCreatePoiStorage } from './inventorySystem';
 import { releaseJobReservations } from './jobReservationSystem';
 import { ensureBuildingSimulation, getOrCreatePoiBuildGrid } from './buildGridSystem';
 import { formatTimeOfDay } from './timeSystem';
@@ -28,8 +28,7 @@ function releaseWorkerForJob(state: GameState, jobId: string, survivorId?: strin
 function returnStagingToPoi(state: GameState, building: GameState['buildings'][number]): void {
   if (!building.stagingInventory?.items.length) return;
   const poiId = building.areaId || 'AREA_CAMP_CLEARING';
-  const storage = state.poiStorages?.[poiId];
-  if (!storage) return;
+  const storage = getOrCreatePoiStorage(state, poiId);
 
   for (const item of building.stagingInventory.items) {
     if (item.quantity <= 0) continue;
