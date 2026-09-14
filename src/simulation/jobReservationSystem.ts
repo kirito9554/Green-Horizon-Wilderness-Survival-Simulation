@@ -143,7 +143,6 @@ export function consumeJobReservations(
   state: GameState,
   reservations: MaterialReservation[],
 ): { success: boolean; qualities: ItemQuality[] } {
-  // Validate first so corrupted saves cannot half-consume a repair/upgrade job.
   for (const reservation of reservations) {
     const inventory = resolveInventory(state, reservation.source);
     const item = inventory?.items.find(candidate => candidate.instanceId === reservation.instanceId);
@@ -170,4 +169,37 @@ export function consumeJobReservations(
     if (item.quantity <= 0) inventory.items.splice(index, 1);
   }
   return { success: true, qualities };
+}
+
+/**
+ * Craft reservations are rebuilt first. This function then reapplies persistent
+ * reservations owned by maintenance/upgrade jobs without resetting existing
+ * counters. Invalid slices are dropped so corrupted saves never create phantom locks.
+ */
+export function rebuildJobReservationCounters(
+  state: GameState,
+  reservations: MaterialReservation[],
+): MaterialReservation[] {
+  const valid: MaterialReservation[] = [];
+  for (const reservation of reservations || []) {
+    const inventory = resolveInventory(state, reservation.source);
+    const item = inventory?.items.find(candidate => candidate.instanceId === reservation.instanceId);
+    if (!item || item.itemId !== reservation.itemId || reservation.quantity <= 0) continue;
+    if (availableQuantity(item) < reservation.quantity) continue;
+
+    const availableBreakdown = subtractBreakdown(normalizedPhysicalBreakdown(item), item.reservedQualityBreakdown);
+    let exactQualityAvailable = true;
+    for (const quality of QUALITY_ORDER) {
+      if ((availableBreakdown[quality] || 0) < (reservation.qualityBreakdown?.[quality] || 0)) {
+        exactQualityAvailable = false;
+        break;
+      }
+    }
+    if (!exactQualityAvailable) continue;
+
+    item.reservedQuantity = (item.reservedQuantity || 0) + reservation.quantity;
+    item.reservedQualityBreakdown = addBreakdown(item.reservedQualityBreakdown, reservation.qualityBreakdown);
+    valid.push(reservation);
+  }
+  return valid;
 }
