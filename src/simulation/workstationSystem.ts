@@ -75,22 +75,26 @@ function descriptorForKind(kind: WorkstationKind): WorkstationDescriptor {
   };
 }
 
+function claimsPhysicalStation(status: string, workstationId?: string): boolean {
+  return Boolean(workstationId && (status === 'pending' || status === 'in_progress'));
+}
+
 function queueOccupancyForBuilding(state: GameState, buildingInstanceId: string, excludingJobId: string): number {
   const crafting = (state.craftingQueue || []).filter(job =>
     job.id !== excludingJobId &&
-    job.status === 'in_progress' &&
+    claimsPhysicalStation(job.status, job.assignedWorkstationId) &&
     job.assignedWorkstationId === buildingInstanceId
   ).length;
 
   const maintenance = (state.maintenanceSystem?.queue || []).filter(job =>
     job.id !== excludingJobId &&
-    job.status === 'in_progress' &&
+    claimsPhysicalStation(job.status, job.assignedWorkstationId) &&
     job.assignedWorkstationId === buildingInstanceId
   ).length;
 
   const upgrades = (state.upgradeSystem?.queue || []).filter(job =>
     job.id !== excludingJobId &&
-    job.status === 'in_progress' &&
+    claimsPhysicalStation(job.status, job.assignedWorkstationId) &&
     job.assignedWorkstationId === buildingInstanceId
   ).length;
 
