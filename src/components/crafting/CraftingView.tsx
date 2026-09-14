@@ -23,7 +23,7 @@ import './CraftingReference.css';
 
 interface CraftingViewProps {
   state: GameState;
-  /** Legacy callback retained for parent compatibility; queue scheduler is authoritative. */
+  /** Legacy callback doubles as the deep-production command gateway. */
   onStartCrafting?: (survivorId: string, recipeId: string) => void;
   onStartResearch?: (recipeId: string, survivorId: string) => void;
   onPauseResearch?: (recipeId: string) => void;
@@ -38,6 +38,7 @@ const UI_FONT = '"Roboto Condensed", "Be Vietnam Pro", -apple-system, BlinkMacSy
 
 export const CraftingView: React.FC<CraftingViewProps> = ({
   state,
+  onStartCrafting,
   onStartResearch,
   onPauseResearch,
   onAddToCraftingQueue,
@@ -64,6 +65,10 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
       if (idle) setSelectedSurvivorId(idle.id);
     }
   }, [survivors, selectedSurvivorId]);
+
+  const dispatchProductionCommand = (command: string, survivorId?: string) => {
+    onStartCrafting?.(survivorId || '', command);
+  };
 
   const allCraftingRecipes = useMemo(
     () => Object.values(RECIPES_DATABASE).filter((recipe) => recipe.type === 'crafting' || recipe.type === undefined),
@@ -123,7 +128,7 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
           if (selectedCategory === 'weapons') {
             if (!(recipe.id.includes('BOW') || recipe.id.includes('SPEAR') || recipe.id.includes('CLUB'))) return false;
           } else if (selectedCategory === 'shelter') {
-            if (!(recipe.category === 'shelter' || recipe.id.includes('BED') || recipe.id.includes('SHELTER'))) return false;
+            if (!(recipe.id.includes('BED') || recipe.id.includes('SHELTER'))) return false;
           } else if (recipe.category !== selectedCategory) return false;
         }
         if (onlyPinned && !isPinned) return false;
@@ -242,7 +247,12 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
               />
             </div>
 
-            <CraftingFavoritesAndHistory recentHistory={recentHistory} favoriteRecipeIds={Array.from(pinnedIds)} allRecipes={allCraftingRecipes} onSelectRecipe={(recipe) => setSelectedRecipeId(recipe.id)} />
+            <CraftingFavoritesAndHistory
+              recentHistory={recentHistory}
+              favoriteRecipeIds={Array.from(pinnedIds)}
+              allRecipes={allCraftingRecipes}
+              onSelectRecipe={(recipe) => setSelectedRecipeId(recipe.id)}
+            />
           </div>
 
           <CraftingQueueSidebar
@@ -261,11 +271,39 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
 
       {activeTab === 'research' && (
         <div className="min-h-0 flex-1 p-2 overflow-hidden">
-          <ResearchView state={state} onStartResearch={onStartResearch} onPauseResearch={onPauseResearch} />
+          <ResearchView
+            state={state}
+            onStartResearch={onStartResearch}
+            onPauseResearch={onPauseResearch}
+            onAnalyzeResearch={(recipeId, survivorId) => dispatchProductionCommand(`__research_analyze__:${recipeId}`, survivorId)}
+            onToggleTrackResearch={(recipeId) => dispatchProductionCommand(`__research_track__:${recipeId}`)}
+          />
         </div>
       )}
-      {activeTab === 'repair' && <div className="min-h-0 flex-1 p-2 overflow-hidden"><RepairView /></div>}
-      {activeTab === 'upgrade' && <div className="min-h-0 flex-1 p-2 overflow-hidden"><UpgradeView /></div>}
+
+      {activeTab === 'repair' && (
+        <div className="min-h-0 flex-1 p-2 overflow-hidden">
+          <RepairView
+            state={state}
+            onQueueMaintenance={(instanceId, mode, componentId, survivorId) => dispatchProductionCommand(`__maintenance__:${mode}:${instanceId}:${componentId || ''}`, survivorId)}
+            onCancelMaintenance={(jobId) => dispatchProductionCommand(`__maintenance_cancel__:${jobId}`)}
+            onTogglePauseMaintenance={(jobId) => dispatchProductionCommand(`__maintenance_pause__:${jobId}`)}
+            onDismantleTool={(instanceId, survivorId) => dispatchProductionCommand(`__dismantle__:${instanceId}`, survivorId)}
+          />
+        </div>
+      )}
+
+      {activeTab === 'upgrade' && (
+        <div className="min-h-0 flex-1 p-2 overflow-hidden">
+          <UpgradeView
+            state={state}
+            onQueueTierUpgrade={(instanceId, survivorId) => dispatchProductionCommand(`__upgrade_tier__:${instanceId}`, survivorId)}
+            onQueueComponentModification={(instanceId, modification, componentId, survivorId) => dispatchProductionCommand(`__upgrade_mod__:${modification}:${instanceId}:${componentId || ''}`, survivorId)}
+            onCancelUpgrade={(jobId) => dispatchProductionCommand(`__upgrade_cancel__:${jobId}`)}
+            onTogglePauseUpgrade={(jobId) => dispatchProductionCommand(`__upgrade_pause__:${jobId}`)}
+          />
+        </div>
+      )}
     </div>
   );
 };
