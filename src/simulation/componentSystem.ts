@@ -75,12 +75,7 @@ function qualityScalar(quality: ItemQuality): number {
   return QUALITY_CONFIG[quality]?.durabilityMultiplier || 1;
 }
 
-function createComponent(
-  item: InventoryItem,
-  template: ComponentTemplate,
-  index: number,
-  conditionRatio: number,
-): ComponentInstance {
+function createComponent(item: InventoryItem, template: ComponentTemplate, index: number, conditionRatio: number): ComponentInstance {
   const quality = item.quality || 'standard';
   const structuralVariance = 0.9 + template.conditionWeight * 0.35;
   const conditionMax = Math.max(20, Math.round(100 * qualityScalar(quality) * structuralVariance));
@@ -110,10 +105,6 @@ export function createDefaultCraftQualityProfile(quality: ItemQuality): CraftQua
   };
 }
 
-/**
- * Backfills real component state for legacy tools and initializes new tools.
- * It is intentionally deterministic from the aggregate item state.
- */
 export function ensureToolComponentInstances(item: InventoryItem, def: ItemDefinition): InventoryItem {
   if (!def.toolProperties && def.category !== 'tool') return item;
 
@@ -123,7 +114,6 @@ export function ensureToolComponentInstances(item: InventoryItem, def: ItemDefin
 
   item.originalConditionMax = item.originalConditionMax || aggregateMax;
   item.craftQualityProfile = item.craftQualityProfile || createDefaultCraftQualityProfile(item.quality || 'standard');
-
   if (!item.components || item.components.length === 0) {
     item.components = templatesForTool(def).map((template, index) => createComponent(item, template, index, ratio));
   }
@@ -156,4 +146,34 @@ export function syncAggregateConditionFromComponents(item: InventoryItem): void 
   const derived = deriveAggregateConditionFromComponents(item);
   item.condition = derived.condition;
   item.conditionMax = derived.conditionMax;
+}
+
+function criticalSlotsFor(def: ItemDefinition): ToolComponentSlot[] {
+  switch (def.toolProperties?.type) {
+    case 'knife': return ['blade', 'handle', 'binding'];
+    case 'axe': return ['head', 'handle', 'binding'];
+    case 'spear': return ['head', 'shaft', 'binding'];
+    case 'hammer': return ['head', 'handle', 'binding'];
+    case 'bow': return ['frame', 'string'];
+    case 'container':
+    case 'canteen': return ['body', 'closure'];
+    default: return ['body'];
+  }
+}
+
+/** A broken critical part disables the tool but leaves the physical item repairable. */
+export function isToolOperational(item: InventoryItem, def: ItemDefinition): boolean {
+  ensureToolComponentInstances(item, def);
+  const criticalSlots = criticalSlotsFor(def);
+  const components = item.components || [];
+  if (components.length === 0) return (item.condition || 0) > 0;
+
+  return criticalSlots.every(slot => {
+    const component = components.find(part => part.slot === slot);
+    if (!component) return true;
+    const ratio = component.conditionMax > 0 ? component.condition / component.conditionMax : 0;
+    if (ratio <= 0.02) return false;
+    if ((slot === 'binding' || slot === 'string') && (component.properties.tension ?? 100) <= 5) return false;
+    return true;
+  });
 }
