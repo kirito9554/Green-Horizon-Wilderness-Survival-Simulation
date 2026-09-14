@@ -20,6 +20,10 @@ import {
   tickBuildingConstructionRuntime,
 } from '../src/simulation/buildingConstructionSystem';
 import {
+  cancelSpatialConstruction,
+  togglePauseSpatialConstruction,
+} from '../src/simulation/buildingConstructionCommands';
+import {
   addItemToInventory,
   getAvailableInventoryStock,
   getOrCreatePoiStorage,
@@ -34,6 +38,8 @@ function freshState(seed = 'building-smoke-seed'): GameState {
   sim.clusters = [];
   sim.preparationJobs = [];
   sim.constructionJobs = [];
+  sim.structureWorkJobs = [];
+  sim.structureWorkHistory = [];
   return state;
 }
 
@@ -44,6 +50,11 @@ function physicalQuantity(state: GameState, itemId: string): number {
   const poi = Object.values(state.poiStorages || {}).reduce((sum, storage) =>
     sum + storage.items.filter(item => item.itemId === itemId).reduce((inner, item) => inner + item.quantity, 0), 0);
   return party + poi;
+}
+
+function availableAtCamp(state: GameState, itemId: string): number {
+  const storage = getOrCreatePoiStorage(state, 'AREA_CAMP_CLEARING');
+  return getAvailableInventoryStock(state.inventory, itemId) + getAvailableInventoryStock(storage, itemId);
 }
 
 function testDeterministicGrid(): void {
@@ -203,8 +214,7 @@ function testConstructionReservationHaulingAndPhases(): void {
 
   assert.equal(physicalQuantity(state, 'ITEM_DRIFTWOOD_BRANCH'), branchBeforePlan, 'planning must not physically consume branches');
   assert.equal(physicalQuantity(state, 'ITEM_COCONUT_HUSK'), huskBeforePlan, 'planning must not physically consume husk');
-  const plannedStorage = getOrCreatePoiStorage(state, 'AREA_CAMP_CLEARING');
-  assert.ok(getAvailableInventoryStock(plannedStorage, 'ITEM_COCONUT_HUSK') < 2, 'reserved material must be unavailable to competing jobs');
+  assert.ok(availableAtCamp(state, 'ITEM_COCONUT_HUSK') < 2, 'reserved material must be unavailable to competing jobs');
 
   tickBuildingConstructionRuntime(state);
   assert.equal(job.status, 'hauling', 'an idle builder should begin hauling reserved material');
@@ -239,15 +249,52 @@ function testConstructionReservationHaulingAndPhases(): void {
   assert.ok(job.phases.every(phase => phase.status === 'completed' && phase.workmanshipScore !== undefined), 'each phase should record workmanship');
 }
 
-function testV7MigrationCreatesSpatialState(): void {
+function testConstructionPauseAndCancel(): void {
+  let state = freshState('construction-command-seed');
+  state = establishFirstUsableCluster(state, 'cooking');
+  const cluster = state.buildingSimulation!.clusters[0];
+  finishClusterPreparation(state, cluster.id);
+  const occupiedBefore = cluster.occupiedAreaM2;
+
+  addItemToInventory(getOrCreatePoiStorage(state, 'AREA_CAMP_CLEARING'), 'ITEM_COCONUT_HUSK', 2, 'standard');
+  const branchAvailableBefore = availableAtCamp(state, 'ITEM_DRIFTWOOD_BRANCH');
+  const huskAvailableBefore = availableAtCamp(state, 'ITEM_COCONUT_HUSK');
+
+  state = planSpatialConstruction(state, state.survivors[0].id, cluster.id, 'BUILDING_CAMPFIRE_HEARTH');
+  let job = state.buildingSimulation!.constructionJobs![0];
+  assert.ok(job);
+  assert.ok(state.buildingSimulation!.clusters[0].occupiedAreaM2 > occupiedBefore, 'planning must reserve physical footprint');
+  assert.ok(availableAtCamp(state, 'ITEM_DRIFTWOOD_BRANCH') < branchAvailableBefore, 'planning must reserve branch stock');
+  assert.ok(availableAtCamp(state, 'ITEM_COCONUT_HUSK') < huskAvailableBefore, 'planning must reserve husk stock');
+
+  state = togglePauseSpatialConstruction(state, job.id);
+  job = state.buildingSimulation!.constructionJobs![0];
+  assert.equal(job.status, 'paused');
+  assert.ok(job.materialReservations.length > 0, 'pause must keep exact reservations');
+
+  state = togglePauseSpatialConstruction(state, job.id);
+  job = state.buildingSimulation!.constructionJobs![0];
+  assert.equal(job.status, 'waiting_hauling');
+
+  state = cancelSpatialConstruction(state, job.id);
+  assert.equal(state.buildingSimulation!.constructionJobs!.length, 0, 'cancel must remove construction job');
+  assert.equal(state.buildings.some(building => building.constructionJobId === job.id), false, 'cancel must remove unfinished structure instance');
+  assert.equal(Math.round(state.buildingSimulation!.clusters[0].occupiedAreaM2 * 10), Math.round(occupiedBefore * 10), 'cancel must release cluster footprint');
+  assert.equal(availableAtCamp(state, 'ITEM_DRIFTWOOD_BRANCH'), branchAvailableBefore, 'cancel before hauling must release branch reservation');
+  assert.equal(availableAtCamp(state, 'ITEM_COCONUT_HUSK'), huskAvailableBefore, 'cancel before hauling must release husk reservation');
+}
+
+function testV8MigrationCreatesSpatialAndStructureWorkState(): void {
   const legacy = JSON.parse(JSON.stringify(INITIAL_GAME_STATE)) as GameState;
   legacy.saveVersion = 5;
   delete legacy.buildingSimulation;
   const migrated = migrateGameState(legacy);
-  assert.equal(migrated.saveVersion, 7);
+  assert.equal(migrated.saveVersion, 8);
   assert.ok(migrated.buildingSimulation?.worldSeed, 'migration must create a persistent world seed');
   assert.ok(migrated.buildingSimulation?.gridsByPoiId.AREA_CAMP_CLEARING, 'migration should materialize the camp grid');
   assert.ok(Array.isArray(migrated.buildingSimulation?.constructionJobs), 'migration must initialize persistent construction queue');
+  assert.ok(Array.isArray(migrated.buildingSimulation?.structureWorkJobs), 'migration must initialize structure work queue');
+  assert.ok(Array.isArray(migrated.buildingSimulation?.structureWorkHistory), 'migration must initialize structure work history');
 }
 
 function main(): void {
@@ -256,7 +303,8 @@ function main(): void {
   testStructureFootprintReservation();
   testPreparationRuntimeReleasesWorker();
   testConstructionReservationHaulingAndPhases();
-  testV7MigrationCreatesSpatialState();
+  testConstructionPauseAndCancel();
+  testV8MigrationCreatesSpatialAndStructureWorkState();
   console.log('Building simulation smoke tests passed.');
 }
 
