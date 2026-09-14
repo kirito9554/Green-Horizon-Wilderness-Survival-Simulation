@@ -19,6 +19,7 @@ import { ResearchView } from './ResearchView';
 import { RepairView } from './RepairView';
 import { UpgradeView } from './UpgradeView';
 import './OrganicUI.css';
+import './CraftingReference.css';
 
 interface CraftingViewProps {
   state: GameState;
@@ -61,8 +62,8 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
   ]);
 
   useEffect(() => {
-    if (!selectedSurvivorId || !survivors.some((s) => s.id === selectedSurvivorId)) {
-      const idle = survivors.find((s) => s.currentAction.type === 'idle') || survivors[0];
+    if (!selectedSurvivorId || !survivors.some((survivor) => survivor.id === selectedSurvivorId)) {
+      const idle = survivors.find((survivor) => survivor.currentAction.type === 'idle') || survivors[0];
       if (idle) setSelectedSurvivorId(idle.id);
     }
   }, [survivors, selectedSurvivorId]);
@@ -178,7 +179,7 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
 
   return (
     <div
-      className="w-full h-full min-h-0 flex flex-col overflow-hidden bg-[#06130f] text-[#e8e2d4] select-none"
+      className="crafting-reference-root w-full h-full min-h-0 flex flex-col overflow-hidden bg-[#06130f] text-[#e8e2d4] select-none"
       style={{ fontFamily: UI_FONT, containerType: 'size' }}
     >
       <CraftingMasterHeader
