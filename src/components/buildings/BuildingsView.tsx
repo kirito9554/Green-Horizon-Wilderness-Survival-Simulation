@@ -13,27 +13,43 @@ import {
   Leaf,
   MapPin,
   Package,
+  Pause,
   PawPrint,
+  Play,
   Plus,
   Shield,
   Shovel,
+  Trash2,
   Trees,
   Users,
   Wrench,
   X,
 } from 'lucide-react';
 import type { GameState } from '../../types';
-import type { CampCluster, ClusterSiteCandidate, ClusterType, SiteRating } from '../../types/buildingSimulation';
+import type {
+  CampCluster,
+  ClusterType,
+  SiteRating,
+  StructureConstructionJob,
+} from '../../types/buildingSimulation';
+import type { StructureWorkJob } from '../../types/structureMaintenanceSimulation';
 import '../../types/buildingSimulation';
+import '../../types/structureSimulation';
+import '../../types/structureMaintenanceSimulation';
 import { BUILDINGS_DATABASE } from '../../data/buildings';
 import { CLUSTER_DEFINITIONS } from '../../data/buildingSpatial';
 import { ITEMS_DATABASE } from '../../data/items';
+import {
+  getAvailableStructureModifications,
+  STRUCTURE_MODIFICATIONS,
+} from '../../data/structureModifications';
 import {
   compatibleBuildingsForCluster,
   deriveClusterStats,
   findStructurePlacement,
   getClusterSiteCandidates,
 } from '../../simulation/buildingClusterSystem';
+import { deriveStructurePerformance } from '../../simulation/structureComponentSystem';
 import { getAvailableInventoryStock } from '../../simulation/inventorySystem';
 
 interface BuildingsViewProps {
@@ -81,6 +97,10 @@ const raisedStyle: React.CSSProperties = {
   boxShadow: '0 2px 8px rgba(0,0,0,.25), inset 0 1px rgba(255,255,255,.025)',
 };
 
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, value));
+}
+
 function ratingMeta(rating: SiteRating) {
   if (rating === 'excellent') return { label: 'Rất phù hợp', color: '#7ee36a', icon: Check };
   if (rating === 'suitable') return { label: 'Phù hợp', color: '#a9d96f', icon: Check };
@@ -91,7 +111,7 @@ function ratingMeta(rating: SiteRating) {
 function placementLabel(status: ReturnType<typeof findStructurePlacement>['status']) {
   if (status === 'available') return { label: 'Sẵn sàng', color: '#7ee36a' };
   if (status === 'preparation_required') return { label: 'Chuẩn bị nhẹ', color: '#f3c85b' };
-  if (status === 'cluster_not_ready') return { label: 'Đang chuẩn bị cluster', color: '#f3c85b' };
+  if (status === 'cluster_not_ready') return { label: 'Cluster chưa sẵn sàng', color: '#f3c85b' };
   if (status === 'incompatible') return { label: 'Không phù hợp', color: '#ef6d5d' };
   return { label: 'Không đủ mặt bằng', color: '#ef6d5d' };
 }
@@ -118,10 +138,69 @@ function structureIcon(category: string) {
   return Box;
 }
 
+function componentLabel(kind: string) {
+  const labels: Record<string, string> = {
+    ground: 'Nền chuẩn bị',
+    foundation: 'Móng / điểm neo',
+    posts: 'Cột chính',
+    frame: 'Khung chịu lực',
+    bindings: 'Mối buộc & liên kết',
+    surface: 'Bề mặt / sàn',
+    roof: 'Mái che',
+    fixture: 'Bộ phận chức năng',
+    drainage: 'Thoát nước',
+    hearth: 'Cụm bếp',
+    other: 'Bộ phận khác',
+  };
+  return labels[kind] || kind;
+}
+
+function constructionStatus(job: StructureConstructionJob) {
+  const labels: Record<StructureConstructionJob['status'], { label: string; color: string }> = {
+    waiting_materials: { label: 'Chờ vật liệu', color: '#e5b95c' },
+    waiting_hauling: { label: 'Chờ vận chuyển', color: '#d5c36c' },
+    hauling: { label: 'Đang vận chuyển', color: '#6ecad2' },
+    waiting_worker: { label: 'Chờ thợ', color: '#c8b878' },
+    waiting_tool: { label: 'Thiếu công cụ', color: '#ed9c56' },
+    waiting_weather: { label: 'Chờ thời tiết', color: '#72b6d7' },
+    in_progress: { label: 'Đang thi công', color: '#78d96c' },
+    paused: { label: 'Tạm dừng', color: '#a9a99f' },
+    completed: { label: 'Hoàn thành', color: '#78d96c' },
+  };
+  return labels[job.status];
+}
+
+function constructionProgress(job: StructureConstructionJob) {
+  if (!job.materialsDelivered) {
+    if (job.haulTotalSeconds <= 0) return 0;
+    return clampPercent(job.haulProgressSeconds / job.haulTotalSeconds * 100);
+  }
+  const total = job.phases.reduce((sum, phase) => sum + phase.totalSeconds, 0);
+  const done = job.phases.reduce((sum, phase) => sum + (phase.status === 'completed' ? phase.totalSeconds : phase.progressSeconds), 0);
+  return total > 0 ? clampPercent(done / total * 100) : 100;
+}
+
+function structureWorkStatus(job: StructureWorkJob) {
+  if (job.status === 'waiting_materials') return { label: 'Chờ vật liệu', color: '#e5b95c' };
+  if (job.status === 'waiting_worker') return { label: 'Chờ thợ', color: '#c8b878' };
+  if (job.status === 'in_progress') return { label: 'Đang làm', color: '#78d96c' };
+  if (job.status === 'paused') return { label: 'Tạm dừng', color: '#a9a99f' };
+  return { label: 'Hoàn thành', color: '#78d96c' };
+}
+
+function structureWorkName(job: StructureWorkJob) {
+  if (job.kind === 'modification') return STRUCTURE_MODIFICATIONS[job.modificationId || '']?.name || 'Cải tạo công trình';
+  if (job.maintenanceMode === 'replace') return 'Thay thế bộ phận';
+  if (job.maintenanceMode === 'repair') return 'Sửa chữa bộ phận';
+  return 'Vá tạm bộ phận';
+}
+
 export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartConstruction }) => {
   const simulation = state.buildingSimulation;
   const clusters = simulation?.clusters.filter(cluster => cluster.poiId === CAMP_POI_ID) || [];
   const prepJobs = simulation?.preparationJobs || [];
+  const constructionJobs = simulation?.constructionJobs || [];
+  const structureWorkJobs = simulation?.structureWorkJobs || [];
 
   const [mode, setMode] = useState<BuildingMode>('clusters');
   const [clusterType, setClusterType] = useState<ClusterType>('shelter');
@@ -155,6 +234,12 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
     }
   }, [assignedSurvivorId, state.survivors]);
 
+  useEffect(() => {
+    if (selectedBuildingInstanceId && !state.buildings.some(building => building.id === selectedBuildingInstanceId)) {
+      setSelectedBuildingInstanceId(null);
+    }
+  }, [selectedBuildingInstanceId, state.buildings]);
+
   const selectedSite = candidates.find(candidate => candidate.id === selectedSiteId) || candidates[0];
   const selectedCluster = clusters.find(cluster => cluster.id === selectedClusterId) || clusters[0];
   const selectedClusterStats = selectedCluster ? deriveClusterStats(state, selectedCluster.id) : null;
@@ -174,80 +259,173 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
     : [];
 
   const selectedWorker = state.survivors.find(survivor => survivor.id === assignedSurvivorId);
-  const selectedWorkerIdle = selectedWorker?.currentAction.type === 'idle';
+  const activePrepJobs = prepJobs.filter(job => job.status !== 'completed');
+  const activeConstructionJobs = constructionJobs.filter(job => job.status !== 'completed');
+  const activeStructureWorkJobs = structureWorkJobs.filter(job => job.status !== 'completed');
   const totalBuilt = state.buildings.filter(building => building.isBuilt).length;
   const totalUnderConstruction = state.buildings.filter(building => !building.isBuilt).length;
-  const activePrepJobs = prepJobs.filter(job => job.status !== 'completed');
   const idleBuilders = state.survivors.filter(survivor => survivor.currentAction.type === 'idle' && survivor.jobPriorities.build !== 'disabled').length;
+  const queueCount = activePrepJobs.length + activeConstructionJobs.length + activeStructureWorkJobs.length;
 
   const totalStock = (itemId: string) => {
     const poi = state.poiStorages?.[CAMP_POI_ID];
     return getAvailableInventoryStock(state.inventory, itemId) + (poi ? getAvailableInventoryStock(poi, itemId) : 0);
   };
 
+  const runBuildingCommand = (command: string) => {
+    onStartConstruction(assignedSurvivorId, command);
+  };
+
   const handleEstablishCluster = () => {
     if (!selectedSite || selectedSite.rating === 'unsuitable') return;
-    onStartConstruction(
-      assignedSurvivorId,
-      `__cluster_establish__:${CAMP_POI_ID}:${clusterType}:${selectedSite.id}`,
-    );
+    runBuildingCommand(`__cluster_establish__:${CAMP_POI_ID}:${clusterType}:${selectedSite.id}`);
   };
 
   const handleBuildStructure = (cluster: CampCluster, buildingId: string) => {
-    onStartConstruction(assignedSurvivorId, `__cluster_build__:${cluster.id}:${buildingId}`);
+    runBuildingCommand(`__cluster_build__:${cluster.id}:${buildingId}`);
   };
 
-  const renderQueue = () => {
-    const construction = state.buildings.filter(building => !building.isBuilt);
+  const renderConstructionJob = (job: StructureConstructionJob) => {
+    const building = state.buildings.find(candidate => candidate.id === job.buildingInstanceId);
+    const def = BUILDINGS_DATABASE[job.buildingId];
+    const status = constructionStatus(job);
+    const progress = constructionProgress(job);
+    const phase = job.phases[job.currentPhaseIndex];
+    const worker = job.assignedSurvivorId ? state.survivors.find(candidate => candidate.id === job.assignedSurvivorId) : undefined;
     return (
-      <div className="space-y-2">
-        {activePrepJobs.slice(0, 3).map(job => {
-          const cluster = simulation?.clusters.find(item => item.id === job.clusterId);
-          const progress = job.totalSeconds > 0 ? Math.min(100, Math.round((job.progressSeconds / job.totalSeconds) * 100)) : 0;
-          return (
-            <div key={job.id} className="rounded-md px-2.5 py-2" style={raisedStyle}>
-              <div className="flex items-start gap-2">
-                <Shovel className="w-4 h-4 text-[#d7b85d] mt-0.5 shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[12px] text-[#e7dfcc] truncate">{prepLabel(job.type)}</div>
-                  <div className="text-[10px] text-[#84a696] truncate">{cluster?.name || 'Cluster'} · {job.status === 'in_progress' ? 'Đang làm' : 'Chờ nhân lực'}</div>
-                  <div className="h-1.5 rounded-full bg-black/35 mt-1.5 overflow-hidden">
-                    <div className="h-full bg-[#9dcc69]" style={{ width: `${progress}%` }} />
-                  </div>
-                </div>
-                <span className="text-[10px] text-[#d8c270]">{progress}%</span>
+      <div key={job.id} className="rounded-md px-2.5 py-2" style={raisedStyle}>
+        <div className="flex items-start gap-2">
+          <Hammer className="w-4 h-4 text-[#d7b85d] mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => {
+                if (building) {
+                  setSelectedBuildingInstanceId(building.id);
+                  setSelectedClusterId(building.clusterId || selectedClusterId);
+                  setMode('structures');
+                }
+              }}
+              className="text-left w-full"
+            >
+              <div className="text-[12px] text-[#e7dfcc] truncate">{def?.name || job.buildingId}</div>
+              <div className="text-[10px] truncate" style={{ color: status.color }}>
+                {status.label}{worker ? ` · ${worker.name}` : ''}{phase && job.materialsDelivered ? ` · ${phase.name}` : ''}
+              </div>
+            </button>
+            {job.blockedReasons[0] && <div className="text-[9px] text-[#d0a45d] truncate mt-0.5">{job.blockedReasons[0]}</div>}
+            <div className="h-1.5 rounded-full bg-black/35 mt-1.5 overflow-hidden">
+              <div className="h-full bg-[#6ecad2]" style={{ width: `${progress}%` }} />
+            </div>
+            <div className="flex items-center justify-between mt-1.5">
+              <span className="text-[9px] text-[#789286]">{Math.round(progress)}%</span>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => runBuildingCommand(`__construction_pause__:${job.id}`)}
+                  className="px-1.5 py-1 rounded border border-[#66796d]/45 text-[#b6c1ba] hover:bg-white/5"
+                  title={job.status === 'paused' ? 'Tiếp tục' : 'Tạm dừng'}
+                >
+                  {job.status === 'paused' ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runBuildingCommand(`__construction_cancel__:${job.id}`)}
+                  className="px-1.5 py-1 rounded border border-[#885c4c]/45 text-[#d89476] hover:bg-[#4a251d]/30"
+                  title="Hủy công trình"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
               </div>
             </div>
-          );
-        })}
-        {construction.slice(0, 3).map(building => {
-          const def = BUILDINGS_DATABASE[building.buildingId];
-          const worker = state.survivors.find(survivor => survivor.currentAction.type === 'building' && survivor.currentAction.targetId === building.id);
-          const progress = worker
-            ? Math.min(100, Math.round((worker.currentAction.progressSeconds / Math.max(1, worker.currentAction.totalSeconds)) * 100))
-            : Math.min(100, Math.round((building.buildProgressSeconds / Math.max(1, building.totalBuildSeconds)) * 100));
-          return (
-            <div key={building.id} className="rounded-md px-2.5 py-2" style={raisedStyle}>
-              <div className="flex items-center gap-2">
-                <Hammer className="w-4 h-4 text-[#d7b85d] shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12px] text-[#e7dfcc] truncate">{def?.name || building.buildingId}</div>
-                  <div className="text-[10px] text-[#84a696]">{worker ? worker.name : 'Đang chờ thợ'}</div>
-                  <div className="h-1.5 rounded-full bg-black/35 mt-1.5 overflow-hidden">
-                    <div className="h-full bg-[#6ecad2]" style={{ width: `${progress}%` }} />
-                  </div>
-                </div>
-                <span className="text-[10px] text-[#d8c270]">{progress}%</span>
-              </div>
-            </div>
-          );
-        })}
-        {activePrepJobs.length === 0 && construction.length === 0 && (
-          <div className="text-[11px] text-[#718f82] text-center py-4">Không có công việc xây dựng đang chờ.</div>
-        )}
+          </div>
+        </div>
       </div>
     );
   };
+
+  const renderStructureWorkJob = (job: StructureWorkJob) => {
+    const building = state.buildings.find(candidate => candidate.id === job.buildingInstanceId);
+    const status = structureWorkStatus(job);
+    const progress = job.totalSeconds > 0 ? clampPercent(job.progressSeconds / job.totalSeconds * 100) : 0;
+    return (
+      <div key={job.id} className="rounded-md px-2.5 py-2" style={raisedStyle}>
+        <div className="flex items-start gap-2">
+          <Wrench className="w-4 h-4 text-[#d7b85d] mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => {
+                if (building) {
+                  setSelectedBuildingInstanceId(building.id);
+                  setSelectedClusterId(building.clusterId || selectedClusterId);
+                  setMode('structures');
+                }
+              }}
+              className="text-left w-full"
+            >
+              <div className="text-[12px] text-[#e7dfcc] truncate">{structureWorkName(job)}</div>
+              <div className="text-[10px] truncate" style={{ color: status.color }}>
+                {status.label} · {building ? BUILDINGS_DATABASE[building.buildingId]?.name || building.buildingId : 'Công trình'}
+              </div>
+            </button>
+            {job.blockedReasons[0] && <div className="text-[9px] text-[#d0a45d] truncate mt-0.5">{job.blockedReasons[0]}</div>}
+            <div className="h-1.5 rounded-full bg-black/35 mt-1.5 overflow-hidden">
+              <div className="h-full bg-[#93c66d]" style={{ width: `${progress}%` }} />
+            </div>
+            <div className="flex items-center justify-between mt-1.5">
+              <span className="text-[9px] text-[#789286]">{Math.round(progress)}%</span>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => runBuildingCommand(`__structure_work_pause__:${job.id}`)}
+                  className="px-1.5 py-1 rounded border border-[#66796d]/45 text-[#b6c1ba] hover:bg-white/5"
+                  title={job.status === 'paused' ? 'Tiếp tục' : 'Tạm dừng'}
+                >
+                  {job.status === 'paused' ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runBuildingCommand(`__structure_work_cancel__:${job.id}`)}
+                  className="px-1.5 py-1 rounded border border-[#885c4c]/45 text-[#d89476] hover:bg-[#4a251d]/30"
+                  title="Hủy công việc"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderQueue = () => (
+    <div className="space-y-2">
+      {activePrepJobs.slice(0, 3).map(job => {
+        const cluster = simulation?.clusters.find(item => item.id === job.clusterId);
+        const progress = job.totalSeconds > 0 ? clampPercent(job.progressSeconds / job.totalSeconds * 100) : 0;
+        return (
+          <div key={job.id} className="rounded-md px-2.5 py-2" style={raisedStyle}>
+            <div className="flex items-start gap-2">
+              <Shovel className="w-4 h-4 text-[#d7b85d] mt-0.5 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-[#e7dfcc] truncate">{prepLabel(job.type)}</div>
+                <div className="text-[10px] text-[#84a696] truncate">{cluster?.name || 'Cluster'} · {job.status === 'in_progress' ? 'Đang làm' : 'Chờ nhân lực'}</div>
+                <div className="h-1.5 rounded-full bg-black/35 mt-1.5 overflow-hidden">
+                  <div className="h-full bg-[#9dcc69]" style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+              <span className="text-[10px] text-[#d8c270]">{Math.round(progress)}%</span>
+            </div>
+          </div>
+        );
+      })}
+      {activeConstructionJobs.map(renderConstructionJob)}
+      {activeStructureWorkJobs.map(renderStructureWorkJob)}
+      {queueCount === 0 && <div className="text-[11px] text-[#718f82] text-center py-4">Không có công việc xây dựng đang chờ.</div>}
+    </div>
+  );
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col gap-2.5 text-[#e8e1cf]" style={{ fontFamily: UI_FONT }}>
@@ -265,7 +443,7 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
           </div>
           <div className="min-w-0">
             <div className="text-[18px] font-semibold tracking-wide text-[#f0e5c9]">QUẢN LÝ XÂY DỰNG</div>
-            <div className="text-[11px] text-[#91aa9d]">Quy hoạch cluster, chuẩn bị mặt bằng và bố trí công trình theo điều kiện địa hình.</div>
+            <div className="text-[11px] text-[#91aa9d]">Quy hoạch cluster, vận chuyển vật liệu, thi công theo phase và bảo trì từng bộ phận vật lý.</div>
           </div>
         </div>
         <div className="flex items-center gap-1 p-1 rounded-md bg-black/20 border border-[#526c5d]/35">
@@ -281,11 +459,11 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
             onClick={() => setMode('structures')}
             className={`px-4 py-2 rounded text-[12px] flex items-center gap-2 transition-all ${mode === 'structures' ? 'bg-[#224c35] border border-[#d8b849]/65 text-[#ffe79a]' : 'text-[#9fb2a6] hover:bg-white/5'}`}
           >
-            <Hammer className="w-4 h-4" /> XÂY DỰNG & BỐ TRÍ
+            <Hammer className="w-4 h-4" /> CÔNG TRÌNH & BẢO TRÌ
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-[#7f998c]">Thợ phụ trách</span>
+          <span className="text-[10px] text-[#7f998c]">Ưu tiên thợ</span>
           <select
             value={assignedSurvivorId}
             onChange={event => setAssignedSurvivorId(event.target.value)}
@@ -305,9 +483,9 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
               <div className="flex items-end justify-between mb-2.5">
                 <div>
                   <div className="text-[12px] font-semibold tracking-wide text-[#e7dcc0]">CHỌN CLUSTER</div>
-                  <div className="text-[10px] text-[#799487]">Chọn chức năng; hệ thống sẽ tự tìm các nhóm ô địa hình phù hợp trong POI.</div>
+                  <div className="text-[10px] text-[#799487]">Chọn chức năng; solver tự tìm các vùng địa hình liền kề phù hợp trong POI.</div>
                 </div>
-                <div className="text-[10px] text-[#748f82]">Grid địa hình được xử lý ẩn · không cần bố trí thủ công</div>
+                <div className="text-[10px] text-[#748f82]">Build Grid ẩn · deterministic theo world seed</div>
               </div>
               <div className="grid grid-cols-4 gap-2">
                 {CLUSTER_ORDER.map(type => {
@@ -357,22 +535,16 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
                           <p className="text-[11px] text-[#a8b7ae] mt-2 leading-relaxed">{def.description}</p>
                         </div>
                       </div>
-
                       <div className="grid grid-cols-2 gap-3 mt-3">
                         <div>
                           <div className="text-[10px] uppercase text-[#738e81] mb-1.5">Điều kiện ưu tiên</div>
-                          <div className="space-y-1.5">
-                            {def.preferred.map(text => <div key={text} className="text-[11px] flex items-center gap-2"><Check className="w-3.5 h-3.5 text-[#7edd6b]" />{text}</div>)}
-                          </div>
+                          <div className="space-y-1.5">{def.preferred.map(text => <div key={text} className="text-[11px] flex items-center gap-2"><Check className="w-3.5 h-3.5 text-[#7edd6b]" />{text}</div>)}</div>
                         </div>
                         <div>
                           <div className="text-[10px] uppercase text-[#738e81] mb-1.5">Nên tránh</div>
-                          <div className="space-y-1.5">
-                            {def.avoid.map(text => <div key={text} className="text-[11px] flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 text-[#e9bb54]" />{text}</div>)}
-                          </div>
+                          <div className="space-y-1.5">{def.avoid.map(text => <div key={text} className="text-[11px] flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 text-[#e9bb54]" />{text}</div>)}</div>
                         </div>
                       </div>
-
                       <div className="grid grid-cols-3 gap-2 mt-4">
                         <div className="rounded-md p-2 text-center" style={raisedStyle}><div className="text-[9px] text-[#759085]">Tối thiểu</div><div className="text-[14px] text-[#e8d68f]">{def.minAreaM2} m²</div></div>
                         <div className="rounded-md p-2 text-center" style={raisedStyle}><div className="text-[9px] text-[#759085]">Khuyến nghị</div><div className="text-[14px] text-[#e8d68f]">{def.preferredAreaM2} m²</div></div>
@@ -385,10 +557,7 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
 
               <div className="rounded-lg p-3 min-h-0 flex flex-col" style={panelStyle}>
                 <div className="flex items-center justify-between gap-2 shrink-0">
-                  <div>
-                    <div className="text-[12px] font-semibold text-[#e7dcc0]">VỊ TRÍ KHẢ DỤNG</div>
-                    <div className="text-[10px] text-[#789286]">Solver đã gom các ô liền kề thành lựa chọn dễ hiểu.</div>
-                  </div>
+                  <div><div className="text-[12px] font-semibold text-[#e7dcc0]">VỊ TRÍ KHẢ DỤNG</div><div className="text-[10px] text-[#789286]">Solver đã gom các ô liền kề thành lựa chọn dễ hiểu.</div></div>
                   <MapPin className="w-5 h-5 text-[#d9bc61]" />
                 </div>
                 <div className="mt-2.5 space-y-2 overflow-auto building-scroll pr-1 flex-1 min-h-0">
@@ -402,11 +571,7 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
                         key={candidate.id}
                         onClick={() => setSelectedSiteId(candidate.id)}
                         className="w-full rounded-md p-2.5 text-left transition-all"
-                        style={{
-                          ...raisedStyle,
-                          borderColor: selected ? '#d8b94f' : 'rgba(126,153,107,.34)',
-                          opacity: candidate.rating === 'unsuitable' ? 0.66 : 1,
-                        }}
+                        style={{ ...raisedStyle, borderColor: selected ? '#d8b94f' : 'rgba(126,153,107,.34)', opacity: candidate.rating === 'unsuitable' ? 0.66 : 1 }}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-start gap-2 min-w-0">
@@ -431,11 +596,7 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
                 {selectedSite && (
                   <div className="mt-2.5 pt-2.5 border-t border-[#58705f]/30 shrink-0">
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="text-[10px] text-[#8ca398]">
-                        {selectedSite.preparation.length
-                          ? `Chuẩn bị: ${selectedSite.preparation.map(task => prepLabel(task.type)).join(' · ')}`
-                          : 'Không cần chuẩn bị mặt bằng đáng kể.'}
-                      </div>
+                      <div className="text-[10px] text-[#8ca398]">{selectedSite.preparation.length ? `Chuẩn bị: ${selectedSite.preparation.map(task => prepLabel(task.type)).join(' · ')}` : 'Không cần chuẩn bị mặt bằng đáng kể.'}</div>
                       <div className="text-[10px] text-[#7e988c]">~{selectedSite.preparation.reduce((sum, task) => sum + task.estimatedSeconds, 0)}s prep</div>
                     </div>
                     <button
@@ -463,27 +624,28 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
                 <div className="rounded-md p-2" style={raisedStyle}><div className="text-[9px] text-[#789184]">Đang thi công</div><div className="text-[16px] text-[#e4cf72]">{totalUnderConstruction}</div></div>
               </div>
             </div>
-
             <div className="rounded-lg p-3 flex-1 min-h-0 overflow-auto building-scroll" style={panelStyle}>
-              <div className="flex items-center justify-between mb-2.5"><div className="text-[12px] font-semibold text-[#e7dcc0]">HÀNG ĐỢI XÂY DỰNG</div><span className="text-[10px] text-[#d7bd67]">{activePrepJobs.length + totalUnderConstruction}</span></div>
+              <div className="flex items-center justify-between mb-2.5"><div className="text-[12px] font-semibold text-[#e7dcc0]">HÀNG ĐỢI CÔNG VIỆC</div><span className="text-[10px] text-[#d7bd67]">{queueCount}</span></div>
               {renderQueue()}
             </div>
-
             <div className="rounded-lg p-3 shrink-0" style={panelStyle}>
               <div className="text-[11px] font-semibold text-[#e7dcc0] mb-1.5">NGUYÊN TẮC BỐ TRÍ</div>
-              <p className="text-[10px] leading-relaxed text-[#80988d]">Game tự xử lý grid, footprint và địa hình. Người chơi chỉ chọn cluster/site; vị trí cụ thể được solver ưu tiên theo độ phù hợp và khả năng mở rộng.</p>
+              <p className="text-[10px] leading-relaxed text-[#80988d]">Grid, footprint, nền đất và micro-prep được solver xử lý. Người chơi quyết định chức năng, site, ưu tiên lao động và cách bảo trì.</p>
             </div>
           </aside>
         </div>
       ) : (
-        <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_310px] gap-2.5">
+        <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_360px] gap-2.5">
           <div className="min-h-0 flex flex-col gap-2.5">
             <div className="rounded-lg px-3 py-2.5 shrink-0 flex items-center gap-3" style={panelStyle}>
               <div className="text-[11px] text-[#82998e]">Khu vực cắm trại</div>
               <ChevronRight className="w-4 h-4 text-[#5e776a]" />
               <select
                 value={selectedCluster?.id || ''}
-                onChange={event => setSelectedClusterId(event.target.value)}
+                onChange={event => {
+                  setSelectedClusterId(event.target.value);
+                  setSelectedBuildingInstanceId(null);
+                }}
                 className="flex-1 bg-[#082925] border border-[#526c5d]/55 rounded px-3 py-2 text-[12px] outline-none"
               >
                 {clusters.map(cluster => <option key={cluster.id} value={cluster.id}>{cluster.name} · {cluster.state}</option>)}
@@ -509,18 +671,19 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
                       const def = BUILDINGS_DATABASE[building.buildingId];
                       const Icon = structureIcon(def?.category || 'infrastructure');
                       const selected = selectedBuildingInstanceId === building.id;
-                      const worker = state.survivors.find(survivor => survivor.currentAction.type === 'building' && survivor.currentAction.targetId === building.id);
+                      const job = building.constructionJobId ? constructionJobs.find(candidate => candidate.id === building.constructionJobId) : undefined;
+                      const status = building.isBuilt ? { label: '● Hoạt động', color: '#79d86c' } : job ? constructionStatus(job) : { label: '○ Legacy', color: '#e5bb5b' };
                       return (
                         <button
                           type="button"
                           key={building.id}
                           onClick={() => setSelectedBuildingInstanceId(building.id)}
-                          className="w-full grid grid-cols-[44px_minmax(0,1.4fr)_110px_90px_90px] items-center gap-2 rounded-md px-2 py-2 text-left"
+                          className="w-full grid grid-cols-[44px_minmax(0,1.35fr)_120px_95px_90px] items-center gap-2 rounded-md px-2 py-2 text-left"
                           style={{ ...raisedStyle, borderColor: selected ? '#d2b84f' : 'rgba(126,153,107,.34)' }}
                         >
                           <div className="w-10 h-10 rounded flex items-center justify-center bg-black/20 border border-[#5b7364]/45"><Icon className="w-5 h-5 text-[#d8c48b]" /></div>
                           <div className="min-w-0"><div className="text-[12px] text-[#e9e1cf] truncate">{def?.name || building.buildingId}</div><div className="text-[9px] text-[#708b7e] truncate">{building.footprintAreaM2 ? `${building.footprintAreaM2} m²` : 'Legacy structure'}</div></div>
-                          <div className={`text-[10px] ${building.isBuilt ? 'text-[#79d86c]' : 'text-[#e5bb5b]'}`}>{building.isBuilt ? '● Hoạt động' : worker ? '◐ Đang xây' : '○ Chờ thợ'}</div>
+                          <div className="text-[10px] truncate" style={{ color: status.color }}>{status.label}</div>
                           <div className="text-[10px] text-[#bac2b7]">Độ bền {Math.round(building.condition)}%</div>
                           <div className="text-[10px] text-[#8ca397]">{building.placementScore ? `Site ${Math.round(building.placementScore)}` : 'Legacy'}</div>
                         </button>
@@ -532,32 +695,33 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
                   {legacyStructures.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-[#58705f]/30">
                       <div className="text-[10px] text-[#ba9d59] mb-1.5">CÔNG TRÌNH LEGACY / CHƯA PHÂN CỤM ({legacyStructures.length})</div>
-                      <div className="text-[9px] text-[#70887c]">Được giữ nguyên để tương thích save cũ; công trình mới sẽ dùng spatial cluster system.</div>
+                      <div className="text-[9px] text-[#70887c]">Được giữ nguyên để tương thích save cũ; công trình mới dùng spatial cluster system.</div>
                     </div>
                   )}
                 </div>
 
                 <div className="rounded-lg p-3 shrink-0" style={panelStyle}>
-                  <div className="flex items-center justify-between mb-2"><div><div className="text-[12px] font-semibold">THƯ VIỆN CÔNG TRÌNH</div><div className="text-[9px] text-[#748e82]">Chỉ hiện công trình phù hợp với cluster này.</div></div><span className="text-[10px] text-[#7f998c]">{structureLibrary.length} mẫu</span></div>
+                  <div className="flex items-center justify-between mb-2"><div><div className="text-[12px] font-semibold">THƯ VIỆN CÔNG TRÌNH</div><div className="text-[9px] text-[#748e82]">Có thể lên kế hoạch cả khi thiếu vật liệu hoặc thợ đang bận.</div></div><span className="text-[10px] text-[#7f998c]">{structureLibrary.length} mẫu</span></div>
                   <div className="grid grid-cols-5 gap-2">
                     {structureLibrary.map(({ definition, placement }) => {
                       if (!definition) return null;
                       const Icon = structureIcon(definition.category);
                       const status = placementLabel(placement.status);
                       const affordable = definition.cost.every(cost => totalStock(cost.itemId) >= cost.quantity);
-                      const canStart = ['available', 'preparation_required'].includes(placement.status) && affordable && Boolean(selectedWorker) && selectedWorkerIdle;
+                      const canPlan = ['available', 'preparation_required'].includes(placement.status) && Boolean(assignedSurvivorId);
                       return (
-                        <div key={definition.id} className="rounded-md p-2 flex flex-col min-h-[132px]" style={raisedStyle}>
+                        <div key={definition.id} className="rounded-md p-2 flex flex-col min-h-[142px]" style={raisedStyle}>
                           <div className="flex items-start justify-between"><div className="w-8 h-8 rounded flex items-center justify-center bg-black/20 border border-[#5b7364]/45"><Icon className="w-4 h-4 text-[#d8c48b]" /></div><span className="text-[9px]" style={{ color: status.color }}>{status.label}</span></div>
                           <div className="text-[11px] font-semibold mt-1.5 text-[#e7decb] leading-tight">{definition.name}</div>
                           <div className="text-[9px] text-[#789084] mt-1">{placement.footprintAreaM2} m² · {definition.buildTimeSeconds}s</div>
+                          <div className={`text-[9px] mt-1 ${affordable ? 'text-[#78c973]' : 'text-[#d3a75c]'}`}>{affordable ? 'Đủ vật liệu hiện tại' : 'Thiếu vật liệu · sẽ chờ kho'}</div>
                           <div className="mt-auto pt-2">
                             <button
                               type="button"
-                              disabled={!canStart}
+                              disabled={!canPlan}
                               onClick={() => handleBuildStructure(selectedCluster, definition.id)}
                               className="w-full rounded py-1.5 text-[10px] border disabled:opacity-35 disabled:cursor-not-allowed"
-                              style={{ background: canStart ? '#1b4a2c' : '#173028', borderColor: canStart ? '#c6b04d' : '#52685b', color: canStart ? '#f2df91' : '#81988c' }}
+                              style={{ background: canPlan ? '#1b4a2c' : '#173028', borderColor: canPlan ? '#c6b04d' : '#52685b', color: canPlan ? '#f2df91' : '#81988c' }}
                             >
                               <Plus className="w-3 h-3 inline mr-1" />Lên kế hoạch
                             </button>
@@ -577,22 +741,121 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
               {selectedStructure ? (() => {
                 const def = BUILDINGS_DATABASE[selectedStructure.buildingId];
                 const Icon = structureIcon(def?.category || 'infrastructure');
+                const constructionJob = selectedStructure.constructionJobId
+                  ? constructionJobs.find(job => job.id === selectedStructure.constructionJobId)
+                  : undefined;
+                const activeWork = activeStructureWorkJobs.filter(job => job.buildingInstanceId === selectedStructure.id);
+                const workBusy = activeWork.length > 0;
+                const performance = selectedStructure.structurePerformance || deriveStructurePerformance(state, selectedStructure);
+                const availableMods = def
+                  ? getAvailableStructureModifications(selectedStructure.buildingId, def.category)
+                  : [];
+                const appliedModIds = new Set((selectedStructure.structureModifications || []).map(record => record.modificationId));
+
                 return (
                   <>
                     <div className="flex items-start gap-3 pb-3 border-b border-[#58705f]/30">
                       <div className="w-16 h-16 rounded-md flex items-center justify-center" style={raisedStyle}><Icon className="w-8 h-8 text-[#d8c48b]" /></div>
-                      <div className="min-w-0"><div className="text-[17px] font-semibold">{def?.name || selectedStructure.buildingId}</div><div className="text-[10px] text-[#7aa096]">{selectedStructure.isBuilt ? 'Hoạt động' : 'Đang thi công'}</div><div className="text-[10px] text-[#7d9489] mt-1">Footprint {selectedStructure.footprintAreaM2 || '—'} m²</div></div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[17px] font-semibold">{def?.name || selectedStructure.buildingId}</div>
+                        <div className="text-[10px] text-[#7aa096]">{selectedStructure.isBuilt ? 'Hoạt động' : constructionJob ? constructionStatus(constructionJob).label : 'Đang thi công'}</div>
+                        <div className="text-[10px] text-[#7d9489] mt-1">Footprint {selectedStructure.footprintAreaM2 || '—'} m² · Site {selectedStructure.placementScore ? Math.round(selectedStructure.placementScore) : '—'}</div>
+                      </div>
                     </div>
                     <p className="text-[11px] text-[#9dac9f] leading-relaxed mt-3">{def?.description}</p>
-                    <div className="mt-3 space-y-2">
-                      <div className="flex justify-between text-[10px]"><span className="text-[#80988c]">Độ bền tổng</span><span>{Math.round(selectedStructure.condition)}%</span></div>
-                      <div className="h-1.5 rounded bg-black/35 overflow-hidden"><div className="h-full bg-[#79d86c]" style={{ width: `${selectedStructure.condition}%` }} /></div>
-                      <div className="flex justify-between text-[10px]"><span className="text-[#80988c]">Độ phù hợp vị trí</span><span>{selectedStructure.placementScore ? `${Math.round(selectedStructure.placementScore)}/100` : 'Legacy'}</span></div>
-                    </div>
-                    <div className="mt-4 rounded-md p-2.5 border border-[#8b7637]/35 bg-[#362f16]/25">
-                      <div className="text-[10px] text-[#d4b85d] font-semibold">COMPONENT / MODIFY</div>
-                      <p className="text-[9px] text-[#968c6d] mt-1 leading-relaxed">Structure component, Repair/Replace và Modification sẽ gắn trực tiếp vào instance này trong milestone dài hạn; không dùng nút Upgrade Lv. giả.</p>
-                    </div>
+
+                    {!selectedStructure.isBuilt && constructionJob ? (
+                      <div className="mt-3 space-y-2">
+                        <div className="rounded-md p-2.5" style={raisedStyle}>
+                          <div className="flex items-center justify-between"><span className="text-[10px] text-[#81998d]">Trạng thái</span><span className="text-[10px]" style={{ color: constructionStatus(constructionJob).color }}>{constructionStatus(constructionJob).label}</span></div>
+                          <div className="flex items-center justify-between mt-1.5"><span className="text-[10px] text-[#81998d]">Vận chuyển</span><span className="text-[10px]">{constructionJob.materialsDelivered ? 'Đã staging' : `${Math.round(constructionJob.haulProgressSeconds)}/${Math.round(constructionJob.haulTotalSeconds)}s`}</span></div>
+                          {constructionJob.blockedReasons[0] && <div className="text-[9px] text-[#d1a85f] mt-1.5">{constructionJob.blockedReasons.join(' · ')}</div>}
+                        </div>
+                        <div className="space-y-1">
+                          {constructionJob.phases.map((phase, index) => (
+                            <div key={phase.id} className="rounded px-2 py-1.5 border border-[#52685b]/30 bg-black/10">
+                              <div className="flex justify-between text-[9px]"><span className={index === constructionJob.currentPhaseIndex ? 'text-[#e5cf77]' : 'text-[#93a69c]'}>{index + 1}. {phase.name}</span><span>{phase.status === 'completed' ? '✓' : `${Math.round(phase.progressSeconds)}/${Math.round(phase.totalSeconds)}s`}</span></div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <button type="button" onClick={() => runBuildingCommand(`__construction_pause__:${constructionJob.id}`)} className="rounded py-2 text-[10px] border border-[#6a7b70]/45 hover:bg-white/5">{constructionJob.status === 'paused' ? <Play className="w-3 h-3 inline mr-1" /> : <Pause className="w-3 h-3 inline mr-1" />}{constructionJob.status === 'paused' ? 'Tiếp tục' : 'Tạm dừng'}</button>
+                          <button type="button" onClick={() => runBuildingCommand(`__construction_cancel__:${constructionJob.id}`)} className="rounded py-2 text-[10px] border border-[#875747]/55 text-[#df9878] hover:bg-[#4a251d]/25"><Trash2 className="w-3 h-3 inline mr-1" />Hủy công trình</button>
+                        </div>
+                      </div>
+                    ) : selectedStructure.isBuilt ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-2 mt-3">
+                          {[
+                            ['Kết cấu', performance.structuralIntegrity],
+                            ['Che thời tiết', performance.weatherProtection],
+                            ['An toàn cháy', performance.fireSafety],
+                            ['Chức năng', performance.functionality],
+                          ].map(([label, value]) => (
+                            <div key={String(label)} className="rounded-md p-2" style={raisedStyle}>
+                              <div className="flex justify-between text-[9px]"><span className="text-[#81998d]">{label}</span><span>{Math.round(Number(value))}%</span></div>
+                              <div className="h-1.5 rounded bg-black/35 overflow-hidden mt-1"><div className="h-full bg-[#8dcc6d]" style={{ width: `${clampPercent(Number(value))}%` }} /></div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="mt-4">
+                          <div className="flex items-center justify-between mb-1.5"><div className="text-[10px] font-semibold text-[#d8c169]">BỘ PHẬN VẬT LÝ</div><span className="text-[9px] text-[#789286]">{selectedStructure.structureComponents?.length || 0} components</span></div>
+                          <div className="space-y-2">
+                            {(selectedStructure.structureComponents || []).map(component => {
+                              const ratio = component.conditionMax > 0 ? clampPercent(component.condition / component.conditionMax * 100) : 0;
+                              const componentBusy = workBusy;
+                              const repairable = component.condition < component.conditionMax - 0.01;
+                              const replaceUseful = component.permanentDamage > 0 || component.rot > 30 || ratio < 50;
+                              return (
+                                <div key={component.id} className="rounded-md p-2.5" style={raisedStyle}>
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div><div className="text-[11px] text-[#e7dfcc]">{componentLabel(component.kind)}</div><div className="text-[9px] text-[#789286]">Workmanship {Math.round(component.workmanship)} · trần {Math.round(component.conditionMax)}/{Math.round(component.originalConditionMax)}</div></div>
+                                    <span className="text-[10px] text-[#d8c270]">{Math.round(ratio)}%</span>
+                                  </div>
+                                  <div className="h-1.5 rounded bg-black/35 overflow-hidden mt-1.5"><div className="h-full bg-[#7fc770]" style={{ width: `${ratio}%` }} /></div>
+                                  <div className="grid grid-cols-3 gap-1.5 mt-2 text-[9px]">
+                                    <div className="rounded bg-black/15 px-1.5 py-1"><span className="text-[#718c80]">Ẩm </span>{Math.round(component.moisture)}%</div>
+                                    <div className="rounded bg-black/15 px-1.5 py-1"><span className="text-[#718c80]">Mục </span>{Math.round(component.rot)}%</div>
+                                    <div className="rounded bg-black/15 px-1.5 py-1"><span className="text-[#718c80]">Hư vĩnh viễn </span>{Math.round(component.permanentDamage)}</div>
+                                  </div>
+                                  <div className="grid grid-cols-3 gap-1.5 mt-2">
+                                    <button disabled={componentBusy || !repairable} onClick={() => runBuildingCommand(`__structure_maintenance__:patch:${selectedStructure.id}:${component.id}`)} type="button" className="rounded py-1.5 text-[9px] border border-[#7d7044]/50 text-[#d8bd73] disabled:opacity-30 disabled:cursor-not-allowed">Vá nhanh</button>
+                                    <button disabled={componentBusy || !repairable} onClick={() => runBuildingCommand(`__structure_maintenance__:repair:${selectedStructure.id}:${component.id}`)} type="button" className="rounded py-1.5 text-[9px] border border-[#587b61]/55 text-[#9fca9b] disabled:opacity-30 disabled:cursor-not-allowed">Sửa chữa</button>
+                                    <button disabled={componentBusy || !replaceUseful} onClick={() => runBuildingCommand(`__structure_maintenance__:replace:${selectedStructure.id}:${component.id}`)} type="button" className="rounded py-1.5 text-[9px] border border-[#755e4c]/55 text-[#d4a681] disabled:opacity-30 disabled:cursor-not-allowed">Thay thế</button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {!selectedStructure.structureComponents?.length && <div className="text-[9px] text-[#718f82] py-3 text-center">Công trình legacy chưa có component graph; lifecycle chỉ áp dụng cho construction mới.</div>}
+                          </div>
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-[#58705f]/30">
+                          <div className="flex items-center justify-between mb-1.5"><div className="text-[10px] font-semibold text-[#d8c169]">CẢI TẠO VẬT LÝ</div><span className="text-[9px] text-[#789286]">Không dùng Upgrade Lv.</span></div>
+                          <div className="space-y-2">
+                            {availableMods.map(modification => {
+                              const applied = appliedModIds.has(modification.id);
+                              const affordable = modification.cost.every(cost => totalStock(cost.itemId) >= cost.quantity);
+                              return (
+                                <div key={modification.id} className="rounded-md p-2" style={raisedStyle}>
+                                  <div className="flex items-start justify-between gap-2"><div><div className="text-[10px] text-[#e4ddca]">{modification.name}</div><div className="text-[9px] text-[#7f978b] mt-0.5 leading-relaxed">{modification.description}</div></div><span className={`text-[9px] shrink-0 ${applied ? 'text-[#77ce70]' : affordable ? 'text-[#a9ca87]' : 'text-[#d0a45d]'}`}>{applied ? 'Đã lắp' : affordable ? 'Đủ vật liệu' : 'Chờ vật liệu'}</span></div>
+                                  <div className="text-[9px] text-[#8c9d94] mt-1.5">{modification.cost.map(cost => `${ITEMS_DATABASE[cost.itemId]?.name || cost.itemId} ${totalStock(cost.itemId)}/${cost.quantity}`).join(' · ')}</div>
+                                  <button disabled={applied || workBusy} onClick={() => runBuildingCommand(`__structure_modify__:${selectedStructure.id}:${modification.id}`)} type="button" className="w-full mt-2 rounded py-1.5 text-[9px] border border-[#7b7547]/55 text-[#daca80] disabled:opacity-30 disabled:cursor-not-allowed"><Hammer className="w-3 h-3 inline mr-1" />{applied ? 'Đã hoàn thành' : 'Lên kế hoạch cải tạo'}</button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {activeWork.length > 0 && (
+                          <div className="mt-4 pt-3 border-t border-[#58705f]/30">
+                            <div className="text-[10px] font-semibold text-[#d8c169] mb-1.5">CÔNG VIỆC ĐANG CHẠY</div>
+                            {activeWork.map(renderStructureWorkJob)}
+                          </div>
+                        )}
+                      </>
+                    ) : null}
                   </>
                 );
               })() : selectedCluster ? (
@@ -619,6 +882,11 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
               ) : <div className="text-[11px] text-[#718f82] text-center py-8">Chọn một cluster để xem thông tin.</div>}
             </div>
 
+            <div className="rounded-lg p-3 max-h-[255px] overflow-auto building-scroll shrink-0" style={panelStyle}>
+              <div className="flex items-center justify-between mb-2.5"><div className="text-[12px] font-semibold text-[#e7dcc0]">HÀNG ĐỢI CÔNG VIỆC</div><span className="text-[10px] text-[#d7bd67]">{queueCount}</span></div>
+              {renderQueue()}
+            </div>
+
             {selectedClusterStats && (
               <div className="rounded-lg p-3 shrink-0" style={panelStyle}>
                 <div className="text-[12px] font-semibold mb-2.5">THỐNG KÊ CLUSTER</div>
@@ -632,7 +900,7 @@ export const BuildingsView: React.FC<BuildingsViewProps> = ({ state, onStartCons
                   ].map(([label, value, pct]) => (
                     <div key={String(label)}>
                       <div className="flex justify-between"><span className="text-[#81998d]">{label}</span><span>{value}</span></div>
-                      <div className="h-1.5 mt-1 rounded bg-black/35 overflow-hidden"><div className="h-full bg-[#8dcf69]" style={{ width: `${Math.max(0, Math.min(100, Number(pct)))}%` }} /></div>
+                      <div className="h-1.5 mt-1 rounded bg-black/35 overflow-hidden"><div className="h-full bg-[#8dcf69]" style={{ width: `${clampPercent(Number(pct))}%` }} /></div>
                     </div>
                   ))}
                 </div>
