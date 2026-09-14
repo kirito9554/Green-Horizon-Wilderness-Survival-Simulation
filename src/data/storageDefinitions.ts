@@ -27,6 +27,7 @@ const defaultPolicy = (overrides: Partial<StoragePolicy> = {}): StoragePolicy =>
   forbiddenTags: [],
   acceptDamaged: true,
   acceptSpoiled: false,
+  stockRules: [],
   ...overrides,
 });
 
