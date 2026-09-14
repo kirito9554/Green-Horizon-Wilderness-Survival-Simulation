@@ -1,25 +1,8 @@
 import type { ItemQuality, StorageInventory } from './index';
 import type { MaterialReservation } from './craftingSimulation';
 
-export type BuildSoilType =
-  | 'sand'
-  | 'loam'
-  | 'clay'
-  | 'rock'
-  | 'mud'
-  | 'gravel'
-  | 'organic';
-
-export type ClusterType =
-  | 'shelter'
-  | 'storage'
-  | 'cooking'
-  | 'farming'
-  | 'utility'
-  | 'defense'
-  | 'livestock'
-  | 'research';
-
+export type BuildSoilType = 'sand' | 'loam' | 'clay' | 'rock' | 'mud' | 'gravel' | 'organic';
+export type ClusterType = 'shelter' | 'storage' | 'cooking' | 'farming' | 'utility' | 'defense' | 'livestock' | 'research';
 export type ClusterState = 'planned' | 'preparing' | 'active' | 'degraded';
 export type SiteRating = 'excellent' | 'suitable' | 'preparation_required' | 'unsuitable';
 export type SitePreparationType =
@@ -202,7 +185,7 @@ export interface BuildingSimulationState {
   gridsByPoiId: Record<string, PoiBuildGrid>;
   clusters: CampCluster[];
   preparationJobs: SitePreparationJob[];
-  constructionJobs: StructureConstructionJob[];
+  constructionJobs?: StructureConstructionJob[];
 }
 
 export interface ClusterDerivedStats {
