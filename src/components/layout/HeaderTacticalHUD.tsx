@@ -21,6 +21,58 @@ interface HeaderTacticalHUDProps {
   gameTime: GameState['gameTime'];
 }
 
+type HudBox = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+/**
+ * =============================================================================
+ * HEADER TACTICAL HUD — MEASURED LAYOUT
+ * =============================================================================
+ * Source asset: public/header-hud-bg.png
+ * Native size: 2168 x 258 px.
+ *
+ * The three rope dividers were measured directly from the raster at roughly:
+ *   x = 648, 1484, 1777
+ *
+ * Every interactive/content region below uses that same design coordinate space,
+ * then converts to percentages. This keeps text, icons and images locked to the
+ * painted wood panels even when the HUD is stretched by the 16:9 game canvas.
+ *
+ * Font/icon sizes use cqh (container-query height units) instead of fixed px.
+ * This is intentional: the header height is the limiting dimension, so UI type
+ * now grows/shrinks with the actual rendered HUD rather than staying fixed-size.
+ * =============================================================================
+ */
+export const HEADER_HUD_UI = {
+  reference: {
+    width: 2168,
+    height: 258,
+  },
+
+  measuredDividers: [648, 1484, 1777],
+
+  // Safe dark interior, excluding the top/bottom wooden rails.
+  safeContent: { x: 78, y: 52, w: 2024, h: 156 } satisfies HudBox,
+
+  // Panel 1 — Current weather.
+  weatherPhoto: { x: 88, y: 57, w: 154, h: 145 } satisfies HudBox,
+  weatherInfo: { x: 260, y: 55, w: 355, h: 150 } satisfies HudBox,
+
+  // Panel 2 — Day-cycle medallion, clock and calendar.
+  clockMedallion: { x: 700, y: 72, w: 115, h: 115 } satisfies HudBox,
+  clockInfo: { x: 840, y: 53, w: 585, h: 151 } satisfies HudBox,
+
+  // Panel 3 — Season.
+  season: { x: 1510, y: 55, w: 238, h: 152 } satisfies HudBox,
+
+  // Panel 4 — Temperature / humidity / wind.
+  environment: { x: 1802, y: 55, w: 298, h: 152 } satisfies HudBox,
+} as const;
+
 export const WEATHER_CONFIG: Record<
   WeatherType,
   {
@@ -93,23 +145,43 @@ const DAYS_PER_SEASON = 30;
 const DAYS_PER_YEAR = 120;
 const DAYS_PER_MONTH = 10;
 
+const pxX = (px: number) => `${(px / HEADER_HUD_UI.reference.width) * 100}%`;
+const pxY = (px: number) => `${(px / HEADER_HUD_UI.reference.height) * 100}%`;
+
+const boxStyle = (box: HudBox): React.CSSProperties => ({
+  left: pxX(box.x),
+  top: pxY(box.y),
+  width: pxX(box.w),
+  height: pxY(box.h),
+});
+
+/**
+ * Scale a source-design pixel measurement against the *rendered HUD height*.
+ * Clamp only prevents text becoming physically unreadable on very small windows.
+ */
+const hudSize = (designPx: number, minPx: number, maxPx: number) =>
+  `clamp(${minPx}px, ${(designPx / HEADER_HUD_UI.reference.height) * 100}cqh, ${maxPx}px)`;
+
+const hudFont = (designPx: number, minPx: number, maxPx: number): React.CSSProperties => ({
+  fontSize: hudSize(designPx, minPx, maxPx),
+});
+
+const TEXT_SHADOW = '0 2px 4px rgba(0, 0, 0, 0.95)';
+const SMALL_TEXT_SHADOW = '0 1px 2px rgba(0, 0, 0, 0.95)';
+
 export const HeaderTacticalHUD: React.FC<HeaderTacticalHUDProps> = ({ weather, gameTime }) => {
-  // Current & next weather
   const currentCfg = WEATHER_CONFIG[weather.current] || WEATHER_CONFIG.clear;
   const nextCfg = weather.next ? WEATHER_CONFIG[weather.next] : undefined;
   const WeatherIcon = currentCfg.icon;
 
-  // Calendar calculations
   const normalizedDay = Math.max(1, gameTime.day);
   const dayIndex = normalizedDay - 1;
   const year = Math.floor(dayIndex / DAYS_PER_YEAR) + 1;
   const dayOfYear = dayIndex % DAYS_PER_YEAR;
   const seasonIndex = Math.floor(dayOfYear / DAYS_PER_SEASON) % SEASONS_CONFIG.length;
   const currentSeason = SEASONS_CONFIG[seasonIndex];
-
   const month = Math.floor(dayOfYear / DAYS_PER_MONTH) + 1;
 
-  // Time & cycle calculations
   const normalizedMinutes = ((gameTime.minuteOfDay % 1440) + 1440) % 1440;
   const hours = Math.floor(normalizedMinutes / 60);
   const minutes = Math.floor(normalizedMinutes % 60);
@@ -137,209 +209,419 @@ export const HeaderTacticalHUD: React.FC<HeaderTacticalHUDProps> = ({ weather, g
     cycleGlow = '#8ba3ce';
   }
 
-  // Environmental numbers
   const tempC = Math.round(weather.temperatureC);
   const humidity = Math.round(weather.humidityPercent);
   const windSpeed = weather.wind?.speedKmh ? Math.round(weather.wind.speedKmh) : 14;
   const windCardinal = weather.wind?.cardinal || 'E';
 
+  const statLabelStyle: React.CSSProperties = {
+    ...hudFont(18, 7, 11),
+    fontFamily: '"Roboto Condensed", "Be Vietnam Pro", sans-serif',
+    color: '#bca073',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    lineHeight: 1,
+    textShadow: SMALL_TEXT_SHADOW,
+    whiteSpace: 'nowrap',
+  };
+
+  const statValueStyle: React.CSSProperties = {
+    ...hudFont(31, 10, 18),
+    fontFamily: '"Lora", "Merriweather", serif',
+    color: '#f7edd9',
+    fontWeight: 700,
+    lineHeight: 1,
+    textShadow: TEXT_SHADOW,
+    whiteSpace: 'nowrap',
+  };
+
   return (
     <div
-      className="relative w-full h-full pointer-events-auto select-none bg-[url('/header-hud-bg.png')] bg-[length:100%_100%] bg-no-repeat filter drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)]"
+      className="relative w-full h-full select-none bg-[url('/header-hud-bg.png')] bg-[length:100%_100%] bg-no-repeat filter drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)]"
       style={{
         imageRendering: 'auto',
+        containerType: 'size',
+        pointerEvents: 'none',
       }}
     >
-      {/* 1. Left Weather Photo (nested inside the foliage wooden photo frame) */}
+      {/* ------------------------------------------------------------------ */}
+      {/* PANEL 1 — weather photo                                            */}
+      {/* ------------------------------------------------------------------ */}
       <div
-        className="absolute overflow-hidden rounded-[3px] shadow-[inset_0_2px_8px_rgba(0,0,0,0.85),0_1px_4px_rgba(0,0,0,0.6)]"
+        className="absolute overflow-hidden"
         style={{
-          left: '1.65%',
-          top: '14.5%',
-          width: '12.4%',
-          height: '71%',
+          ...boxStyle(HEADER_HUD_UI.weatherPhoto),
+          borderRadius: hudSize(5, 2, 5),
+          boxShadow:
+            'inset 0 3px 11px rgba(0,0,0,0.92), 0 1px 3px rgba(196,145,76,0.15)',
         }}
         title={`Thời tiết hiện tại: ${currentCfg.nameVi}\n${currentCfg.description}`}
       >
         <img
           src={currentCfg.image}
           alt={currentCfg.nameVi}
-          className="w-full h-full object-cover object-center"
+          className="absolute inset-0 w-full h-full object-cover object-center"
           referrerPolicy="no-referrer"
         />
 
-        {/* Top-Right Weather Badge */}
-        <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 border border-white/20 flex items-center justify-center shadow-md backdrop-blur-[1px]">
-          <WeatherIcon className="w-3 h-3 text-white" />
-        </div>
-
-        {/* Bottom Title Label */}
-        <div className="absolute bottom-1 inset-x-1.5 flex items-center justify-center">
-          <span className="bg-black/80 px-2 py-0.5 rounded text-[10px] font-serif font-bold text-[#fcefdc] tracking-wide shadow-md border border-white/10 truncate max-w-full">
-            {currentCfg.nameVi}
-          </span>
+        <div
+          className="absolute flex items-center justify-center rounded-full"
+          style={{
+            right: hudSize(7, 2, 6),
+            top: hudSize(7, 2, 6),
+            width: hudSize(31, 12, 20),
+            height: hudSize(31, 12, 20),
+            background: 'rgba(6, 8, 6, 0.76)',
+            border: '1px solid rgba(226, 207, 169, 0.28)',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.75)',
+          }}
+        >
+          <WeatherIcon
+            style={{
+              width: hudSize(17, 7, 12),
+              height: hudSize(17, 7, 12),
+              color: currentCfg.accentColor,
+            }}
+          />
         </div>
       </div>
 
-      {/* 2. Weather Details Section (Right of photo) */}
+      {/* PANEL 1 — weather text */}
       <div
-        className="absolute flex flex-col justify-center font-hud"
+        className="absolute flex flex-col justify-center min-w-0"
         style={{
-          left: '15.0%',
-          top: '14%',
-          width: '20.6%',
-          height: '72%',
+          ...boxStyle(HEADER_HUD_UI.weatherInfo),
+          fontFamily: '"Lora", "Merriweather", serif',
         }}
       >
-        {/* Top Label: THỜI TIẾT HIỆN TẠI — */}
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-[11px] font-bold text-[#bca073] tracking-[0.06em] uppercase whitespace-nowrap drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">
+        <div className="flex items-center min-w-0" style={{ gap: hudSize(8, 3, 7) }}>
+          <span
+            style={{
+              ...hudFont(19, 7.5, 12),
+              color: '#bca073',
+              fontFamily: '"Roboto Condensed", "Be Vietnam Pro", sans-serif',
+              fontWeight: 700,
+              letterSpacing: '0.075em',
+              lineHeight: 1,
+              textShadow: SMALL_TEXT_SHADOW,
+              whiteSpace: 'nowrap',
+            }}
+          >
             THỜI TIẾT HIỆN TẠI
           </span>
-          <span className="flex-1 h-[1px] bg-[#61472c]/90 min-w-[12px]" />
+          <span
+            className="flex-1"
+            style={{
+              height: 1,
+              minWidth: hudSize(18, 7, 16),
+              background: 'linear-gradient(90deg, rgba(154,111,59,.72), rgba(154,111,59,0))',
+            }}
+          />
         </div>
 
-        {/* Middle Row: Icon Badge + Weather Name */}
-        <div className="flex items-center gap-2 mt-1 min-w-0">
-          <div className="w-7 h-7 rounded-full bg-[#181109] border border-[#5a4228] flex items-center justify-center shadow-[inset_0_1px_3px_rgba(0,0,0,0.9)] shrink-0">
+        <div
+          className="flex items-center min-w-0"
+          style={{
+            gap: hudSize(10, 3, 8),
+            marginTop: hudSize(10, 3, 8),
+          }}
+        >
+          <div
+            className="shrink-0 rounded-full flex items-center justify-center"
+            style={{
+              width: hudSize(39, 15, 26),
+              height: hudSize(39, 15, 26),
+              background: 'rgba(16, 13, 8, 0.66)',
+              border: '1px solid rgba(128, 91, 48, 0.58)',
+              boxShadow: 'inset 0 2px 6px rgba(0,0,0,.85)',
+            }}
+          >
             <WeatherIcon
-              className="w-4 h-4 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
-              style={{ color: currentCfg.accentColor }}
+              style={{
+                width: hudSize(22, 8, 15),
+                height: hudSize(22, 8, 15),
+                color: currentCfg.accentColor,
+                filter: 'drop-shadow(0 1px 2px rgba(0,0,0,.9))',
+              }}
             />
           </div>
-          <span className="font-bold text-[19px] text-[#f7ecd8] drop-shadow-[0_2px_4px_rgba(0,0,0,1)] tracking-normal truncate">
+
+          <span
+            className="truncate"
+            style={{
+              ...hudFont(34, 12, 22),
+              color: '#f3e5ca',
+              fontWeight: 700,
+              lineHeight: 1.02,
+              textShadow: TEXT_SHADOW,
+            }}
+          >
             {currentCfg.nameVi}
           </span>
         </div>
 
-        {/* Bottom Row: Sắp tới: > [Next Weather] */}
-        <div className="flex items-center gap-1 mt-0.5 text-[11px] text-[#a99477] truncate">
-          <span>Sắp tới:</span>
-          <span className="text-amber-400/90 font-bold">›</span>
-          <span className="text-[#d8c3a5] truncate">
+        <div
+          className="flex items-center min-w-0 truncate"
+          style={{
+            marginTop: hudSize(9, 2, 7),
+            gap: hudSize(7, 2, 5),
+            ...hudFont(19, 7.5, 12),
+            color: '#a99477',
+            fontFamily: '"Roboto Condensed", "Be Vietnam Pro", sans-serif',
+            lineHeight: 1,
+            textShadow: SMALL_TEXT_SHADOW,
+          }}
+        >
+          <span className="shrink-0">Sắp tới:</span>
+          <span className="shrink-0 font-bold" style={{ color: '#d9a452' }}>›</span>
+          <span className="truncate" style={{ color: '#d8c3a5', fontWeight: 600 }}>
             {nextCfg?.nameVi || currentCfg.nameVi}
           </span>
         </div>
       </div>
 
-      {/* 3. Center Clock & Date Section */}
+      {/* ------------------------------------------------------------------ */}
+      {/* PANEL 2 — day-cycle medallion                                      */}
+      {/* ------------------------------------------------------------------ */}
       <div
-        className="absolute flex items-center font-hud"
+        className="absolute rounded-full flex items-center justify-center"
         style={{
-          left: '37.0%',
-          top: '14%',
-          width: '25.6%',
-          height: '72%',
+          ...boxStyle(HEADER_HUD_UI.clockMedallion),
+          border: `${hudSize(3, 1, 2)} solid rgba(157, 111, 55, 0.86)`,
+          background:
+            'radial-gradient(circle at 50% 42%, rgba(74,49,22,.95) 0%, rgba(34,22,10,.98) 58%, rgba(10,8,5,.98) 100%)',
+          boxShadow:
+            '0 3px 9px rgba(0,0,0,.9), inset 0 0 0 2px rgba(235,190,120,.12), inset 0 3px 7px rgba(255,214,145,.08)',
+        }}
+        title={`Thời khắc: ${cycleLabel}`}
+      >
+        <div
+          className="absolute rounded-full"
+          style={{
+            inset: hudSize(10, 3, 8),
+            border: '1px solid rgba(195,145,76,.32)',
+          }}
+        />
+        <DayCycleIcon
+          style={{
+            width: hudSize(48, 17, 31),
+            height: hudSize(48, 17, 31),
+            color: cycleGlow,
+            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,.95))',
+          }}
+        />
+      </div>
+
+      {/* PANEL 2 — clock / calendar */}
+      <div
+        className="absolute flex flex-col justify-center min-w-0"
+        style={{
+          ...boxStyle(HEADER_HUD_UI.clockInfo),
+          fontFamily: '"Lora", "Merriweather", serif',
         }}
       >
-        {/* Circular Sun/Moon Medallion */}
         <div
-          className="relative w-11 h-11 rounded-full border-2 border-[#8c6738] bg-gradient-to-b from-[#2a1d10] via-[#1b1208] to-[#0f0a04] shadow-[0_2px_6px_rgba(0,0,0,0.9),inset_0_1px_3px_rgba(235,190,120,0.4)] flex items-center justify-center shrink-0 mr-3"
-          title={`Thời khắc: ${cycleLabel}`}
+          className="flex items-baseline min-w-0 whitespace-nowrap"
+          style={{ gap: hudSize(12, 4, 10) }}
         >
-          <DayCycleIcon
-            className="w-5 h-5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] transition-colors duration-500"
-            style={{ color: cycleGlow }}
-          />
+          <span
+            style={{
+              ...hudFont(53, 17, 31),
+              color: '#f7edd9',
+              fontFamily: '"Merriweather", "Lora", serif',
+              fontWeight: 900,
+              letterSpacing: '0.035em',
+              lineHeight: 1,
+              textShadow: '0 2px 5px rgba(0,0,0,1)',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {timeString}
+          </span>
+
+          <span
+            aria-hidden="true"
+            style={{
+              ...hudFont(35, 12, 21),
+              color: '#765331',
+              fontWeight: 400,
+              lineHeight: 1,
+            }}
+          >
+            |
+          </span>
+
+          <span
+            className="truncate"
+            style={{
+              ...hudFont(25, 9, 16),
+              color: cycleGlow,
+              fontFamily: '"Roboto Condensed", "Be Vietnam Pro", sans-serif',
+              fontWeight: 700,
+              letterSpacing: '0.085em',
+              lineHeight: 1,
+              textShadow: SMALL_TEXT_SHADOW,
+            }}
+          >
+            {cycleLabel}
+          </span>
         </div>
 
-        {/* Time, Period & Calendar */}
-        <div className="flex flex-col justify-center min-w-0">
-          {/* Row 1: 06:00 | BÌNH MINH */}
-          <div className="flex items-center gap-1.5 whitespace-nowrap">
-            <span className="font-bold text-[22px] text-[#f7edd9] tracking-wider tabular-nums drop-shadow-[0_2px_4px_rgba(0,0,0,1)] leading-none">
-              {timeString}
-            </span>
-            <span className="text-[#5a4228] font-light text-[17px] leading-none">|</span>
-            <span className="font-bold text-[13px] text-[#dca052] tracking-[0.08em] uppercase drop-shadow-[0_1px_2px_rgba(0,0,0,1)] leading-none">
-              {cycleLabel}
-            </span>
-          </div>
-
-          {/* Row 2: Ngày 5 - Tháng 9, Năm 1 — */}
-          <div className="flex items-center gap-1.5 mt-1 min-w-0">
-            <span className="text-[11px] text-[#b7a285] tracking-wide whitespace-nowrap drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">
-              Ngày <strong className="text-[#ecd6b7]">{normalizedDay}</strong> - Tháng {month}, Năm {year}
-            </span>
-            <span className="w-5 h-[1px] bg-[#61472c]/90 min-w-[8px]" />
-          </div>
+        <div
+          className="flex items-center min-w-0"
+          style={{
+            marginTop: hudSize(17, 5, 12),
+            gap: hudSize(13, 4, 10),
+          }}
+        >
+          <span
+            className="whitespace-nowrap"
+            style={{
+              ...hudFont(21, 8, 14),
+              color: '#bca98a',
+              fontWeight: 500,
+              lineHeight: 1,
+              textShadow: SMALL_TEXT_SHADOW,
+            }}
+          >
+            Ngày <strong style={{ color: '#ead4b2' }}>{normalizedDay}</strong>
+            {' · '}Tháng {month}
+            {' · '}Năm {year}
+          </span>
+          <span
+            className="flex-1"
+            style={{
+              height: 1,
+              maxWidth: pxX(120),
+              background: 'linear-gradient(90deg, rgba(154,111,59,.7), rgba(154,111,59,0))',
+            }}
+          />
         </div>
       </div>
 
-      {/* 4. Season Section */}
+      {/* ------------------------------------------------------------------ */}
+      {/* PANEL 3 — season                                                   */}
+      {/* ------------------------------------------------------------------ */}
       <div
-        className="absolute flex flex-col justify-center font-hud"
+        className="absolute flex flex-col justify-center min-w-0"
         style={{
-          left: '63.8%',
-          top: '14%',
-          width: '12.8%',
-          height: '72%',
+          ...boxStyle(HEADER_HUD_UI.season),
+          fontFamily: '"Lora", "Merriweather", serif',
         }}
       >
-        {/* Top: Leaf Icon + MÙA VỤ */}
-        <div className="flex items-center gap-1 min-w-0">
-          <Leaf className="w-3 h-3 text-emerald-400 drop-shadow shrink-0" />
-          <span className="text-[10.5px] font-bold text-[#bca073] tracking-[0.06em] uppercase whitespace-nowrap drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">
+        <div
+          className="flex items-center min-w-0"
+          style={{ gap: hudSize(8, 2, 6) }}
+        >
+          <Leaf
+            className="shrink-0"
+            style={{
+              width: hudSize(27, 9, 17),
+              height: hudSize(27, 9, 17),
+              color: '#75c98f',
+              filter: 'drop-shadow(0 1px 2px rgba(0,0,0,.9))',
+            }}
+          />
+          <span
+            style={{
+              ...hudFont(20, 8, 13),
+              color: '#bca073',
+              fontFamily: '"Roboto Condensed", "Be Vietnam Pro", sans-serif',
+              fontWeight: 700,
+              letterSpacing: '0.07em',
+              lineHeight: 1,
+              textShadow: SMALL_TEXT_SHADOW,
+              whiteSpace: 'nowrap',
+            }}
+          >
             MÙA VỤ
           </span>
         </div>
 
-        {/* Bottom: Tên Mùa */}
-        <div className="mt-1 min-w-0">
-          <span
-            className="font-bold text-[14.5px] text-[#4ade80] drop-shadow-[0_2px_4px_rgba(0,0,0,1)] tracking-normal truncate block"
-            title={`Mùa hiện tại: ${currentSeason.name}`}
-          >
-            {currentSeason.name}
-          </span>
-        </div>
+        <span
+          className="block min-w-0"
+          title={`Mùa hiện tại: ${currentSeason.name}`}
+          style={{
+            marginTop: hudSize(13, 4, 10),
+            ...hudFont(28, 10, 18),
+            color: currentSeason.color,
+            fontWeight: 700,
+            lineHeight: 1.12,
+            textShadow: TEXT_SHADOW,
+            overflow: 'hidden',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+          }}
+        >
+          {currentSeason.name}
+        </span>
       </div>
 
-      {/* 5. Right Environmental Stats (3 sub-boxes: Nhiệt độ, Độ ẩm, Gió) */}
+      {/* ------------------------------------------------------------------ */}
+      {/* PANEL 4 — environment                                              */}
+      {/* ------------------------------------------------------------------ */}
       <div
-        className="absolute grid grid-cols-3 items-center font-hud"
-        style={{
-          left: '78.5%',
-          top: '14%',
-          width: '19.8%',
-          height: '72%',
-        }}
+        className="absolute grid grid-cols-3 items-stretch"
+        style={boxStyle(HEADER_HUD_UI.environment)}
       >
-        {/* Box 1: Nhiệt độ */}
-        <div className="flex flex-col items-center justify-center px-1">
-          <div className="flex items-center gap-1">
-            <Thermometer className="w-3.5 h-3.5 text-amber-400 drop-shadow" />
-            <span className="text-[10px] font-bold text-[#bca073] tracking-[0.05em] uppercase drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
-              NHIỆT
-            </span>
+        <div className="flex flex-col items-center justify-center min-w-0">
+          <div className="flex items-center" style={{ gap: hudSize(5, 2, 4) }}>
+            <Thermometer
+              style={{
+                width: hudSize(23, 8, 15),
+                height: hudSize(23, 8, 15),
+                color: '#e5ad53',
+                filter: 'drop-shadow(0 1px 2px rgba(0,0,0,.9))',
+              }}
+            />
+            <span style={statLabelStyle}>NHIỆT</span>
           </div>
-          <span className="font-bold text-[15px] text-[#f7edd9] drop-shadow-[0_2px_3px_rgba(0,0,0,1)] mt-0.5">
-            {tempC}°C
-          </span>
+          <span style={{ ...statValueStyle, marginTop: hudSize(13, 4, 9) }}>{tempC}°C</span>
         </div>
 
-        {/* Box 2: Độ ẩm */}
-        <div className="flex flex-col items-center justify-center px-1 border-x border-[#382618]/50">
-          <div className="flex items-center gap-1">
-            <Droplets className="w-3.5 h-3.5 text-[#38bdf8] drop-shadow" />
-            <span className="text-[10px] font-bold text-[#bca073] tracking-[0.05em] uppercase drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
-              ĐỘ ẨM
-            </span>
+        <div
+          className="flex flex-col items-center justify-center min-w-0"
+          style={{
+            borderLeft: '1px solid rgba(119,84,46,.26)',
+            borderRight: '1px solid rgba(119,84,46,.26)',
+          }}
+        >
+          <div className="flex items-center" style={{ gap: hudSize(5, 2, 4) }}>
+            <Droplets
+              style={{
+                width: hudSize(23, 8, 15),
+                height: hudSize(23, 8, 15),
+                color: '#55bde2',
+                filter: 'drop-shadow(0 1px 2px rgba(0,0,0,.9))',
+              }}
+            />
+            <span style={statLabelStyle}>ĐỘ ẨM</span>
           </div>
-          <span className="font-bold text-[15px] text-[#38bdf8] drop-shadow-[0_2px_3px_rgba(0,0,0,1)] mt-0.5">
+          <span
+            style={{
+              ...statValueStyle,
+              marginTop: hudSize(13, 4, 9),
+              color: '#7bcbe8',
+            }}
+          >
             {humidity}%
           </span>
         </div>
 
-        {/* Box 3: Gió */}
-        <div className="flex flex-col items-center justify-center px-1">
-          <div className="flex items-center gap-1">
-            <Wind className="w-3.5 h-3.5 text-[#86efac] drop-shadow" />
-            <span className="text-[10px] font-bold text-[#bca073] tracking-[0.05em] uppercase drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
-              GIÓ
-            </span>
+        <div className="flex flex-col items-center justify-center min-w-0">
+          <div className="flex items-center" style={{ gap: hudSize(5, 2, 4) }}>
+            <Wind
+              style={{
+                width: hudSize(23, 8, 15),
+                height: hudSize(23, 8, 15),
+                color: '#86c997',
+                filter: 'drop-shadow(0 1px 2px rgba(0,0,0,.9))',
+              }}
+            />
+            <span style={statLabelStyle}>GIÓ</span>
           </div>
-          <span className="font-bold text-[15px] text-[#f7edd9] drop-shadow-[0_2px_3px_rgba(0,0,0,1)] mt-0.5">
+          <span style={{ ...statValueStyle, marginTop: hudSize(13, 4, 9) }}>
             {windSpeed} {windCardinal}
           </span>
         </div>
