@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+@theme {
+  --font-serif: 'Lora', 'Merriweather', 'Be Vietnam Pro', Georgia, serif;
+  --font-sans: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-hud: 'Lora', 'Merriweather', 'Be Vietnam Pro', serif;
+}
+
 @layer base {
   body {
     font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -10,10 +16,16 @@
     user-select: none;
     overflow: hidden;
   }
+}
 
-  h1, h2, h3, h4, .font-serif {
-    font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  }
+/* Explicit font utilities with complete Vietnamese glyph guarantee */
+.font-serif,
+.font-hud {
+  font-family: 'Lora', 'Merriweather', 'Be Vietnam Pro', Georgia, serif !important;
+}
+
+.font-sans {
+  font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
 
 /* Tactile Wood Frame & Game UI Utilities */

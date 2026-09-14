@@ -171,6 +171,7 @@ const WEATHER_LABELS: Record<WeatherType, string> = {
   light_rain: 'Light Rain',
   heavy_rain: 'Heavy Rain',
   storm: 'Storm',
+  fog: 'Fog',
   heat_wave: 'Heat Wave',
 };
 

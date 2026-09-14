@@ -662,9 +662,9 @@ export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
             {storageItems.map((item, idx) => {
               const sSlotCfg = CAMP_OVERVIEW_CONFIG.bottomRow.storagePreview.slot;
               const slotStyle: React.CSSProperties = {
-                minWidth: sSlotCfg.minWidth !== 'auto' ? sSlotCfg.minWidth : undefined,
-                minHeight: sSlotCfg.minHeight !== 'auto' ? sSlotCfg.minHeight : undefined,
-                aspectRatio: sSlotCfg.aspectRatio !== 'auto' ? sSlotCfg.aspectRatio : undefined,
+                minWidth: (sSlotCfg.minWidth as string) !== 'auto' ? sSlotCfg.minWidth : undefined,
+                minHeight: (sSlotCfg.minHeight as string) !== 'auto' ? sSlotCfg.minHeight : undefined,
+                aspectRatio: (sSlotCfg.aspectRatio as string) !== 'auto' ? sSlotCfg.aspectRatio : undefined,
               };
 
               if (item) {

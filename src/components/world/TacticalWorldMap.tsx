@@ -13,12 +13,12 @@ import {
 } from 'lucide-react';
 import type { AreaDefinition, GameState } from '../../types';
 import '../../data/mainMapAreaOverrides';
-import { TropicalMapClock } from './TropicalMapClock';
 import { MainMapWaterShader, MAIN_MAP_WATER_TUNING } from './MainMapWaterShader';
 import { MapAmbientEffects } from './MapAmbientEffects';
 import { MapParticleEffects } from './MapParticleEffects';
 import type { MapShaderEnvironment } from './MapShaderEnvironment';
 import { MAIN_MAP_AREA_IDS } from './MainMapGeometry';
+import { MAIN_MAP_TERRITORIES, territoryPointsToSvgString } from '../../data/poiTerritories';
 import { preloadImage, preloadImages } from '../../utils/imageCache';
 
 const ENABLE_SECTOR_NAVIGATION = false;
@@ -328,7 +328,7 @@ export const TacticalWorldMap: React.FC<TacticalWorldMapProps> = ({
   };
 
   const isPanBlockedTarget = (target: EventTarget | null) =>
-    target instanceof Element && Boolean(target.closest('button, input, label, [data-map-poi="true"]'));
+    target instanceof Element && Boolean(target.closest('button, input, label, a, [data-map-poi="true"]'));
 
   const handleMapPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!WORLD_MAP_UI.pan.enabled || isLoadingImage || imageError || isPanBlockedTarget(event.target)) return;
@@ -346,9 +346,13 @@ export const TacticalWorldMap: React.FC<TacticalWorldMapProps> = ({
   const handleMapPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = panDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const deltaX = event.clientX - drag.startClientX;
+    const deltaY = event.clientY - drag.startClientY;
+
     setMapPan({
-      x: clampPanAxis(drag.startPanX + (event.clientX - drag.startClientX) * WORLD_MAP_UI.pan.dragSpeed, maxPanX),
-      y: clampPanAxis(drag.startPanY + (event.clientY - drag.startClientY) * WORLD_MAP_UI.pan.dragSpeed, maxPanY),
+      x: clampPanAxis(drag.startPanX + deltaX * WORLD_MAP_UI.pan.dragSpeed, maxPanX),
+      y: clampPanAxis(drag.startPanY + deltaY * WORLD_MAP_UI.pan.dragSpeed, maxPanY),
     });
   };
 
@@ -356,6 +360,7 @@ export const TacticalWorldMap: React.FC<TacticalWorldMapProps> = ({
     const drag = panDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch { /* already released */ }
+
     panDragRef.current = null;
     setIsPanning(false);
   };
@@ -363,10 +368,9 @@ export const TacticalWorldMap: React.FC<TacticalWorldMapProps> = ({
   const resetMapPan = () => setMapPan({ x: WORLD_MAP_UI.pan.initialX, y: WORLD_MAP_UI.pan.initialY });
 
   const renderPoi = (area: AreaDefinition) => {
-    const posX = area.mapX ?? 50;
-    const posY = area.mapY ?? 50;
-    const boxW = area.boxW ?? 8;
-    const boxH = area.boxH ?? 3;
+    const territory = MAIN_MAP_TERRITORIES[area.id];
+    const posX = territory ? territory.labelPos[0] : (area.mapX ?? 50);
+    const posY = territory ? territory.labelPos[1] : (area.mapY ?? 50);
     const selected = area.id === selectedAreaId;
     const hovered = area.id === hoveredAreaId;
     const peopleCount = getPeopleCountAtArea(area.id);
@@ -375,57 +379,76 @@ export const TacticalWorldMap: React.FC<TacticalWorldMapProps> = ({
       <div
         key={area.id}
         data-map-poi="true"
-        onClick={(event) => { event.stopPropagation(); onSelectArea(area.id); }}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelectArea(area.id);
+        }}
         onMouseEnter={() => setHoveredAreaId(area.id)}
         onMouseLeave={() => setHoveredAreaId(null)}
         style={{
           left: `${posX}%`,
           top: `${posY}%`,
-          width: `${Math.max(boxW + .9, 6.5)}%`,
-          height: `${Math.max(boxH + .9, 3.1)}%`,
           transform: 'translate(-50%, -50%)',
         }}
         title={area.name}
-        className="absolute pointer-events-auto cursor-pointer group flex items-center justify-center transition-[filter] duration-200 ease-out"
+        className="absolute pointer-events-auto cursor-pointer flex flex-col items-center justify-center select-none p-1 group z-20"
       >
-        {!selected && !hovered && (
-          <div className="w-full h-full rounded-md border border-amber-100/15 bg-black/[0.015] opacity-15 transition-opacity duration-200 group-hover:opacity-60" />
-        )}
-
+        {/* Survivor count badge when survivors are stationed here */}
         {peopleCount > 0 && (
-          <div className="absolute -top-3 -right-2 z-20 flex items-center gap-0.5 rounded-full border border-amber-300/75 bg-[#0b110d]/92 px-1.5 py-0.5 text-[9px] font-mono font-bold text-amber-100 shadow-[0_2px_7px_rgba(0,0,0,.75)] pointer-events-none">
-            <Users className="w-2.5 h-2.5 text-amber-300" />
+          <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 rounded-full border border-white/65 bg-[#09110d]/95 px-2 py-0.5 text-[9px] font-mono font-bold text-white shadow-[0_2px_8px_rgba(0,0,0,0.85)] pointer-events-none">
+            <Users className="w-2.5 h-2.5 text-zinc-200" />
             <span>{peopleCount}</span>
           </div>
         )}
 
-        {hovered && !selected && (
-          <>
-            <div className="absolute -inset-0.5 rounded-md border border-amber-100/70 bg-amber-100/[0.035] shadow-[0_0_11px_rgba(233,190,112,.26),inset_0_0_9px_rgba(255,239,204,.05)] backdrop-brightness-[1.06] pointer-events-none">
-              <span className="absolute -top-px -left-px w-2 h-2 border-t border-l border-amber-100" />
-              <span className="absolute -top-px -right-px w-2 h-2 border-t border-r border-amber-100" />
-              <span className="absolute -bottom-px -left-px w-2 h-2 border-b border-l border-amber-100" />
-              <span className="absolute -bottom-px -right-px w-2 h-2 border-b border-r border-amber-100" />
-            </div>
-            <div className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm border border-[#c5a16a]/50 bg-[#08120d]/90 px-1.5 py-0.5 text-[8px] font-semibold tracking-wide text-[#f3e8d3] shadow-md pointer-events-none">
-              {area.name}
-            </div>
-          </>
-        )}
+        {/* Stable Unified Label Badge - fixed dimensions across normal, hover, and selected */}
+        <div
+          className={`flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded transition-all duration-150 pointer-events-none ${
+            selected
+              ? 'border border-white/85 bg-[#08120d]/95 shadow-[0_4px_14px_rgba(0,0,0,0.9)] backdrop-blur-xs'
+              : hovered
+              ? 'border border-white/65 bg-[#09110d]/92 shadow-[0_2px_12px_rgba(0,0,0,0.85)] backdrop-blur-xs'
+              : 'border border-black/40 bg-[#0b130e]/60 shadow-[0_1px_4px_rgba(0,0,0,0.8)] backdrop-blur-[2px]'
+          }`}
+        >
+          {selected ? (
+            <MapPin className="w-3.5 h-3.5 text-white fill-white/20 stroke-[1.8]" />
+          ) : hovered ? (
+            <span className="w-1.5 h-1.5 rounded-full bg-white/95 animate-ping" />
+          ) : (
+            <span className="w-1 h-1 rotate-45 bg-[#d8cbaf]/80 shadow-[0_1px_2px_rgba(0,0,0,0.8)]" />
+          )}
 
-        {selected && (
-          <>
-            <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 whitespace-nowrap rounded-sm border border-amber-100/70 bg-[#0b120d]/94 px-1.5 py-0.5 shadow-[0_2px_8px_rgba(0,0,0,.72)] pointer-events-none">
-              <MapPin className="w-3 h-3 text-amber-100 fill-amber-500/20 stroke-[1.6]" />
-              <span className="text-[8px] font-bold tracking-wide text-[#fff0d2]">{area.name}</span>
-            </div>
-            <div className="absolute -inset-1 rounded-md border border-amber-100/75 bg-amber-200/[0.045] shadow-[0_0_14px_rgba(235,191,111,.30),inset_0_0_10px_rgba(255,240,204,.05)] pointer-events-none z-10">
-              <span className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-amber-100" />
-              <span className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-amber-100" />
-              <span className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-amber-100" />
-              <span className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-amber-100" />
-            </div>
-          </>
+          <span
+            className={`font-serif text-[11px] font-bold tracking-[0.16em] uppercase transition-colors duration-150 ${
+              selected
+                ? 'text-white'
+                : hovered
+                ? 'text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.6)]'
+                : 'text-[#f7eedf] drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)]'
+            }`}
+          >
+            {area.name}
+          </span>
+
+          {!selected && !hovered && (
+            <span className="w-1 h-1 rotate-45 bg-[#d8cbaf]/80 shadow-[0_1px_2px_rgba(0,0,0,0.8)]" />
+          )}
+        </div>
+
+        {/* Stable Subtitle: Preserves height across all states to completely eliminate edge oscillation glitch */}
+        {territory?.subtitle && (
+          <span
+            className={`text-[7.5px] font-mono tracking-wider uppercase transition-colors duration-150 pointer-events-none mt-0.5 ${
+              selected
+                ? 'text-white/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]'
+                : hovered
+                ? 'text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]'
+                : 'text-[#cfc2aa]/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]'
+            }`}
+          >
+            {territory.subtitle}
+          </span>
         )}
       </div>
     );
@@ -449,8 +472,6 @@ export const TacticalWorldMap: React.FC<TacticalWorldMapProps> = ({
         onDoubleClick={WORLD_MAP_UI.pan.doubleClickToReset ? resetMapPan : undefined}
       >
         <div className="relative w-full h-full overflow-hidden">
-          <TropicalMapClock gameTime={state.gameTime} weather={state.weather} />
-
           {isLoadingImage && !displayedImageSrc && (
             <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#070b08] text-center">
               <div className="relative flex items-center justify-center">
@@ -487,15 +508,63 @@ export const TacticalWorldMap: React.FC<TacticalWorldMapProps> = ({
                     strength={1}
                     environment={shaderEnvironment}
                     poiLights={occupiedPoiLights}
+                    enableCampfire={false}
                   />
-                  <MapParticleEffects strength={1} environment={shaderEnvironment} />
+                  <MapParticleEffects
+                    strength={1}
+                    environment={shaderEnvironment}
+                    enableCampfireSmoke={false}
+                  />
                 </>
               )}
 
               {!isLoadingImage && (
-                <div className="absolute inset-0 z-10 pointer-events-none">
-                  {currentAreas.map(renderPoi)}
-                </div>
+                <>
+                  {/* Irregular Territorial Zones (SVG Overlay with delicate white dashed outline) */}
+                  <svg
+                    className="absolute inset-0 w-full h-full pointer-events-none z-10 overflow-visible select-none"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                  >
+                    <defs>
+                      <filter id="softWhiteTerritoryGlow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="0.3" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+                    </defs>
+                    {currentAreas.map((area) => {
+                      const territory = MAIN_MAP_TERRITORIES[area.id];
+                      if (!territory) return null;
+                      const isHovered = area.id === hoveredAreaId;
+                      // Territorial mask strictly only appears when hovering its label (hidden when selected)
+                      if (!isHovered) return null;
+
+                      return (
+                        <polygon
+                          key={`territory-${area.id}`}
+                          points={territoryPointsToSvgString(territory.points)}
+                          vectorEffect="non-scaling-stroke"
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
+                          className="pointer-events-none transition-all duration-200"
+                          fill="rgba(255, 255, 255, 0.06)"
+                          stroke="rgba(255, 255, 255, 0.75)"
+                          strokeWidth={1.2}
+                          strokeDasharray="4, 2.5"
+                          filter="url(#softWhiteTerritoryGlow)"
+                        />
+                      );
+                    })}
+                  </svg>
+
+                  {/* Badges, Survivor Counts and Hover tooltips for areas */}
+                  <div className="absolute inset-0 z-20 pointer-events-none">
+                    {currentAreas.map(renderPoi)}
+                  </div>
+                </>
               )}
             </div>
           ) : imageError ? (

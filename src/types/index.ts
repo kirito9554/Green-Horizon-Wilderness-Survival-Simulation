@@ -147,6 +147,7 @@ export type WeatherType =
   | 'light_rain' 
   | 'heavy_rain' 
   | 'storm' 
+  | 'fog'
   | 'heat_wave';
 
 export interface WindState {

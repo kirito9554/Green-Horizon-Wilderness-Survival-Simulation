@@ -329,20 +329,16 @@ const UI = {
       borderColor: 'rgba(159, 155, 132, 0.35)',
     },
 
-    // Grid 5 x 3. Tất cả slot dùng chung grid nên luôn bằng nhau.
+    // Grid 5 x 3. Tất cả slot dùng chung grid nên luôn bằng nhau và cách đều.
     grid: {
-      top: 19.0,
-      left: 4.0,
-      right: 3.7,
-      bottom: 5.4,
+      top: 18.5,
+      left: 4.2,
+      right: 4.2,
+      bottom: 5.2,
       columns: 5,
       rows: 3,
       columnGapPx: 6,
-      rowGapPx: 7,
-
-      // Dịch riêng hàng cuối xuống để khớp các ô được vẽ sẵn trong background AI.
-      // Hàng 1 và 2 giữ nguyên. Đặt 0 nếu không cần bù.
-      lastRowOffsetYPx: 2,
+      rowGapPx: 6,
     },
 
     // Nội dung bên trong mỗi slot.
@@ -510,11 +506,6 @@ export const TacticalCenterColumn: React.FC<TacticalCenterColumnProps> = ({
   state.inventory.items.slice(0, slotCount).forEach((item, idx) => {
     displaySlots[idx] = item;
   });
-
-  // Chỉ bù vị trí cho hàng cuối của grid; 2 hàng trên không thay đổi.
-  const lastRowStartIndex = UI.inventory.grid.columns * (UI.inventory.grid.rows - 1);
-  const getInventoryRowOffsetY = (idx: number) =>
-    idx >= lastRowStartIndex ? UI.inventory.grid.lastRowOffsetYPx : 0;
 
   const getLogVisual = (text: string) => {
     const value = text.toLocaleLowerCase('vi');
@@ -927,15 +918,17 @@ export const TacticalCenterColumn: React.FC<TacticalCenterColumnProps> = ({
               return (
                 <div
                   key={`empty_${idx}`}
-                  className="relative hover:bg-white/5 transition-colors w-full h-full"
+                  className="relative w-full h-full border border-[#37443a]/50 bg-[#0c1511]/55 shadow-[inset_0_1px_3px_rgba(0,0,0,0.6)] hover:border-[#4d5e51]/70 hover:bg-[#111f18]/65 transition-all duration-150 flex items-center justify-center group"
                   style={{
                     borderRadius: UI.inventory.slot.radiusPx,
-                    top: getInventoryRowOffsetY(idx),
                   }}
-                />
+                >
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#2f3d33]/40 group-hover:bg-[#485b4d]/60 transition-colors pointer-events-none" />
+                </div>
               );
             }
 
+            const isSelected = selectedItemInstance?.instanceId === item.instanceId;
             const def = ITEMS_DATABASE[item.itemId];
             const dominantQuality = getDominantQuality(item.qualityBreakdown, item.quality);
             const qualityMeta = QUALITY_CONFIG[dominantQuality];
@@ -945,11 +938,14 @@ export const TacticalCenterColumn: React.FC<TacticalCenterColumnProps> = ({
               <div
                 key={item.instanceId}
                 onClick={() => setSelectedItemInstance(item)}
-                className="relative flex items-center justify-center cursor-pointer hover:bg-white/10 transition-all overflow-hidden active:scale-95 w-full h-full"
+                className={`relative flex items-center justify-center cursor-pointer transition-all duration-150 overflow-hidden active:scale-95 w-full h-full ${
+                  isSelected
+                    ? 'border-2 border-[#d8c7a6] bg-[#1a2d23]/95 shadow-[0_0_8px_rgba(216,199,166,0.4),inset_0_1px_3px_rgba(0,0,0,0.6)] z-10'
+                    : 'border border-[#4c5c4f]/80 bg-[#0e1b15]/80 hover:border-[#7e9683] hover:bg-[#15271e]/90 shadow-[inset_0_1px_3px_rgba(0,0,0,0.5),0_1px_4px_rgba(0,0,0,0.4)]'
+                }`}
                 style={{
                   borderRadius: UI.inventory.slot.radiusPx,
                   padding: UI.inventory.slot.paddingPx,
-                  top: getInventoryRowOffsetY(idx),
                 }}
                 title={`${def?.name || item.itemId} [${qualityMeta.nameVi}]`}
               >

@@ -16,6 +16,7 @@ export const WEATHER_BASELINES: Record<WeatherType, WeatherTarget> = {
   light_rain: { temperatureC: 25, humidityPercent: 90, rainIntensity: 0.35, cloudCover: 0.85, windSpeedKmh: 24, windDirectionDeg: 135 },
   heavy_rain: { temperatureC: 23, humidityPercent: 96, rainIntensity: 0.75, cloudCover: 0.95, windSpeedKmh: 45, windDirectionDeg: 195 },
   storm: { temperatureC: 21, humidityPercent: 99, rainIntensity: 1.0, cloudCover: 1.0, windSpeedKmh: 85, windDirectionDeg: 240 },
+  fog: { temperatureC: 22, humidityPercent: 98, rainIntensity: 0.1, cloudCover: 0.85, windSpeedKmh: 5, windDirectionDeg: 60 },
   heat_wave: { temperatureC: 37, humidityPercent: 50, rainIntensity: 0.0, cloudCover: 0.05, windSpeedKmh: 4, windDirectionDeg: 10 },
 };
 
@@ -29,11 +30,12 @@ export function getCardinalDirection(angleDeg: number): string {
 // Natural transition matrix for tropical rainforest climate
 export function getNextWeather(current: WeatherType): WeatherType {
   const transitions: Record<WeatherType, WeatherType[]> = {
-    clear: ['clear', 'cloudy', 'heat_wave'],
-    cloudy: ['clear', 'light_rain', 'cloudy'],
+    clear: ['clear', 'cloudy', 'heat_wave', 'fog'],
+    cloudy: ['clear', 'light_rain', 'cloudy', 'fog'],
     light_rain: ['heavy_rain', 'cloudy', 'clear'],
     heavy_rain: ['storm', 'light_rain', 'cloudy'],
     storm: ['heavy_rain', 'light_rain'],
+    fog: ['clear', 'cloudy', 'light_rain'],
     heat_wave: ['clear', 'cloudy'],
   };
   const possible = transitions[current] || ['clear', 'cloudy'];

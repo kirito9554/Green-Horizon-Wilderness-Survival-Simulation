@@ -254,6 +254,7 @@ export interface MapParticleEffectsProps {
   strength?: number;
   speed?: number;
   environment?: Partial<MapShaderEnvironment>;
+  enableCampfireSmoke?: boolean;
   respectReducedMotion?: boolean;
 }
 
@@ -262,11 +263,12 @@ export function MapParticleEffects({
   strength=PARTICLE_TUNING.strength,
   speed=PARTICLE_TUNING.speed,
   environment,
+  enableCampfireSmoke=false,
   respectReducedMotion=false,
 }:MapParticleEffectsProps){
   const canvasRef=useRef<HTMLCanvasElement>(null);
-  const paramsRef=useRef({strength,speed,environment,respectReducedMotion});
-  paramsRef.current={strength,speed,environment,respectReducedMotion};
+  const paramsRef=useRef({strength,speed,environment,enableCampfireSmoke,respectReducedMotion});
+  paramsRef.current={strength,speed,environment,enableCampfireSmoke,respectReducedMotion};
 
   useEffect(()=>{
     const canvas=canvasRef.current;
@@ -378,16 +380,18 @@ export function MapParticleEffects({
         }
       });
 
-      // Campfire smoke; each torn sprite is cheap and expands as it cools.
-      for(let index=0;index<9;index++){
-        const age=fract(elapsed*.075+index/9);
-        const life=smooth(0,.13,age)*(1-smooth(.52,1,age));
-        const drift=Math.pow(age,1.2)*(.014+wind01*.055);
-        const x=(.4406+windX*drift+Math.sin(age*9+index*1.7)*.004*age)*width;
-        const y=(.3969-age*.092+windY*drift*.34+Math.cos(age*7+index)*.002*age)*height;
-        const spriteSize=(7+age*35)*sizeScale;
-        const alpha=life*(1-smoothRain*.40)*.74*effectStrength*labelVisibility(x/width,y/height);
-        drawSprite(sprites.smoke[index%sprites.smoke.length],x,y,spriteSize*1.08,spriteSize*1.28,alpha,Math.sin(age*5.3+index)*.18);
+      // Campfire smoke; hidden by default, ready to be attached to POIs with active campfires.
+      if (paramsRef.current.enableCampfireSmoke) {
+        for(let index=0;index<9;index++){
+          const age=fract(elapsed*.075+index/9);
+          const life=smooth(0,.13,age)*(1-smooth(.52,1,age));
+          const drift=Math.pow(age,1.2)*(.014+wind01*.055);
+          const x=(.4406+windX*drift+Math.sin(age*9+index*1.7)*.004*age)*width;
+          const y=(.3969-age*.092+windY*drift*.34+Math.cos(age*7+index)*.002*age)*height;
+          const spriteSize=(7+age*35)*sizeScale;
+          const alpha=life*(1-smoothRain*.40)*.74*effectStrength*labelVisibility(x/width,y/height);
+          drawSprite(sprites.smoke[index%sprites.smoke.length],x,y,spriteSize*1.08,spriteSize*1.28,alpha,Math.sin(age*5.3+index)*.18);
+        }
       }
 
       // Small drifting leaves, restricted to authored canopy zones.

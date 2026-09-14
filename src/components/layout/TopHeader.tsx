@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Pause, Save, Wrench, RotateCcw } from 'lucide-react';
-import { GameState, InventoryItem } from '../../types';
-import { ITEMS_DATABASE } from '../../data/items';
+import { GameState } from '../../types';
 
 interface TopHeaderProps {
   state: GameState;
@@ -18,149 +17,19 @@ type Box = {
   h: number;
 };
 
-type ResourceKey =
-  | 'food'
-  | 'water'
-  | 'wood'
-  | 'stone'
-  | 'fiber'
-  | 'leaves'
-  | 'rope'
-  | 'medicine'
-  | 'firewood';
-
 /**
  * ================================================================
  * HEADER UI TUNING
  * ================================================================
- * Chỉnh vị trí / kích thước / font ở đây.
- * Tất cả x, y, w, h đều tính theo ảnh reference 1586 x 110 px.
- * JSX phía dưới không còn chứa các con số layout quan trọng.
+ * Tọa độ pixel đối chiếu với tỷ lệ ảnh reference 1586 x 110 px.
  */
-const HEADER_UI = {
+export const HEADER_UI = {
   reference: {
     width: 1586,
     height: 110,
   },
 
-  logoHotspot: {
-    x: 0,
-    y: 0,
-    w: 301,
-    h: 110,
-  } satisfies Box,
-
-  resources: {
-    // Typography dùng chung cho 9 resource.
-    typography: {
-      fontFamily: '"Roboto Condensed", "Arial Narrow", Arial, sans-serif',
-      label: {
-        y: 32,
-        h: 12,
-        fontSize: 10,
-        fontWeight: 700,
-        letterSpacing: '0.015em',
-        color: '#d7c8ad',
-        textShadow: '0 1px 2px rgba(0,0,0,0.95)',
-      },
-      value: {
-        y: 50,
-        h: 19,
-        fontSize: 15,
-        fontWeight: 700,
-        letterSpacing: '0.005em',
-        color: '#f5eee2',
-        textShadow: '0 1px 2px rgba(0,0,0,1)',
-      },
-      campValue: {
-        fontSize: 11,
-        fontWeight: 700,
-        letterSpacing: '0.005em',
-        color: '#fbbf24', // Màu vàng ấm sáng (amber gold), hiển thị số trong kho trại chính
-        textShadow: '0 1px 2px rgba(0,0,0,1)',
-      },
-    },
-
-    // segment = vùng hover/tính theo hai vạch ngăn.
-    // textX/textW = vùng thực tế dành cho chữ, đã né icon phía trái.
-    items: [
-      {
-        key: 'food' as const,
-        label: 'FOOD',
-        title: 'Lương thực (Food)',
-        segment: { x: 312, y: 0, w: 106, h: 110 },
-        textX: 355,
-        textW: 58,
-      },
-      {
-        key: 'water' as const,
-        label: 'WATER',
-        title: 'Nước ngọt (Water)',
-        segment: { x: 418, y: 0, w: 101, h: 110 },
-        textX: 462,
-        textW: 53,
-      },
-      {
-        key: 'wood' as const,
-        label: 'WOOD',
-        title: 'Gỗ & Tre (Wood)',
-        segment: { x: 519, y: 0, w: 99, h: 110 },
-        textX: 565,
-        textW: 49,
-      },
-      {
-        key: 'stone' as const,
-        label: 'STONE',
-        title: 'Đá suối (Stone)',
-        segment: { x: 618, y: 0, w: 100, h: 110 },
-        textX: 666,
-        textW: 48,
-      },
-      {
-        key: 'fiber' as const,
-        label: 'FIBER',
-        title: 'Sợi dây leo (Fiber)',
-        segment: { x: 718, y: 0, w: 100, h: 110 },
-        textX: 771,
-        textW: 44,
-      },
-      {
-        key: 'leaves' as const,
-        label: 'LEAVES',
-        title: 'Lá cọ (Leaves)',
-        segment: { x: 818, y: 0, w: 104, h: 110 },
-        textX: 866,
-        textW: 52,
-      },
-      {
-        key: 'rope' as const,
-        label: 'ROPE',
-        title: 'Dây thừng (Rope)',
-        segment: { x: 922, y: 0, w: 94, h: 110 },
-        textX: 971,
-        textW: 42,
-      },
-      {
-        key: 'medicine' as const,
-        label: 'MEDICINE',
-        title: 'Dược liệu (Medicine)',
-        segment: { x: 1016, y: 0, w: 119, h: 110 },
-        textX: 1073,
-        textW: 58,
-      },
-      {
-        key: 'firewood' as const,
-        label: 'FIREWOOD',
-        title: 'Củi đốt (Firewood)',
-        segment: { x: 1135, y: 0, w: 113, h: 110 },
-        textX: 1188,
-        textW: 58,
-      },
-    ],
-  },
-
   actionButtons: {
-    // Vùng overlay nằm trên hai button đã được vẽ sẵn trong background.
     fullscreen: {
       box: { x: 1283, y: 39, w: 118, h: 44 } satisfies Box,
       radius: 7,
@@ -206,56 +75,12 @@ const HEADER_UI = {
 const toPercentX = (px: number) => `${(px / HEADER_UI.reference.width) * 100}%`;
 const toPercentY = (px: number) => `${(px / HEADER_UI.reference.height) * 100}%`;
 
-// IMPORTANT: percentages on children are relative to their parent segment,
-// not to the full 1586 px header. Resource textX/textW are stored in
-// reference-header pixels, so convert them against the segment width here.
-const toLocalPercentX = (px: number, parentWidth: number) => `${(px / parentWidth) * 100}%`;
-
 const boxStyle = (box: Box): React.CSSProperties => ({
   left: toPercentX(box.x),
   top: toPercentY(box.y),
   width: toPercentX(box.w),
   height: toPercentY(box.h),
 });
-
-const countResources = (items: InventoryItem[] = []): Record<ResourceKey, number> => {
-  let food = 0;
-  let water = 0;
-  let wood = 0;
-  let stone = 0;
-  let fiber = 0;
-  let leaves = 0;
-  let rope = 0;
-  let medicine = 0;
-  let firewood = 0;
-
-  for (const item of items) {
-    const def = ITEMS_DATABASE[item.itemId];
-    if (!def) continue;
-
-    if (def.category === 'food') food += item.quantity;
-    if (def.category === 'water' || def.tags.includes('drinkable')) water += item.quantity;
-    if (def.tags.includes('wood') || def.tags.includes('bamboo') || def.tags.includes('pole')) wood += item.quantity;
-    if (def.tags.includes('stone') || def.tags.includes('tool_head')) stone += item.quantity;
-    if (def.tags.includes('fiber') || def.tags.includes('binding') || def.tags.includes('weaving')) fiber += item.quantity;
-    if (def.tags.includes('leaf') || def.tags.includes('roofing')) leaves += item.quantity;
-    if (def.tags.includes('rope') || def.id === 'ITEM_CORD_ROPE') rope += item.quantity;
-    if (def.category === 'medicine' || def.tags.includes('medicine') || def.tags.includes('healing')) medicine += item.quantity;
-    if (def.tags.includes('fuel') || def.tags.includes('tinder') || def.tags.includes('charcoal')) firewood += item.quantity;
-  }
-
-  return {
-    food,
-    water,
-    wood,
-    stone,
-    fiber,
-    leaves,
-    rope,
-    medicine,
-    firewood,
-  };
-};
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   state,
@@ -264,17 +89,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onToggleDevPanel,
   onResetGame,
 }) => {
-  const { gameTime, inventory } = state;
+  const { gameTime } = state;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-
-  // Kho trại chính (Camp Clearing)
-  const campStorage =
-    state.poiStorages?.['AREA_CAMP_CLEARING'] ||
-    state.poiStorages?.['base-camp'] ||
-    Object.entries(state.poiStorages || {}).find(([k]) => k.toLowerCase().includes('camp'))?.[1];
-
-  const partyResourceValues = countResources(inventory.items);
-  const campResourceValues = countResources(campStorage?.items || []);
 
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -284,86 +100,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     }
   };
 
-  const resourceTypography = HEADER_UI.resources.typography;
   const dropdown = HEADER_UI.dropdown;
 
   return (
-    <header className="relative w-full h-full text-[#ecd9b5] select-none z-30">
-      {/* Logo / title hotspot */}
-      <div
-        className="absolute cursor-pointer"
-        style={boxStyle(HEADER_UI.logoHotspot)}
-        title="Green Horizon: Survive • Explore • Belong"
-      />
-
-      {/* 9 dynamic resource labels + values */}
-      {HEADER_UI.resources.items.map((resource) => (
-        <div
-          key={resource.key}
-          className="absolute pointer-events-auto"
-          style={boxStyle(resource.segment)}
-          title={`${resource.title}\n• Túi đồ Party: ${partyResourceValues[resource.key]}\n• Kho trại chính: ${campResourceValues[resource.key]}`}
-        >
-          <span
-            className="absolute text-center whitespace-nowrap uppercase leading-none"
-            style={{
-              left: toLocalPercentX(resource.textX - resource.segment.x, resource.segment.w),
-              top: toPercentY(resourceTypography.label.y),
-              width: toLocalPercentX(resource.textW, resource.segment.w),
-              height: toPercentY(resourceTypography.label.h),
-              fontFamily: resourceTypography.fontFamily,
-              fontSize: `${resourceTypography.label.fontSize}px`,
-              fontWeight: resourceTypography.label.fontWeight,
-              letterSpacing: resourceTypography.label.letterSpacing,
-              color: resourceTypography.label.color,
-              textShadow: resourceTypography.label.textShadow,
-            }}
-          >
-            {resource.label}
-          </span>
-
-          <div
-            className="absolute flex items-baseline justify-center whitespace-nowrap leading-none tabular-nums"
-            style={{
-              left: toLocalPercentX(resource.textX - resource.segment.x, resource.segment.w),
-              top: toPercentY(resourceTypography.value.y),
-              width: toLocalPercentX(resource.textW, resource.segment.w),
-              height: toPercentY(resourceTypography.value.h),
-              fontFamily: resourceTypography.fontFamily,
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            <span
-              style={{
-                fontSize: `${resourceTypography.value.fontSize}px`,
-                fontWeight: resourceTypography.value.fontWeight,
-                letterSpacing: resourceTypography.value.letterSpacing,
-                color: resourceTypography.value.color,
-                textShadow: resourceTypography.value.textShadow,
-              }}
-            >
-              {partyResourceValues[resource.key]}
-            </span>
-            <span
-              style={{
-                fontSize: `${resourceTypography.campValue.fontSize}px`,
-                fontWeight: resourceTypography.campValue.fontWeight,
-                letterSpacing: resourceTypography.campValue.letterSpacing,
-                color: resourceTypography.campValue.color,
-                textShadow: resourceTypography.campValue.textShadow,
-                marginLeft: '1px',
-              }}
-            >
-              ({campResourceValues[resource.key]})
-            </span>
-          </div>
-        </div>
-      ))}
-
-      {/* Fullscreen overlay */}
+    <header className="relative w-full h-full text-[#ecd9b5] select-none z-30 pointer-events-none">
+      {/* 3. Right Action Buttons: Fullscreen & Game Menu */}
+      {/* Fullscreen button overlay */}
       <button
         onClick={handleToggleFullscreen}
-        className="absolute hover:bg-white/10 active:bg-white/20 active:scale-[0.985] transition-all cursor-pointer ring-0 hover:ring-1 hover:ring-emerald-400/40"
+        className="absolute pointer-events-auto hover:bg-white/10 active:bg-white/20 active:scale-[0.985] transition-all cursor-pointer ring-0 hover:ring-1 hover:ring-emerald-400/40"
         style={{
           ...boxStyle(HEADER_UI.actionButtons.fullscreen.box),
           borderRadius: `${HEADER_UI.actionButtons.fullscreen.radius}px`,
@@ -374,7 +119,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
       {/* Game Menu overlay + dropdown anchor */}
       <div
-        className="absolute"
+        className="absolute pointer-events-auto"
         style={boxStyle(HEADER_UI.actionButtons.gameMenu.box)}
       >
         <button
@@ -425,8 +170,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               >
                 <button
                   onClick={() => onSetSpeed(0)}
-                  className={`font-mono font-bold flex items-center justify-center ${
-                    gameTime.speed === 0 ? 'bg-amber-600 text-white' : 'bg-[#22170e] text-[#a89274] hover:text-white'
+                  className={`font-serif font-bold flex items-center justify-center cursor-pointer transition-all border ${
+                    gameTime.speed === 0
+                      ? 'bg-[#6b3c1a] border-[#b87333] text-[#faedd9] shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]'
+                      : 'bg-[#181109] border-[#382617] text-[#a18a6e] hover:text-[#faeed8] hover:border-[#52371f]'
                   }`}
                   style={{
                     paddingTop: `${dropdown.speedSection.buttonPaddingY}px`,
@@ -447,10 +194,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                   <button
                     key={speed}
                     onClick={() => onSetSpeed(speed as 1 | 2 | 4)}
-                    className={`font-mono font-bold flex items-center justify-center ${
+                    className={`font-serif font-bold flex items-center justify-center cursor-pointer transition-all border ${
                       gameTime.speed === speed
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-[#22170e] text-[#a89274] hover:text-white'
+                        ? 'bg-[#2a593e] border-[#52b788] text-white shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]'
+                        : 'bg-[#181109] border-[#382617] text-[#a18a6e] hover:text-[#faeed8] hover:border-[#52371f]'
                     }`}
                     style={{
                       paddingTop: `${dropdown.speedSection.buttonPaddingY}px`,

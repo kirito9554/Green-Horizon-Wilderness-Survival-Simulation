@@ -76,10 +76,14 @@ export const DevPanel: React.FC<DevPanelProps> = ({
 
         <div className="pt-2 border-t border-[#3d2e1c]">
           <span className="text-[10px] text-[#9e8b74] font-serif font-bold block mb-1.5 tracking-wider uppercase">Điều Chỉnh Thời Tiết:</span>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-4 gap-1.5">
             <button onClick={() => onChangeWeather('clear')} className="btn-organic-subtle py-1.5 px-1 text-[10px] text-amber-300 flex items-center justify-center gap-1 font-medium cursor-pointer"><Sun className="w-3 h-3" /> Nắng</button>
-            <button onClick={() => onChangeWeather('heavy_rain')} className="btn-organic-subtle py-1.5 px-1 text-[10px] text-sky-400 flex items-center justify-center gap-1 font-medium cursor-pointer"><CloudRain className="w-3 h-3" /> Mưa</button>
+            <button onClick={() => onChangeWeather('cloudy')} className="btn-organic-subtle py-1.5 px-1 text-[10px] text-slate-300 flex items-center justify-center gap-1 font-medium cursor-pointer">Nhiều mây</button>
+            <button onClick={() => onChangeWeather('light_rain')} className="btn-organic-subtle py-1.5 px-1 text-[10px] text-cyan-300 flex items-center justify-center gap-1 font-medium cursor-pointer"><CloudRain className="w-3 h-3" /> Mưa rào</button>
+            <button onClick={() => onChangeWeather('heavy_rain')} className="btn-organic-subtle py-1.5 px-1 text-[10px] text-blue-400 flex items-center justify-center gap-1 font-medium cursor-pointer">Mưa to</button>
             <button onClick={() => onChangeWeather('storm')} className="btn-organic-danger py-1.5 px-1 text-[10px] text-rose-200 flex items-center justify-center gap-1 font-medium cursor-pointer">Bão táp</button>
+            <button onClick={() => onChangeWeather('fog')} className="btn-organic-subtle py-1.5 px-1 text-[10px] text-emerald-300 flex items-center justify-center gap-1 font-medium cursor-pointer">Sương mù</button>
+            <button onClick={() => onChangeWeather('heat_wave')} className="btn-organic-subtle py-1.5 px-1 text-[10px] text-orange-400 flex items-center justify-center gap-1 font-medium cursor-pointer">Sóng nhiệt</button>
           </div>
         </div>
 

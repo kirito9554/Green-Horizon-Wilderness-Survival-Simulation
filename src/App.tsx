@@ -20,7 +20,8 @@ import {
   assignArtisanToQueueItem,
   transferItemBetweenInventories,
   transferAllItems,
-  getOrCreatePoiStorage
+  getOrCreatePoiStorage,
+  WEATHER_BASELINES,
 } from './simulation/simEngine';
 import { saveManager } from './save/saveManager';
 import { ITEMS_DATABASE } from './data/items';
@@ -29,6 +30,7 @@ import { generateRecruitSurvivor } from './data/survivors';
 
 // Layout & Tactical Components
 import { TopHeader } from './components/layout/TopHeader';
+import { HeaderTacticalHUD } from './components/layout/HeaderTacticalHUD';
 import { TacticalWorldMap } from './components/world/TacticalWorldMap';
 import { TacticalCenterColumn } from './components/layout/TacticalCenterColumn';
 import { TacticalPartyColumn } from './components/layout/TacticalPartyColumn';
@@ -499,7 +501,7 @@ export default function App() {
   };
 
   const handleDevChangeWeather = (weather: WeatherType) => {
-    const defaultWindSpeed = weather === 'storm' ? 85 : weather === 'heavy_rain' ? 45 : weather === 'light_rain' ? 24 : weather === 'cloudy' ? 18 : 8;
+    const base = WEATHER_BASELINES[weather] || WEATHER_BASELINES.clear;
     setGameState(prev => ({
       ...prev,
       weather: {
@@ -507,14 +509,18 @@ export default function App() {
         previous: prev.weather.current,
         current: weather,
         next: weather === 'clear' ? 'cloudy' : 'clear',
+        temperatureC: base.temperatureC,
+        humidityPercent: base.humidityPercent,
+        rainIntensity: base.rainIntensity,
+        cloudCover: base.cloudCover,
         totalDurationMinutes: 180,
         durationRemainingMinutes: 180,
         transitionProgress: 0,
         wind: {
-          speedKmh: defaultWindSpeed,
-          gustKmh: Math.round(defaultWindSpeed * 1.3),
-          directionDeg: 135,
-          cardinal: 'SE',
+          speedKmh: base.windSpeedKmh,
+          gustKmh: Math.round(base.windSpeedKmh * 1.3),
+          directionDeg: base.windDirectionDeg,
+          cardinal: 'NE',
         },
       },
     }));
@@ -536,14 +542,22 @@ export default function App() {
           backgroundSize: '100% 100%' 
         }}
       >
-        {/* 1. Top Header Bar (0% to 9.6% height) */}
-        <div className="absolute top-0 left-0 w-full h-[9.6%] z-20">
+        {/* 1. Top Header Bar (Action buttons: Fullscreen, Menu, etc.) */}
+        <div className="absolute top-0 left-0 w-full h-[11%] z-20 pointer-events-none">
           <TopHeader
             state={gameState}
             onSetSpeed={handleSetSpeed}
             onOpenSaveModal={() => setIsSaveModalOpen(true)}
             onToggleDevPanel={() => setIsDevPanelOpen(!isDevPanelOpen)}
             onResetGame={handleOpenResetModal}
+          />
+        </div>
+
+        {/* 1.1 Tactical HUD (Separated from Header, Layered above header with z-30 to avoid clipping) */}
+        <div className="absolute left-[18.4%] top-[0.3%] w-[61.6%] h-[10.6%] z-30 pointer-events-auto overflow-visible">
+          <HeaderTacticalHUD
+            weather={gameState.weather}
+            gameTime={gameState.gameTime}
           />
         </div>
 

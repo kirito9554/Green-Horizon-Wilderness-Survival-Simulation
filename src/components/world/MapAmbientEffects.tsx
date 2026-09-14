@@ -44,6 +44,7 @@ uniform float uDebug;
 uniform vec2 uCloudOffset;
 uniform vec4 uPoiLights[8];
 uniform float uPoiLightCount;
+uniform float uEnableCampfire;
 
 float hash(vec2 p){
   return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);
@@ -248,12 +249,12 @@ void main(){
   vec3 premul=vec3(0.);
   float alpha=0.;
 
-  // 1. Campfire — centered on the painted flame, not the Base Camp label.
+  // 1. Campfire — hidden by default, can be toggled or repurposed for campfire POIs.
   // Noise bends the falloff so neither the spill nor its edge reads as an ellipse.
   vec2 fireQ=(p-vec2(.4406,.3969))/vec2(.060,.048);
   float fireStable=0.;
   float fireLight=0.;
-  if(dot(fireQ,fireQ)<7.){
+  if(uEnableCampfire>.5 && dot(fireQ,fireQ)<7.){
     vec2 fireWarp=vec2(
       noise(fireQ*2.07+vec2(4.3,time*.041)),
       noise(fireQ.yx*2.23+vec2(-7.1,time*.037))
@@ -523,6 +524,7 @@ export interface MapAmbientEffectsProps {
   speed?: number;
   environment?: Partial<MapShaderEnvironment>;
   poiLights?: readonly MapPoiLight[];
+  enableCampfire?: boolean;
   debugMask?: boolean;
   respectReducedMotion?: boolean;
 }
@@ -534,12 +536,13 @@ export function MapAmbientEffects({
   speed=AMBIENT_TUNING.speed,
   environment,
   poiLights=[],
+  enableCampfire=false,
   debugMask=false,
   respectReducedMotion=false,
 }:MapAmbientEffectsProps){
   const canvasRef=useRef<HTMLCanvasElement>(null);
-  const paramsRef=useRef({strength,speed,environment,poiLights,debugMask,respectReducedMotion});
-  paramsRef.current={strength,speed,environment,poiLights,debugMask,respectReducedMotion};
+  const paramsRef=useRef({strength,speed,environment,poiLights,enableCampfire,debugMask,respectReducedMotion});
+  paramsRef.current={strength,speed,environment,poiLights,enableCampfire,debugMask,respectReducedMotion};
 
   useEffect(()=>{
     const canvas=canvasRef.current;
@@ -782,6 +785,7 @@ export function MapAmbientEffects({
           debug:context.getUniformLocation(program,'uDebug'),
           poiLights:context.getUniformLocation(program,'uPoiLights[0]'),
           poiLightCount:context.getUniformLocation(program,'uPoiLightCount'),
+          enableCampfire:context.getUniformLocation(program,'uEnableCampfire'),
         };
         const poiUniformData=new Float32Array(8*4);
         let uploadedPoiCount=-1;
@@ -799,6 +803,7 @@ export function MapAmbientEffects({
           const current=paramsRef.current;
           context.uniform1f(locations.time,elapsed);
           context.uniform1f(locations.strength,Math.max(0,Math.min(2,current.strength)));
+          context.uniform1f(locations.enableCampfire,current.enableCampfire?1.:0.);
           context.uniform1f(locations.dayMinutes,dayMin);
           context.uniform1f(locations.rain,rain);
           context.uniform1f(locations.cloud,cloud);
