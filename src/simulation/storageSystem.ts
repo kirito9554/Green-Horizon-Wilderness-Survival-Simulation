@@ -27,16 +27,28 @@ function groundLocationId(poiId: string): string {
   return `storage_ground_${poiId}`;
 }
 
+function normalizePolicy(location: StorageLocation): void {
+  location.policy.priority ||= location.isGroundCache ? 'low' : 'normal';
+  location.policy.autoHaul = Boolean(location.policy.autoHaul);
+  location.policy.allowCategories ||= [];
+  location.policy.preferredTags ||= [];
+  location.policy.forbiddenTags ||= [];
+  location.policy.stockRules ||= [];
+  location.policy.acceptDamaged = location.policy.acceptDamaged !== false;
+  location.policy.acceptSpoiled = Boolean(location.policy.acceptSpoiled);
+}
+
 function createGroundLocation(poiId: string): StorageLocation {
   const def = STORAGE_TYPES.STORAGE_GROUND_CACHE;
+  const isCamp = poiId === CAMP_POI_ID;
   return {
     id: groundLocationId(poiId),
     poiId,
-    name: poiId === CAMP_POI_ID ? 'Kho tạm doanh trại' : 'Điểm tập kết',
+    name: isCamp ? 'Kho tạm doanh trại' : 'Điểm tập kết',
     typeId: def.id,
     kind: def.kind,
     isGroundCache: true,
-    capacity: { ...def.capacity },
+    capacity: isCamp ? { ...def.capacity } : { maxWeightKg: 45, maxVolumeL: 70 },
     environment: { ...def.environment },
     policy: cloneValue(def.policy),
     condition: 100,
@@ -44,15 +56,16 @@ function createGroundLocation(poiId: string): StorageLocation {
 }
 
 export function createStorageSystemState(): StorageSystemState {
-  return { version: 1, locations: [createGroundLocation(CAMP_POI_ID)], alerts: [] };
+  return { version: 2, locations: [createGroundLocation(CAMP_POI_ID)], alerts: [], haulJobs: [] };
 }
 
 export function ensureStorageSystem(state: GameState): StorageSystemState {
   state.poiStorages ||= {};
   state.storageSystem ||= createStorageSystemState();
-  state.storageSystem.version = Math.max(1, state.storageSystem.version || 1);
+  state.storageSystem.version = Math.max(2, state.storageSystem.version || 1);
   state.storageSystem.locations ||= [];
   state.storageSystem.alerts ||= [];
+  state.storageSystem.haulJobs ||= [];
 
   const poiIds = new Set<string>([CAMP_POI_ID, ...Object.keys(state.poiStorages)]);
   for (const poiId of poiIds) {
@@ -61,13 +74,21 @@ export function ensureStorageSystem(state: GameState): StorageSystemState {
     }
   }
 
+  for (const location of state.storageSystem.locations) normalizePolicy(location);
+
   for (const building of state.buildings || []) {
     if (!building.isBuilt) continue;
     const type = storageTypeForBuilding(building.buildingId);
     if (!type) continue;
     const locationId = `storage_building_${building.id}`;
-    if (state.storageSystem.locations.some(location => location.id === locationId)) continue;
-    state.storageSystem.locations.push({
+    const existing = state.storageSystem.locations.find(location => location.id === locationId);
+    if (existing) {
+      existing.condition = Math.max(0, Math.min(100, building.condition || 100));
+      existing.parentStructureId = building.clusterId;
+      normalizePolicy(existing);
+      continue;
+    }
+    const created: StorageLocation = {
       id: locationId,
       poiId: building.areaId || CAMP_POI_ID,
       name: type.name,
@@ -79,7 +100,9 @@ export function ensureStorageSystem(state: GameState): StorageSystemState {
       environment: { ...type.environment },
       policy: cloneValue(type.policy),
       condition: Math.max(0, Math.min(100, building.condition || 100)),
-    });
+    };
+    normalizePolicy(created);
+    state.storageSystem.locations.push(created);
   }
 
   // Existing POI stock remains in the canonical inventory used by production;
@@ -87,9 +110,8 @@ export function ensureStorageSystem(state: GameState): StorageSystemState {
   for (const [poiId, inventory] of Object.entries(state.poiStorages)) {
     const fallbackId = groundLocationId(poiId);
     for (const item of inventory.items || []) {
-      if (!item.storageLocationId || !state.storageSystem.locations.some(location => location.id === item.storageLocationId)) {
-        item.storageLocationId = fallbackId;
-      }
+      const validLocation = item.storageLocationId && state.storageSystem.locations.some(location => location.id === item.storageLocationId && location.poiId === poiId);
+      if (!validLocation) item.storageLocationId = fallbackId;
     }
   }
 
@@ -108,8 +130,10 @@ function syncPoiAggregateCapacity(state: GameState): void {
   }
   for (const [poiId, total] of totals.entries()) {
     const inventory = getOrCreatePoiStorage(state, poiId);
-    inventory.maxWeightKg = Math.max(inventory.maxWeightKg, total.weight);
-    inventory.maxVolumeL = Math.max(inventory.maxVolumeL, total.volume);
+    // POI inventories are canonical stock indexes. Their limits mirror the sum
+    // of currently registered physical locations, never a count of UI slots.
+    inventory.maxWeightKg = total.weight;
+    inventory.maxVolumeL = total.volume;
   }
 }
 
@@ -140,7 +164,13 @@ export function summarizeStorageLocation(state: GameState, locationId: string): 
   };
 }
 
-function itemPolicyProblems(location: StorageLocation, item: InventoryItem): string[] {
+function countItemAtLocation(state: GameState, locationId: string, itemId: string): number {
+  return getStorageLocationItems(state, locationId)
+    .filter(item => item.itemId === itemId)
+    .reduce((sum, item) => sum + item.quantity, 0);
+}
+
+function itemPolicyProblems(state: GameState, location: StorageLocation, item: InventoryItem, quantity: number): string[] {
   const def = ITEMS_DATABASE[item.itemId];
   if (!def) return ['Không có dữ liệu vật phẩm'];
   const type = STORAGE_TYPES[location.typeId];
@@ -150,6 +180,10 @@ function itemPolicyProblems(location: StorageLocation, item: InventoryItem): str
   if (!type.allowedForms.includes(form)) reasons.push(`Dạng ${form} không phù hợp với nơi chứa này`);
   if (location.policy.allowCategories.length > 0 && !location.policy.allowCategories.includes(def.category)) reasons.push('Nhóm vật phẩm bị policy chặn');
   if (location.policy.forbiddenTags.some(tag => def.tags.includes(tag))) reasons.push('Vật phẩm có thuộc tính bị cấm tại nơi chứa này');
+  if (!location.policy.acceptDamaged && item.condition !== undefined && item.conditionMax && item.condition / item.conditionMax < 0.5) reasons.push('Policy không nhận vật phẩm hư hỏng nặng');
+  if (!location.policy.acceptSpoiled && item.freshness !== undefined && item.freshness <= 5) reasons.push('Policy không nhận vật phẩm đã hỏng');
+  const rule = location.policy.stockRules.find(entry => entry.itemId === item.itemId);
+  if (rule?.maxQuantity !== undefined && countItemAtLocation(state, location.id, item.itemId) + quantity > rule.maxQuantity) reasons.push(`Đã đạt mức tối đa policy (${rule.maxQuantity})`);
   return reasons;
 }
 
@@ -168,14 +202,17 @@ export function canStoreItemInLocation(
   const remainingVolumeL = Math.max(0, location.capacity.maxVolumeL - (summary?.usedVolumeL || 0));
   const maxByWeight = def.weight > 0 ? Math.floor((remainingWeightKg + 1e-6) / def.weight) : requestedQuantity;
   const maxByVolume = def.volume > 0 ? Math.floor((remainingVolumeL + 1e-6) / def.volume) : requestedQuantity;
-  const maxAcceptableQuantity = Math.max(0, Math.min(requestedQuantity, maxByWeight, maxByVolume, getAvailableInventoryItemQuantity(item)));
-  const reasons = itemPolicyProblems(location, item);
+  const rule = location.policy.stockRules.find(entry => entry.itemId === item.itemId);
+  const byRule = rule?.maxQuantity === undefined ? requestedQuantity : Math.max(0, rule.maxQuantity - countItemAtLocation(state, location.id, item.itemId));
+  const maxAcceptableQuantity = Math.max(0, Math.min(requestedQuantity, maxByWeight, maxByVolume, byRule, getAvailableInventoryItemQuantity(item)));
+  const reasons = itemPolicyProblems(state, location, item, Math.max(1, maxAcceptableQuantity));
   if (maxByWeight <= 0) reasons.push('Không đủ tải trọng còn lại');
   if (maxByVolume <= 0) reasons.push('Không đủ dung tích còn lại');
+  if (byRule <= 0) reasons.push('Đã đạt giới hạn stock policy');
   return {
     accepted: reasons.length === 0 && maxAcceptableQuantity > 0,
     maxAcceptableQuantity: reasons.length === 0 ? maxAcceptableQuantity : 0,
-    reasons,
+    reasons: [...new Set(reasons)],
     remainingWeightKg,
     remainingVolumeL,
   };
@@ -254,7 +291,6 @@ export function takeItemFromLocation(state: GameState, locationId: string, insta
   const result = transferItemBetweenInventories(sourceView, next.inventory, instanceId, quantity);
   replaceLocationItems(poiStorage, locationId, sourceView.items);
   if (result.success) {
-    // Durable tools are copied wholesale by the generic transfer helper.
     for (const item of next.inventory.items) {
       if (item.instanceId === instanceId) item.storageLocationId = undefined;
     }
@@ -269,12 +305,12 @@ export function takeItemFromLocation(state: GameState, locationId: string, insta
   return next;
 }
 
-/** Slot count is UI-derived: one empty row exists only while physical capacity remains. */
+/** Slot count is presentation-only. Full physical storage exposes no active empty drop slots. */
 export function getDynamicStorageSlotCount(itemStackCount: number, columns: number, isFull: boolean): number {
+  if (isFull) return Math.max(0, itemStackCount);
   const safeColumns = Math.max(1, Math.floor(columns));
   const occupiedRows = Math.ceil(itemStackCount / safeColumns);
-  const rows = Math.max(1, occupiedRows + (isFull ? 0 : 1));
-  return Math.max(itemStackCount, rows * safeColumns);
+  return Math.max(safeColumns, (occupiedRows + 1) * safeColumns);
 }
 
 export function tickStorageSimulation(state: GameState, deltaGameMinutes: number): void {
