@@ -18,6 +18,7 @@ import { tickMaintenanceSystem } from './maintenanceSystem';
 import { tickUpgradeSystem } from './upgradeSystem';
 import { createBuildingSimulationState } from './buildGridSystem';
 import { tickBuildingPreparationRuntime } from './buildingPreparationRuntime';
+import { tickBuildingConstructionRuntime } from './buildingConstructionSystem';
 import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
@@ -45,9 +46,10 @@ export * from './upgradeSystem';
 export * from './buildGridSystem';
 export * from './buildingClusterSystem';
 export * from './buildingPreparationRuntime';
+export * from './buildingConstructionSystem';
 
 export const INITIAL_GAME_STATE: GameState = {
-  saveVersion: 6,
+  saveVersion: 7,
   campName: 'Canopy Bay Settlement',
   gameTime: { day: 1, minuteOfDay: 510, speed: 1 },
   weather: {
@@ -135,10 +137,11 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickExpeditions(next, deltaGameMinutes);
   tickItemSimulation(next, deltaGameMinutes);
 
-  // Site-preparation jobs reuse real survivors and the existing build priority.
-  // They run after SurvivorSystem so their runtime can reconcile worker progress
-  // without introducing a second competing action scheduler.
+  // Spatial building jobs share real survivors with the rest of the camp. Both
+  // runtimes own sentinel `building` actions after SurvivorSystem advances the
+  // clock, so legacy completion code cannot consume their targets accidentally.
   tickBuildingPreparationRuntime(next);
+  tickBuildingConstructionRuntime(next);
 
   // All production systems contend for the same physical workstation pool.
   prepareMaintenanceWorkstations(next);
