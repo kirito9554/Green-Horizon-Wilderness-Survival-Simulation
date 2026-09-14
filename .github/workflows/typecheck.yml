@@ -38,5 +38,8 @@ jobs:
       - name: Structure repair and modification smoke test
         run: npm run test:structure-work
 
+      - name: Storage simulation smoke test
+        run: npm run test:storage
+
       - name: Production build
         run: npm run build
