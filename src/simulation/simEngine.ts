@@ -4,6 +4,7 @@ import '../types/researchSimulation';
 import '../types/maintenanceSimulation';
 import '../types/upgradeSimulation';
 import '../types/buildingSimulation';
+import '../types/structureSimulation';
 import { INITIAL_SURVIVORS } from '../data/survivors';
 import { getDefaultResourcePools } from './resourcePools';
 import { advanceTime } from './timeSystem';
@@ -19,6 +20,7 @@ import { tickUpgradeSystem } from './upgradeSystem';
 import { createBuildingSimulationState } from './buildGridSystem';
 import { tickBuildingPreparationRuntime } from './buildingPreparationRuntime';
 import { tickBuildingConstructionRuntime } from './buildingConstructionSystem';
+import { tickStructureLifecycle } from './structureLifecycleSystem';
 import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
@@ -47,6 +49,8 @@ export * from './buildGridSystem';
 export * from './buildingClusterSystem';
 export * from './buildingPreparationRuntime';
 export * from './buildingConstructionSystem';
+export * from './structureComponentSystem';
+export * from './structureLifecycleSystem';
 
 export const INITIAL_GAME_STATE: GameState = {
   saveVersion: 7,
@@ -142,6 +146,11 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   // clock, so legacy completion code cannot consume their targets accidentally.
   tickBuildingPreparationRuntime(next);
   tickBuildingConstructionRuntime(next);
+
+  // A completed phased construction becomes a physical component graph before
+  // environmental exposure is applied. Existing components then accumulate
+  // moisture, rot, flood and storm wear deterministically from their POI cells.
+  tickStructureLifecycle(next, deltaGameMinutes);
 
   // All production systems contend for the same physical workstation pool.
   prepareMaintenanceWorkstations(next);
