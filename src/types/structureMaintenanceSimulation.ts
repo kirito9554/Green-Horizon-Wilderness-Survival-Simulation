@@ -1,3 +1,4 @@
+import type { ItemQuality } from './index';
 import type { MaterialReservation } from './craftingSimulation';
 
 export type StructureMaintenanceMode = 'patch' | 'repair' | 'replace';
@@ -21,6 +22,7 @@ export interface StructureWorkJob {
   progressSeconds: number;
   totalSeconds: number;
   materialsConsumed: boolean;
+  consumedQualities: ItemQuality[];
   materialReservations: MaterialReservation[];
   blockedReasons: string[];
   createdAtGameMinute: number;
