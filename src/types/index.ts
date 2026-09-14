@@ -14,8 +14,8 @@ export type ItemCategory =
   | 'construction';
 
 export interface Nutrition {
-  calories: number;       // Energy kcal
-  hydration: number;      // Water ml
+  calories: number;
+  hydration: number;
   protein?: number;
   fat?: number;
   moraleBonus?: number;
@@ -26,17 +26,17 @@ export interface ToolProperties {
   tier: number;
   durabilityMax: number;
   efficiency: number;
-  hardness?: number;          // 1 - 5: chống mài mòn khi va chạm vật liệu cứng
-  repairable?: boolean;       // có thể mài sắc / buộc lại dây
+  hardness?: number;
+  repairable?: boolean;
 }
 
 export type PreservationType = 
-  | 'raw_fresh'        // Thực phẩm sống, nhanh ươn
-  | 'perishable'       // Thức ăn thông thường
-  | 'cooked'           // Đã nấu chín / nướng, tươi lâu hơn
-  | 'dried'            // Đã sấy khô / hun khói
-  | 'sealed'           // Bịt kín trong đồ chứa
-  | 'non_perishable';  // Không bị hỏng (đá, kim loại, củi khô...)
+  | 'raw_fresh'
+  | 'perishable'
+  | 'cooked'
+  | 'dried'
+  | 'sealed'
+  | 'non_perishable';
 
 export interface BreakageYield {
   itemId: string;
@@ -48,25 +48,25 @@ export interface ItemDefinition {
   name: string;
   description: string;
   category: ItemCategory;
-  weight: number;          // kg per unit
-  volume: number;          // liters per unit
-  stackSize: number;       // max stack in an inventory slot
-  freshnessMaxDays?: number; // days until spoiled (undefined = non-perishable)
+  weight: number;
+  volume: number;
+  stackSize: number;
+  freshnessMaxDays?: number;
   preservationType?: PreservationType;
   nutrition?: Nutrition;
   toolProperties?: ToolProperties;
-  breakageSalvage?: BreakageYield[]; // Phế liệu thu hồi khi độ bền cạn về 0
-  tags: string[];          // e.g., ['wood', 'fiber', 'sharp', 'edible', 'coconut', 'water_container']
-  iconName: string;        // Lucide icon identifier
+  breakageSalvage?: BreakageYield[];
+  tags: string[];
+  iconName: string;
 }
 
 export type ItemQuality = 'crude' | 'standard' | 'prime' | 'masterwork';
 
 export interface QualityBreakdown {
-  crude?: number;      // Tạm bợ / mục nứt / xơ non
-  standard?: number;   // Đạt chuẩn / ráo nước
-  prime?: number;      // Tuyển chọn / chắc thịt / lõi cứng
-  masterwork?: number; // Hoàn mỹ / thượng phẩm
+  crude?: number;
+  standard?: number;
+  prime?: number;
+  masterwork?: number;
 }
 
 export interface CraftedInfo {
@@ -80,13 +80,13 @@ export interface InventoryItem {
   instanceId: string;
   itemId: string;
   quantity: number;
-  quality?: ItemQuality;              // Phẩm chất của trang bị/vật phẩm đơn chiếc
-  qualityBreakdown?: QualityBreakdown; // Phân bổ phẩm chất trong stack
-  condition?: number;                 // Độ bền hiện tại (0 - conditionMax)
-  conditionMax?: number;              // Độ bền tối đa thực tế (được tăng theo phẩm chất)
-  freshness?: number;                 // Độ tươi hiện tại (0 - 100)
-  spoilageMultiplier?: number;        // Hệ số bảo quản riêng (0.5 = chậm gấp đôi)
-  craftedInfo?: CraftedInfo;          // Thông tin thợ chế tác và thời điểm tạo ra
+  quality?: ItemQuality;
+  qualityBreakdown?: QualityBreakdown;
+  condition?: number;
+  conditionMax?: number;
+  freshness?: number;
+  spoilageMultiplier?: number;
+  craftedInfo?: CraftedInfo;
   isFavorite?: boolean;
 }
 
@@ -98,26 +98,26 @@ export interface RecipeIngredient {
 export interface RecipeOutput {
   itemId: string;
   quantity: number;
-  chance?: number;         // 0 - 1 (default 1)
+  chance?: number;
 }
 
 export interface RecipeDefinition {
   id: string;
   name: string;
   description: string;
-  type?: 'crafting' | 'processing'; // 'crafting' (kết hợp/lắp ráp đa thành phần) vs 'processing' (sơ chế/tinh luyện đơn tầng)
+  type?: 'crafting' | 'processing';
   category: 'tools' | 'processing' | 'food' | 'water' | 'materials' | 'shelter' | 'medicine' | 'survival' | 'utility';
   ingredients: RecipeIngredient[];
   outputs: RecipeOutput[];
-  craftTimeSeconds: number; // base time at 1x speed
-  researchTimeSeconds?: number; // Thời gian nghiên cứu bản vẽ (giây) nếu là loại 'crafting'
-  unlockedByDefault?: boolean; // Mở khoá sẵn từ đầu (không cần nghiên cứu)
+  craftTimeSeconds: number;
+  researchTimeSeconds?: number;
+  unlockedByDefault?: boolean;
   tier?: 'Primitive' | 'Basic' | 'Advanced';
-  workstationName?: string; // 'None (Handcraft)' | 'Campfire' | 'Workbench' | 'Kiln'
+  workstationName?: string;
   durabilityLevel?: 'Low' | 'Medium' | 'High' | 'Indestructible' | 'One-time';
   weightKg?: number;
   useCases?: string;
-  ingredientClues?: Record<string, string>; // itemId -> text clue e.g. "Found on beaches and rocky areas"
+  ingredientClues?: Record<string, string>;
   progression?: {
     nextRecipeId: string;
     nextName: string;
@@ -131,7 +131,7 @@ export interface RecipeDefinition {
     skill: string;
     level: number;
   };
-  requiredToolTag?: string; // e.g., 'sharp' (knife or sharp stone)
+  requiredToolTag?: string;
   requiredBuildingId?: string;
 }
 
@@ -166,10 +166,10 @@ export type WeatherType =
   | 'heat_wave';
 
 export interface WindState {
-  speedKmh: number;        // Average wind speed (km/h)
-  gustKmh: number;         // Peak instantaneous gust (km/h)
-  directionDeg: number;    // Direction angle 0-360 degrees
-  cardinal: string;        // Cardinal label e.g., 'N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'
+  speedKmh: number;
+  gustKmh: number;
+  directionDeg: number;
+  cardinal: string;
 }
 
 export interface WeatherState {
@@ -180,9 +180,9 @@ export interface WeatherState {
   humidityPercent: number;
   durationRemainingMinutes: number;
   totalDurationMinutes?: number;
-  transitionProgress?: number; // 0.0 to 1.0
-  rainIntensity?: number;      // 0.0 to 1.0
-  cloudCover?: number;         // 0.0 to 1.0
+  transitionProgress?: number;
+  rainIntensity?: number;
+  cloudCover?: number;
   wind?: WindState;
 }
 
@@ -198,7 +198,7 @@ export type JobType =
 export type JobPriority = 'highest' | 'high' | 'normal' | 'low' | 'disabled';
 
 export interface CurrentAction {
-  type: 'idle' | 'gathering' | 'crafting' | 'building' | 'resting' | 'on_expedition' | 'researching';
+  type: 'idle' | 'gathering' | 'crafting' | 'building' | 'hauling' | 'resting' | 'on_expedition' | 'researching';
   description: string;
   targetId?: string;
   progressSeconds: number;
@@ -212,13 +212,13 @@ export interface SurvivorState {
   role: string;
   avatarColor: string;
   avatarUrl?: string;
-  portraitIndex?: number;  // 0 - 19 in 4x5 sprite sheet
-  health: number;          // 0 - 100
-  hunger: number;          // 0 (full) - 100 (starving)
-  thirst: number;          // 0 (quenched) - 100 (dehydrated)
-  fatigue: number;         // 0 (energetic) - 100 (exhausted)
-  morale: number;          // 0 (broken) - 100 (inspired)
-  skills: Record<string, number>; // foraging, crafting, cooking, medicine, exploration, etc.
+  portraitIndex?: number;
+  health: number;
+  hunger: number;
+  thirst: number;
+  fatigue: number;
+  morale: number;
+  skills: Record<string, number>;
   traits: string[];
   jobPriorities: Record<JobType, JobPriority>;
   currentAction: CurrentAction;
@@ -240,10 +240,10 @@ export interface ResourceNode {
   minYield: number;
   maxYield: number;
   gatherTimeSeconds: number;
-  dangerLevel: number;     // 0 - 100
+  dangerLevel: number;
   requiredToolTag?: string;
-  knowledgeRequired: number; // % needed to see this node
-  respawnTimeMinutes: number; // how long before it can be harvested again
+  knowledgeRequired: number;
+  respawnTimeMinutes: number;
 }
 
 export interface AreaDefinition {
@@ -254,15 +254,15 @@ export interface AreaDefinition {
   imageUrl?: string;
   distanceKm: number;
   baseTravelMinutes: number;
-  baseDanger: number;      // 0 - 100
+  baseDanger: number;
   waterAvailability: 'none' | 'dirty' | 'brackish' | 'fresh_stream';
   nodes: ResourceNode[];
   flavorText: string;
   sector?: 'center' | 'up' | 'down' | 'left' | 'right';
-  mapX?: number; // 0 - 100% position on world map
-  mapY?: number; // 0 - 100% position on world map
-  boxW?: number; // width % of detected label pill on map image
-  boxH?: number; // height % of detected label pill on map image
+  mapX?: number;
+  mapY?: number;
+  boxW?: number;
+  boxH?: number;
   iconType?: 'water' | 'ruins' | 'bamboo' | 'clay' | 'camp' | 'trail' | 'forage' | 'hut' | 'river' | 'wildlife' | 'cave' | 'mountain' | 'village' | 'dock' | 'beach' | 'shrine';
 }
 
@@ -306,11 +306,11 @@ export interface StorageInventory {
 export interface ConstructedBuilding {
   id: string;
   buildingId: string;
-  condition: number;       // 0 - 100
+  condition: number;
   isBuilt: boolean;
   buildProgressSeconds: number;
   totalBuildSeconds: number;
-  areaId?: string;         // Địa điểm POI xây dựng công trình (mặc định AREA_CAMP_CLEARING)
+  areaId?: string;
 }
 
 export interface LogMessage {
@@ -327,7 +327,7 @@ export interface GameSettings {
   foodPolicy: 'ration' | 'normal' | 'generous';
   waterPolicy: 'ration' | 'normal' | 'generous';
   soundEnabled: boolean;
-  gameSpeedMultiplier: number; // for balancing
+  gameSpeedMultiplier: number;
 }
 
 export interface GameState {
@@ -335,8 +335,8 @@ export interface GameState {
   campName: string;
   gameTime: {
     day: number;
-    minuteOfDay: number;   // 0 - 1439
-    speed: 0 | 1 | 2 | 4;  // 0 = paused
+    minuteOfDay: number;
+    speed: 0 | 1 | 2 | 4;
   };
   weather: WeatherState;
   survivors: SurvivorState[];
@@ -347,7 +347,7 @@ export interface GameState {
   };
   areasProgress: Record<string, {
     knowledgePercent: number;
-    lastGatheredTime: Record<string, number>; // nodeId -> gameMinute
+    lastGatheredTime: Record<string, number>;
   }>;
   buildings: ConstructedBuilding[];
   poiStorages?: Record<string, StorageInventory>;
