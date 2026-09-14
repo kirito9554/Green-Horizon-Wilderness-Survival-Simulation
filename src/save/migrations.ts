@@ -4,6 +4,7 @@ import '../types/researchSimulation';
 import '../types/maintenanceSimulation';
 import '../types/upgradeSimulation';
 import '../types/buildingSimulation';
+import '../types/structureMaintenanceSimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { ensureToolComponentInstances } from '../simulation/componentSystem';
 import { rebuildReservationCounters } from '../simulation/materialReservationSystem';
@@ -13,7 +14,7 @@ import { ensureUpgradeSystem, rebuildUpgradeLocks } from '../simulation/upgradeS
 import { rebuildJobReservationCounters } from '../simulation/jobReservationSystem';
 import { ensureBuildingSimulation, getOrCreatePoiBuildGrid } from '../simulation/buildGridSystem';
 
-export const LATEST_SAVE_VERSION = 7;
+export const LATEST_SAVE_VERSION = 8;
 
 function stableStringSeed(value: string): number {
   let hash = 2166136261;
@@ -122,6 +123,21 @@ function migrateToV7(state: GameState): void {
   state.saveVersion = 7;
 }
 
+function migrateToV8(state: GameState): void {
+  const simulation = ensureBuildingSimulation(state);
+  simulation.version = 3;
+  simulation.structureWorkJobs ||= [];
+  simulation.structureWorkHistory ||= [];
+  for (const job of simulation.structureWorkJobs) {
+    job.materialReservations ||= [];
+    job.blockedReasons ||= [];
+    job.consumedQualities ||= [];
+    job.materialsConsumed = Boolean(job.materialsConsumed);
+    job.progressSeconds ||= 0;
+  }
+  state.saveVersion = 8;
+}
+
 export function migrateGameState(rawState: GameState): GameState {
   const state = rawState;
   const fromVersion = Math.max(1, state.saveVersion || 1);
@@ -132,6 +148,7 @@ export function migrateGameState(rawState: GameState): GameState {
   if (fromVersion < 5) migrateToV5(state);
   if (fromVersion < 6) migrateToV6(state);
   if (fromVersion < 7) migrateToV7(state);
+  if (fromVersion < 8) migrateToV8(state);
 
   state.poiStorages = state.poiStorages || {};
   state.craftingQueue = state.craftingQueue || [];
@@ -157,8 +174,10 @@ export function migrateGameState(rawState: GameState): GameState {
   const maintenance = ensureMaintenanceSystem(state);
   const upgrades = ensureUpgradeSystem(state);
   const buildingSimulation = ensureBuildingSimulation(state);
-  buildingSimulation.version = Math.max(2, buildingSimulation.version || 1);
+  buildingSimulation.version = Math.max(3, buildingSimulation.version || 1);
   buildingSimulation.constructionJobs ||= [];
+  buildingSimulation.structureWorkJobs ||= [];
+  buildingSimulation.structureWorkHistory ||= [];
   getOrCreatePoiBuildGrid(state, 'AREA_CAMP_CLEARING');
 
   // Rebuild reservations in deterministic ownership order. Later systems only
@@ -191,6 +210,25 @@ export function migrateGameState(rawState: GameState): GameState {
         job.status = 'waiting_materials';
         if (!job.blockedReasons.length) job.blockedReasons = ['Vật liệu đã thay đổi sau khi tải save'];
       }
+    }
+  }
+
+  // Structure work is rebuilt after construction so an old save cannot let a
+  // repair/modification claim material that a planned structure already owns.
+  for (const job of buildingSimulation.structureWorkJobs) {
+    job.materialReservations ||= [];
+    job.blockedReasons ||= [];
+    job.consumedQualities ||= [];
+    job.materialsConsumed = Boolean(job.materialsConsumed);
+    if (job.materialsConsumed) {
+      job.materialReservations = [];
+      continue;
+    }
+
+    job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations);
+    if (job.materialReservations.length === 0 && job.status !== 'in_progress' && job.status !== 'paused') {
+      job.status = 'waiting_materials';
+      if (!job.blockedReasons.length) job.blockedReasons = ['Vật liệu đã thay đổi sau khi tải save'];
     }
   }
 
