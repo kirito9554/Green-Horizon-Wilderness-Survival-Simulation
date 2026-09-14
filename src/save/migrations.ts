@@ -3,6 +3,7 @@ import '../types/craftingSimulation';
 import '../types/researchSimulation';
 import '../types/maintenanceSimulation';
 import '../types/upgradeSimulation';
+import '../types/buildingSimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { ensureToolComponentInstances } from '../simulation/componentSystem';
 import { rebuildReservationCounters } from '../simulation/materialReservationSystem';
@@ -10,8 +11,9 @@ import { ensureResearchSystem, refreshResearchEvidence } from '../simulation/res
 import { ensureMaintenanceSystem, rebuildMaintenanceLocks } from '../simulation/maintenanceSystem';
 import { ensureUpgradeSystem, rebuildUpgradeLocks } from '../simulation/upgradeSystem';
 import { rebuildJobReservationCounters } from '../simulation/jobReservationSystem';
+import { ensureBuildingSimulation, getOrCreatePoiBuildGrid } from '../simulation/buildGridSystem';
 
-export const LATEST_SAVE_VERSION = 5;
+export const LATEST_SAVE_VERSION = 6;
 
 function stableStringSeed(value: string): number {
   let hash = 2166136261;
@@ -97,6 +99,18 @@ function migrateToV5(state: GameState): void {
   state.saveVersion = 5;
 }
 
+function migrateToV6(state: GameState): void {
+  const simulation = ensureBuildingSimulation(state);
+  simulation.version = 1;
+  simulation.clusters ||= [];
+  simulation.preparationJobs ||= [];
+  simulation.gridsByPoiId ||= {};
+  // Generate only the current camp lazily during migration. Other POIs receive
+  // their deterministic grid the first time the player plans construction there.
+  getOrCreatePoiBuildGrid(state, 'AREA_CAMP_CLEARING');
+  state.saveVersion = 6;
+}
+
 export function migrateGameState(rawState: GameState): GameState {
   const state = rawState;
   const fromVersion = Math.max(1, state.saveVersion || 1);
@@ -105,6 +119,7 @@ export function migrateGameState(rawState: GameState): GameState {
   if (fromVersion < 3) migrateToV3(state);
   if (fromVersion < 4) migrateToV4(state);
   if (fromVersion < 5) migrateToV5(state);
+  if (fromVersion < 6) migrateToV6(state);
 
   state.poiStorages = state.poiStorages || {};
   state.craftingQueue = state.craftingQueue || [];
@@ -126,6 +141,8 @@ export function migrateGameState(rawState: GameState): GameState {
   state.craftedRecipeCounts ||= {};
   const maintenance = ensureMaintenanceSystem(state);
   const upgrades = ensureUpgradeSystem(state);
+  ensureBuildingSimulation(state);
+  getOrCreatePoiBuildGrid(state, 'AREA_CAMP_CLEARING');
 
   // Rebuild in deterministic order so every system sees the same canonical
   // free stock after a load: Craft -> Repair -> Upgrade -> exclusive item locks.
