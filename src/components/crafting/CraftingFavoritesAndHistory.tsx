@@ -19,105 +19,48 @@ export const CraftingFavoritesAndHistory: React.FC<CraftingFavoritesAndHistoryPr
   onSelectRecipe,
   onOpenFavoritesModal,
 }) => {
-  const favoriteRecipes = allRecipes.filter((r) => favoriteRecipeIds.includes(r.id));
+  const favoriteRecipes = allRecipes.filter((recipe) => favoriteRecipeIds.includes(recipe.id));
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pt-2.5 border-t border-[#2d4d3c]/40 select-none">
-      {/* Recently Crafted Bar */}
-      <div className="flex flex-col gap-1.5 p-2.5 rounded-lg bg-[#0a1813]/80 border border-[#1f382a]/70">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#9db7a7]">
-            <History className="w-3.5 h-3.5 text-[#5eead4]" />
-            <span>RECENTLY CRAFTED</span>
-          </div>
-          <span className="text-[10px] text-[#698574] font-mono">
-            {recentHistory.length} ENTRIES
-          </span>
+    <div className="h-[82px] shrink-0 grid grid-cols-[1.65fr_.85fr] border-t border-[#42513e] bg-[#071711] select-none overflow-hidden">
+      <section className="min-w-0 px-2.5 py-1.5 border-r border-[#40503d]">
+        <div className="h-5 flex items-center gap-1.5 text-[11px] font-black text-[#e8dfcc] uppercase tracking-wide">
+          <History className="w-3.5 h-3.5 text-[#e3cf6b]" /> Recently Crafted
         </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto py-1">
+        <div className="h-[50px] flex items-center gap-1.5 overflow-x-auto custom-scrollbar-horizontal">
           {recentHistory.length === 0 ? (
-            <div className="text-[11px] text-[#61796b] italic py-1">
-              No items crafted recently yet.
-            </div>
+            <span className="text-[10px] italic text-[#738174]">Nothing crafted recently.</span>
           ) : (
-            recentHistory.map((item) => {
+            recentHistory.slice(0, 7).map((item) => {
               const recipe = allRecipes.find((r) => r.id === item.recipeId);
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => recipe && onSelectRecipe(recipe)}
-                  className="group flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-[#12241d]/90 hover:bg-[#183027] border border-[#2b4c3a]/50 hover:border-[#4ade80]/60 transition-all text-left shrink-0 cursor-pointer"
+                  className="h-10 shrink-0 px-2 flex items-center gap-1.5 border border-[#344b3c] bg-[#0b2019] hover:border-[#69745b] cursor-pointer"
                 >
-                  <div className="w-6 h-6 rounded bg-[#091510] flex items-center justify-center overflow-hidden border border-[#243d30]">
-                    <CraftedItemArt recipeId={item.recipeId} size={22} />
-                  </div>
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] font-bold text-[#e1ece5] group-hover:text-[#4ade80] transition-colors leading-tight">
-                        {item.name}
-                      </span>
-                      <span className="text-[10px] font-mono font-bold text-[#86efac]">
-                        x{item.quantity}
-                      </span>
-                    </div>
-                    <span className="text-[9px] text-[#6e8879]">{item.timeAgoText}</span>
-                  </div>
+                  <CraftedItemArt recipeId={item.recipeId} size={30} />
+                  <div className="text-left"><div className="text-[10px] font-bold text-[#e9e2d3] leading-none">{item.name}</div><div className="text-[8.5px] mt-1 text-[#7f8d80]">x{item.quantity} · {item.timeAgoText}</div></div>
                 </button>
               );
             })
           )}
         </div>
-      </div>
+      </section>
 
-      {/* Favorites Bar */}
-      <div className="flex flex-col gap-1.5 p-2.5 rounded-lg bg-[#0a1813]/80 border border-[#1f382a]/70">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#9db7a7]">
-            <Star className="w-3.5 h-3.5 text-[#fbbf24] fill-[#fbbf24]" />
-            <span>FAVORITES</span>
-          </div>
-          <span className="text-[10px] text-[#698574] font-mono">
-            {favoriteRecipes.length} PINNED
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto py-1">
-          {favoriteRecipes.length === 0 ? (
-            <div className="text-[11px] text-[#61796b] italic py-1">
-              Click the star on any recipe card to pin it here.
-            </div>
-          ) : (
-            favoriteRecipes.map((recipe) => (
-              <button
-                key={recipe.id}
-                type="button"
-                onClick={() => onSelectRecipe(recipe)}
-                className="group flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-[#12241d]/90 hover:bg-[#183027] border border-[#2b4c3a]/50 hover:border-[#fbbf24]/60 transition-all text-left shrink-0 cursor-pointer"
-              >
-                <div className="w-6 h-6 rounded bg-[#091510] flex items-center justify-center overflow-hidden border border-[#243d30]">
-                  <CraftedItemArt recipeId={recipe.id} size={22} />
-                </div>
-                <span className="text-[11px] font-bold text-[#e1ece5] group-hover:text-[#fbbf24] transition-colors leading-tight">
-                  {recipe.name}
-                </span>
-              </button>
-            ))
-          )}
-
-          {onOpenFavoritesModal && (
-            <button
-              type="button"
-              onClick={onOpenFavoritesModal}
-              title="Pin more favorites"
-              className="w-8 h-8 rounded-md bg-[#12241d]/60 hover:bg-[#1c382b] border border-[#2b4c3a]/50 flex items-center justify-center text-[#759180] hover:text-[#fbbf24] transition-colors shrink-0 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
+      <section className="min-w-0 px-2.5 py-1.5">
+        <div className="h-5 flex items-center gap-1.5 text-[11px] font-black text-[#e8dfcc] uppercase tracking-wide"><Star className="w-3.5 h-3.5 text-[#e8cb59] fill-current" /> Favorites</div>
+        <div className="h-[50px] flex items-center gap-1.5 overflow-x-auto custom-scrollbar-horizontal">
+          {favoriteRecipes.slice(0, 4).map((recipe) => (
+            <button key={recipe.id} type="button" onClick={() => onSelectRecipe(recipe)} className="h-10 min-w-[92px] flex items-center gap-1.5 px-2 border border-[#344b3c] bg-[#0b2019] hover:border-[#c9b84c] cursor-pointer">
+              <CraftedItemArt recipeId={recipe.id} size={29} />
+              <span className="text-[9.5px] font-bold text-[#e9e2d3] truncate">{recipe.name}</span>
             </button>
-          )}
+          ))}
+          {onOpenFavoritesModal && <button type="button" onClick={onOpenFavoritesModal} className="w-10 h-10 shrink-0 border border-dashed border-[#566753] text-[#d7cb9b] flex items-center justify-center cursor-pointer"><Plus className="w-4 h-4" /></button>}
         </div>
-      </div>
+      </section>
     </div>
   );
 };
