@@ -1,5 +1,6 @@
 import { GameState } from '../types';
 import { INITIAL_GAME_STATE } from '../simulation/simEngine';
+import { LATEST_SAVE_VERSION, migrateGameState } from './migrations';
 
 const SAVE_KEY_PREFIX = 'canopy_save_slot_';
 const AUTOSAVE_KEY = 'canopy_autosave';
@@ -14,11 +15,23 @@ export interface SaveMetadata {
   version: number;
 }
 
+function parseAndMigrate(raw: string): GameState | null {
+  try {
+    const parsed = JSON.parse(raw) as GameState;
+    if (!parsed.survivors || !parsed.gameTime || !parsed.inventory) return null;
+    return migrateGameState(parsed);
+  } catch (e) {
+    console.error('Failed to parse/migrate save data', e);
+    return null;
+  }
+}
+
 export const saveManager = {
   saveToSlot(slot: number, state: GameState): boolean {
     try {
       const dataToSave = {
         ...state,
+        saveVersion: LATEST_SAVE_VERSION,
         timestamp: Date.now(),
       };
       localStorage.setItem(`${SAVE_KEY_PREFIX}${slot}`, JSON.stringify(dataToSave));
@@ -33,17 +46,7 @@ export const saveManager = {
     try {
       const raw = localStorage.getItem(`${SAVE_KEY_PREFIX}${slot}`);
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as GameState;
-      if (!parsed.saveVersion || !parsed.survivors) return null;
-      if (!parsed.poiStorages) {
-        parsed.poiStorages = JSON.parse(JSON.stringify(INITIAL_GAME_STATE.poiStorages || {}));
-      }
-      if (parsed.buildings) {
-        parsed.buildings.forEach(b => {
-          if (!b.areaId) b.areaId = 'AREA_CAMP_CLEARING';
-        });
-      }
-      return parsed;
+      return parseAndMigrate(raw);
     } catch (e) {
       console.error('Failed to load from slot', slot, e);
       return null;
@@ -83,7 +86,11 @@ export const saveManager = {
 
   autoSave(state: GameState): void {
     try {
-      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ ...state, timestamp: Date.now() }));
+      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({
+        ...state,
+        saveVersion: LATEST_SAVE_VERSION,
+        timestamp: Date.now(),
+      }));
     } catch (e) {
       console.warn('Autosave skipped', e);
     }
@@ -93,28 +100,21 @@ export const saveManager = {
     try {
       const raw = localStorage.getItem(AUTOSAVE_KEY);
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as GameState;
-      if (!parsed.poiStorages) {
-        parsed.poiStorages = JSON.parse(JSON.stringify(INITIAL_GAME_STATE.poiStorages || {}));
-      }
-      if (parsed.buildings) {
-        parsed.buildings.forEach(b => {
-          if (!b.areaId) b.areaId = 'AREA_CAMP_CLEARING';
-        });
-      }
-      return parsed;
-    } catch {
+      return parseAndMigrate(raw);
+    } catch (e) {
+      console.warn('Failed to load autosave', e);
       return null;
     }
   },
 
   exportSaveJSON(state: GameState): void {
-    const jsonStr = JSON.stringify(state, null, 2);
+    const exportState = { ...state, saveVersion: LATEST_SAVE_VERSION };
+    const jsonStr = JSON.stringify(exportState, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `canopy_save_day${state.gameTime.day}_v${state.saveVersion}.json`;
+    a.download = `canopy_save_day${state.gameTime.day}_v${LATEST_SAVE_VERSION}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -123,19 +123,11 @@ export const saveManager = {
 
   importSaveJSON(fileContent: string): GameState | null {
     try {
-      const parsed = JSON.parse(fileContent);
+      const parsed = JSON.parse(fileContent) as GameState;
       if (!parsed.survivors || !parsed.gameTime || !parsed.inventory) {
         throw new Error('Invalid save file structure');
       }
-      if (!parsed.poiStorages) {
-        parsed.poiStorages = JSON.parse(JSON.stringify(INITIAL_GAME_STATE.poiStorages || {}));
-      }
-      if (parsed.buildings) {
-        parsed.buildings.forEach((b: any) => {
-          if (!b.areaId) b.areaId = 'AREA_CAMP_CLEARING';
-        });
-      }
-      return parsed as GameState;
+      return migrateGameState(parsed);
     } catch (e) {
       console.error('Failed to parse save file JSON', e);
       return null;
@@ -156,13 +148,10 @@ export const saveManager = {
       for (let i = 1; i <= 10; i++) {
         localStorage.removeItem(`${SAVE_KEY_PREFIX}${i}`);
       }
-      // Clean sweep any lingering canopy_ keys
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.startsWith('canopy_')) {
-          keysToRemove.push(key);
-        }
+        if (key && key.startsWith('canopy_')) keysToRemove.push(key);
       }
       keysToRemove.forEach(k => localStorage.removeItem(k));
     } catch (e) {
@@ -177,6 +166,6 @@ export const saveManager = {
       console.warn('Failed to clear autosave during reset', e);
     }
     const fresh: GameState = JSON.parse(JSON.stringify(INITIAL_GAME_STATE));
-    return fresh;
+    return migrateGameState(fresh);
   },
 };
