@@ -15,6 +15,10 @@ import { tickCraftingAndResearch } from './craftingSystem';
 import { tickComponentBootstrap } from './componentBootstrapSystem';
 import { tickMaintenanceSystem } from './maintenanceSystem';
 import { tickUpgradeSystem } from './upgradeSystem';
+import {
+  prepareMaintenanceWorkstations,
+  prepareUpgradeWorkstations,
+} from './productionWorkstationCoordinator';
 
 export * from './inventorySystem';
 export * from './timeSystem';
@@ -31,6 +35,7 @@ export * from './componentSystem';
 export * from './componentWearSystem';
 export * from './craftQualitySystem';
 export * from './workstationSystem';
+export * from './productionWorkstationCoordinator';
 export * from './researchSystem';
 export * from './maintenanceSystem';
 export * from './upgradeSystem';
@@ -123,9 +128,13 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickExpeditions(next, deltaGameMinutes);
   tickItemSimulation(next, deltaGameMinutes);
 
-  // Production systems compete for the same idle workers and reserved stock.
-  // Maintenance gets first claim, then upgrades, then normal production/research.
+  // All production systems now contend for the same physical workstation pool.
+  // Priority remains Maintenance -> Upgrade -> Craft/Research. A heavy repair
+  // claims the workbench before upgrades/crafting; field maintenance/sharpening
+  // uses handcraft and therefore does not consume a physical station slot.
+  prepareMaintenanceWorkstations(next);
   tickMaintenanceSystem(next, deltaGameSeconds);
+  prepareUpgradeWorkstations(next);
   tickUpgradeSystem(next, deltaGameSeconds);
   tickCraftingAndResearch(next, deltaGameSeconds);
 
