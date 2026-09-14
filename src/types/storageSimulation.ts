@@ -1,0 +1,102 @@
+import type { ItemQuality } from './index';
+
+export type StorageKind = 'ground_cache' | 'container' | 'rack' | 'bulk' | 'liquid' | 'structure';
+export type StoragePriority = 'low' | 'normal' | 'high' | 'critical';
+export type StorageForm = 'loose' | 'stackable' | 'bundle' | 'long' | 'liquid' | 'fragile' | 'bulk';
+
+export interface StorageCapacity {
+  maxWeightKg: number;
+  maxVolumeL: number;
+  maxItemLengthCm?: number;
+  liquidCapacityL?: number;
+}
+
+export interface StorageEnvironmentProfile {
+  moistureProtection: number;
+  rainProtection: number;
+  pestProtection: number;
+  ventilation: number;
+  temperatureBuffer: number;
+  contaminationProtection: number;
+  fireProtection: number;
+  accessibility: number;
+}
+
+export interface StoragePolicy {
+  priority: StoragePriority;
+  autoHaul: boolean;
+  allowCategories: string[];
+  preferredTags: string[];
+  forbiddenTags: string[];
+  acceptDamaged: boolean;
+  acceptSpoiled: boolean;
+}
+
+export interface StorageLocation {
+  id: string;
+  poiId: string;
+  name: string;
+  typeId: string;
+  kind: StorageKind;
+  buildingInstanceId?: string;
+  parentStructureId?: string;
+  isGroundCache?: boolean;
+  capacity: StorageCapacity;
+  environment: StorageEnvironmentProfile;
+  policy: StoragePolicy;
+  condition: number;
+}
+
+export interface StorageAlert {
+  id: string;
+  locationId: string;
+  severity: 'info' | 'warning' | 'danger';
+  message: string;
+}
+
+export interface StorageSystemState {
+  version: number;
+  locations: StorageLocation[];
+  alerts: StorageAlert[];
+}
+
+export interface StorageAcceptanceResult {
+  accepted: boolean;
+  maxAcceptableQuantity: number;
+  reasons: string[];
+  remainingWeightKg: number;
+  remainingVolumeL: number;
+}
+
+export interface StorageLocationSummary {
+  location: StorageLocation;
+  usedWeightKg: number;
+  usedVolumeL: number;
+  usedPercent: number;
+  itemStacks: number;
+  availableUnits: number;
+  reservedUnits: number;
+  isFull: boolean;
+}
+
+export interface StorageItemEnvironmentState {
+  moisture: number;
+  contamination: number;
+  pestDamage: number;
+  lastStorageQuality?: ItemQuality;
+}
+
+declare module './index' {
+  interface InventoryItem {
+    storageLocationId?: string;
+    moisture?: number;
+    contamination?: number;
+    pestDamage?: number;
+  }
+
+  interface GameState {
+    storageSystem?: StorageSystemState;
+  }
+}
+
+export {};
