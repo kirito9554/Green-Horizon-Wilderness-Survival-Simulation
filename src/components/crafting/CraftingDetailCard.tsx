@@ -1,19 +1,5 @@
-import React, { useState } from 'react';
-import {
-  Clock3,
-  Hammer,
-  Plus,
-  Minus,
-  CheckCircle2,
-  AlertTriangle,
-  Bookmark,
-  Sparkles,
-  Shield,
-  Weight,
-  Layers,
-  Flame,
-  UserCheck,
-} from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Clock3, Hammer, Bookmark, Weight, Shield, Layers, UserCheck, Minus, Plus } from 'lucide-react';
 import { RecipeDefinition, SurvivorState, InventoryItem } from '../../types';
 import { ITEMS_DATABASE } from '../../data/items';
 import { CraftedItemArt } from './CraftedItemArt';
@@ -44,291 +30,152 @@ export const CraftingDetailCard: React.FC<CraftingDetailCardProps> = ({
 }) => {
   const [quantity, setQuantity] = useState(1);
 
-  // Calculate owned counts for each ingredient
-  const ingredientStatus = recipe.ingredients.map((ing) => {
-    const owned = inventoryItems
-      .filter((i) => i.itemId === ing.itemId)
-      .reduce((sum, i) => sum + i.quantity, 0);
-    const requiredTotal = ing.quantity * quantity;
-    const isSufficient = owned >= requiredTotal;
-    const itemDef = ITEMS_DATABASE[ing.itemId];
-    const clue = recipe.ingredientClues?.[ing.itemId] || 'Gathered from exploration & resource nodes';
+  const ingredientStatus = useMemo(
+    () => recipe.ingredients.map((ing) => {
+      const owned = inventoryItems
+        .filter((item) => item.itemId === ing.itemId)
+        .reduce((sum, item) => sum + item.quantity, 0);
+      const required = ing.quantity * quantity;
+      const itemDef = ITEMS_DATABASE[ing.itemId];
+      return {
+        itemId: ing.itemId,
+        name: itemDef?.name || ing.itemId.replace('ITEM_', '').replace(/_/g, ' '),
+        owned,
+        required,
+        sufficient: owned >= required,
+        clue: recipe.ingredientClues?.[ing.itemId] || 'Gathered while exploring the island',
+      };
+    }),
+    [recipe, inventoryItems, quantity]
+  );
 
-    return {
-      itemId: ing.itemId,
-      name: itemDef?.name || ing.itemId.replace('ITEM_', '').replace(/_/g, ' '),
-      owned,
-      requiredPerUnit: ing.quantity,
-      requiredTotal,
-      isSufficient,
-      clue,
-    };
-  });
-
-  const canAfford = ingredientStatus.every((ing) => ing.isSufficient);
-
-  // Maximum craftable based on available inventory
+  const canAfford = ingredientStatus.every((item) => item.sufficient);
   const maxCraftable = Math.max(
-    1,
+    0,
     Math.min(
       ...recipe.ingredients.map((ing) => {
         const owned = inventoryItems
-          .filter((i) => i.itemId === ing.itemId)
-          .reduce((sum, i) => sum + i.quantity, 0);
+          .filter((item) => item.itemId === ing.itemId)
+          .reduce((sum, item) => sum + item.quantity, 0);
         return Math.floor(owned / ing.quantity);
       })
     )
   );
-
   const selectedSurvivor = survivors.find((s) => s.id === selectedSurvivorId) || survivors[0];
-  const isSurvivorBusy = selectedSurvivor && selectedSurvivor.currentAction.type !== 'idle';
-  const craftingSkill = Math.round(selectedSurvivor?.skills.crafting || 1);
-
-  const handleAdjustQty = (delta: number) => {
-    setQuantity((prev) => Math.max(1, Math.min(99, prev + delta)));
-  };
-
-  const handleSetMax = () => {
-    if (maxCraftable > 0 && maxCraftable !== Infinity) {
-      setQuantity(maxCraftable);
-    }
-  };
-
-  const tier = recipe.tier || 'Primitive';
-  const durability = recipe.durabilityLevel || 'Medium';
-  const weight = recipe.weightKg ? `${recipe.weightKg} kg` : '0.5 kg';
-  const workstation = recipe.workstationName || 'None (Handcraft)';
+  const survivorBusy = !!selectedSurvivor && selectedSurvivor.currentAction.type !== 'idle';
   const totalCraftTime = recipe.craftTimeSeconds * quantity;
+  const workstation = recipe.workstationName || 'None (Handcraft)';
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-b from-[#11231c]/95 via-[#0c1a14]/95 to-[#08130f]/98 rounded-xl border border-[#274b39]/80 p-3.5 shadow-xl select-none overflow-y-auto scrollbar-thin scrollbar-thumb-[#2f5540] scrollbar-track-[#091410]">
-      {/* 1. Header: Title, Tier, Category, Pin */}
-      <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-[rgba(90,125,102,0.22)]">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-base md:text-lg font-black text-[#f7f2e7] tracking-wider uppercase font-serif drop-shadow">
-              {recipe.name}
-            </h2>
-            <span
-              className={`text-[9.5px] font-black uppercase px-2 py-0.5 rounded tracking-widest ${
-                tier === 'Advanced'
-                  ? 'bg-[#7c2d12]/80 text-[#fdba74] border border-[#ea580c]/50'
-                  : tier === 'Basic'
-                  ? 'bg-[#1e3a8a]/70 text-[#93c5fd] border border-[#3b82f6]/40'
-                  : 'bg-[#292524]/80 text-[#d6d3d1] border border-[#57534e]/50'
-              }`}
-            >
-              {tier}
-            </span>
+    <section className="h-full min-h-0 flex flex-col overflow-hidden border border-[#3b513f] bg-gradient-to-b from-[#0d211b] to-[#071611] shadow-inner">
+      <div className="shrink-0 p-3 border-b border-[#34493a]">
+        <div className="flex gap-3">
+          <div className="w-[92px] h-[92px] shrink-0 rounded-[5px] border border-[#49624e] bg-[#091510] flex items-center justify-center">
+            <CraftedItemArt
+              itemId={recipe.outputs[0]?.itemId || ''}
+              recipeId={recipe.id}
+              size={82}
+              className="drop-shadow-[0_5px_8px_rgba(0,0,0,.8)]"
+            />
           </div>
 
-          <div className="flex items-center gap-2 mt-1 text-[11px] text-[#91a89b]">
-            <span className="capitalize px-1.5 py-0.2 rounded bg-[#173024] text-[#86e2ab] font-medium">
-              {recipe.category}
-            </span>
-            <span>•</span>
-            <span className="text-[#a4b8ad]">Workstation: {workstation}</span>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => onTogglePin(recipe.id)}
-          title={isPinned ? 'Remove from favorites' : 'Pin to favorites'}
-          className={`p-1.5 rounded-md border transition-all cursor-pointer ${
-            isPinned
-              ? 'bg-[#b45309]/30 border-[#f59e0b] text-[#fbbf24]'
-              : 'bg-[#0b1613] border-[#254434]/60 text-[#60796b] hover:text-[#b4c8bc]'
-          }`}
-        >
-          <Bookmark className={`w-4 h-4 ${isPinned ? 'fill-current' : ''}`} />
-        </button>
-      </div>
-
-      {/* 2. Main Hero Showcase & Specs */}
-      <div className="flex items-center gap-3 my-3 p-2.5 rounded-lg bg-[#07130f]/80 border border-[#1b3628]/60">
-        <div className="shrink-0 w-20 h-20 rounded-lg bg-gradient-to-b from-[#132d22] to-[#0a1712] border border-[#315a44] flex items-center justify-center p-1.5 relative shadow-inner">
-          <div className="absolute inset-0 bg-radial from-[#34d399]/10 to-transparent pointer-events-none" />
-          <CraftedItemArt
-            itemId={recipe.outputs[0]?.itemId || ''}
-            recipeId={recipe.id}
-            size={68}
-            className="filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
-          />
-        </div>
-
-        <div className="flex-1 min-w-0 space-y-1.5">
-          <p className="text-xs text-[#b8cbbf] leading-relaxed line-clamp-2">
-            {recipe.description}
-          </p>
-
-          {recipe.useCases && (
-            <div className="text-[11px] text-[#81998c]">
-              <span className="text-[#a7beaf] font-semibold">Use cases: </span>
-              <span className="italic text-[#c2d5c8]">{recipe.useCases}</span>
-            </div>
-          )}
-
-          {/* Mini Stats Badges */}
-          <div className="flex items-center gap-2 pt-0.5">
-            <div className="flex items-center gap-1 text-[10px] text-[#869b8e] bg-[#11241c] px-2 py-0.5 rounded border border-[#214232]">
-              <Weight className="w-2.5 h-2.5 text-[#5eead4]" />
-              <span>{weight}</span>
-            </div>
-
-            <div className="flex items-center gap-1 text-[10px] text-[#869b8e] bg-[#11241c] px-2 py-0.5 rounded border border-[#214232]">
-              <Shield className="w-2.5 h-2.5 text-[#a78bfa]" />
-              <span>Durability: <strong className="text-[#d8b4fe]">{durability}</strong></span>
-            </div>
-
-            <div className="flex items-center gap-1 text-[10px] text-[#869b8e] bg-[#11241c] px-2 py-0.5 rounded border border-[#214232]">
-              <Clock3 className="w-2.5 h-2.5 text-[#fbbf24]" />
-              <span>{totalCraftTime}s</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. REQUIRED INGREDIENTS LIST */}
-      <div className="space-y-1.5 my-1">
-        <div className="flex items-center justify-between text-[11px] font-bold tracking-wider text-[#a0b8aa] uppercase">
-          <span>REQUIRED INGREDIENTS</span>
-          <span className="text-[10px] text-[#6b8274] font-normal lowercase">
-            for {quantity}x craft
-          </span>
-        </div>
-
-        <div className="space-y-1.5">
-          {ingredientStatus.map((ing) => (
-            <div
-              key={ing.itemId}
-              className={`flex items-center justify-between p-2 rounded-lg border transition-all ${
-                ing.isSufficient
-                  ? 'bg-[#0c1a14]/90 border-[#234533]'
-                  : 'bg-[#1a0f0f]/80 border-[#5a1e1e]/60'
-              }`}
-            >
-              {/* Left: Pixel Icon + Name + Location Clue */}
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="shrink-0 w-8 h-8 rounded bg-[#06100c] border border-[#1b3628] flex items-center justify-center p-0.5">
-                  <ItemIcon itemId={ing.itemId} size={28} />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-bold text-[#e6ece8] truncate">
-                    {ing.name}
-                  </div>
-                  <div className="text-[10px] text-[#788e80] italic truncate">
-                    {ing.clue}
-                  </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h2 className="text-[20px] leading-none font-black text-[#f5efe2] truncate">{recipe.name}</h2>
+                <div className="flex items-center gap-1.5 mt-2">
+                  <span className="px-2 py-0.5 rounded bg-[#0d4c40] border border-[#317d67] text-[10px] font-bold text-[#c9f2df] capitalize">{recipe.category}</span>
+                  <span className="px-2 py-0.5 rounded bg-[#473712] border border-[#816426] text-[10px] font-bold text-[#f0d583]">{recipe.tier || 'Primitive'}</span>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={() => onTogglePin(recipe.id)}
+                className={`p-1.5 rounded cursor-pointer ${isPinned ? 'text-[#f2ca4e]' : 'text-[#8d8e79] hover:text-[#dfcf95]'}`}
+                title={isPinned ? 'Unpin recipe' : 'Pin recipe'}
+              >
+                <Bookmark className={`w-5 h-5 ${isPinned ? 'fill-current' : ''}`} />
+              </button>
+            </div>
+            <p className="mt-2 text-[11.5px] leading-[1.35] text-[#c3c7b9] line-clamp-3">{recipe.description}</p>
+          </div>
+        </div>
 
-              {/* Right: Quantity (owned / required) */}
-              <div className="shrink-0 text-right font-mono text-xs">
-                <span
-                  className={`font-bold ${
-                    ing.isSufficient ? 'text-[#4ade80]' : 'text-[#f87171]'
-                  }`}
-                >
-                  {ing.owned}
-                </span>
-                <span className="text-[#62776a]"> / {ing.requiredTotal}</span>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 pt-2.5 border-t border-[#32483a] text-[11px]">
+          <div className="flex items-center justify-between gap-2"><span className="text-[#9aa393] flex items-center gap-1"><Shield className="w-3.5 h-3.5" />Durability</span><strong className="text-[#e9d77f]">{recipe.durabilityLevel || 'Medium'}</strong></div>
+          <div className="flex items-center justify-between gap-2"><span className="text-[#9aa393] flex items-center gap-1"><Weight className="w-3.5 h-3.5" />Weight</span><strong className="text-[#e8e1d3]">{recipe.weightKg || 0.5} kg</strong></div>
+          <div className="flex items-center justify-between gap-2"><span className="text-[#9aa393] flex items-center gap-1"><Clock3 className="w-3.5 h-3.5" />Craft Time</span><strong className="text-[#e8e1d3]">{totalCraftTime}s</strong></div>
+          <div className="flex items-center justify-between gap-2"><span className="text-[#9aa393] flex items-center gap-1"><Layers className="w-3.5 h-3.5" />Workstation</span><strong className="text-[#e8e1d3] truncate">{workstation}</strong></div>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 flex flex-col p-3">
+        <div className="shrink-0 flex items-center justify-between text-[12px] font-black tracking-wide text-[#f0e8d6] uppercase">
+          <span>Required Materials</span>
+          <span className="text-[10px] font-medium text-[#a8aa96] normal-case">Have / Need</span>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar mt-2 space-y-1.5 pr-1">
+          {ingredientStatus.map((ing) => (
+            <div key={ing.itemId} className="h-[54px] px-2 flex items-center gap-2 border border-[#314a3a] bg-[#091813]">
+              <div className="w-10 h-10 shrink-0 rounded-[4px] border border-[#334b3c] bg-[#07120e] flex items-center justify-center">
+                <ItemIcon itemId={ing.itemId} size={34} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-bold text-[#ede8dc] truncate">{ing.name}</div>
+                <div className="text-[9.5px] text-[#7d8b7e] truncate">{ing.clue}</div>
+              </div>
+              <div className={`shrink-0 font-mono text-[12px] font-black ${ing.sufficient ? 'text-[#8be06b]' : 'text-[#ef7564]'}`}>
+                {ing.owned} / {ing.required}
               </div>
             </div>
           ))}
         </div>
-      </div>
 
-      {/* 4. SURVIVOR ASSIGNMENT & QUANTITY STEPPER */}
-      <div className="mt-3 pt-2.5 border-t border-[rgba(90,125,102,0.22)] space-y-2.5">
-        <div className="flex items-center justify-between gap-2">
-          {/* Survivor dropdown */}
-          <div className="flex items-center gap-1.5 flex-1 min-w-0">
-            <UserCheck className="w-3.5 h-3.5 text-[#5ee7aa] shrink-0" />
-            <select
-              value={selectedSurvivorId}
-              onChange={(e) => onSelectSurvivor(e.target.value)}
-              className="bg-[#091511] border border-[#224534] rounded-md px-2 py-1 text-xs text-[#dbe7e0] outline-none w-full cursor-pointer"
-            >
-              {survivors.map((s) => (
-                <option key={s.id} value={s.id} className="bg-[#0c1a14] text-[#dbe7e0]">
-                  {s.name} ({s.currentAction.type === 'idle' ? 'Idle' : 'Busy'} • Crafting {Math.round(s.skills.crafting || 1)})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Stepper */}
-          <div className="flex items-center gap-1 bg-[#091511] border border-[#224534] rounded-md p-0.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => handleAdjustQty(-1)}
-              disabled={quantity <= 1}
-              className="p-1 text-[#869b8e] hover:text-[#dbe7e0] disabled:opacity-30 cursor-pointer"
-            >
-              <Minus className="w-3 h-3" />
-            </button>
-            <span className="w-7 text-center font-mono font-bold text-xs text-[#fbbf24]">
-              {quantity}
-            </span>
-            <button
-              type="button"
-              onClick={() => handleAdjustQty(1)}
-              className="p-1 text-[#869b8e] hover:text-[#dbe7e0] cursor-pointer"
-            >
-              <Plus className="w-3 h-3" />
-            </button>
-            {maxCraftable > 1 && maxCraftable !== Infinity && (
-              <button
-                type="button"
-                onClick={handleSetMax}
-                className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#173024] text-[#86e2ab] hover:bg-[#204433] cursor-pointer"
+        <div className="shrink-0 mt-2.5 pt-2.5 border-t border-[#314839] space-y-2">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+            <label className="h-8 flex items-center gap-1.5 px-2 border border-[#314a3a] bg-[#081713] rounded-[4px] min-w-0">
+              <UserCheck className="w-3.5 h-3.5 text-[#82c9a3] shrink-0" />
+              <select
+                value={selectedSurvivorId}
+                onChange={(e) => onSelectSurvivor(e.target.value)}
+                className="min-w-0 flex-1 bg-transparent outline-none text-[10.5px] text-[#dcd7c8] cursor-pointer"
               >
-                MAX
-              </button>
-            )}
+                {survivors.map((s) => (
+                  <option key={s.id} value={s.id} className="bg-[#0a1a15]">
+                    {s.name} — {s.currentAction.type === 'idle' ? 'Idle' : 'Busy'}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="h-8 flex items-center border border-[#314a3a] bg-[#081713] rounded-[4px] overflow-hidden">
+              <button type="button" onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="h-full w-7 flex items-center justify-center text-[#a9ac98] hover:text-white cursor-pointer"><Minus className="w-3.5 h-3.5" /></button>
+              <span className="w-7 text-center text-[11px] font-bold text-[#eed36d]">{quantity}</span>
+              <button type="button" onClick={() => setQuantity((q) => Math.min(Math.max(1, maxCraftable || 1), q + 1))} className="h-full w-7 flex items-center justify-center text-[#a9ac98] hover:text-white cursor-pointer"><Plus className="w-3.5 h-3.5" /></button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-[1.15fr_.85fr] gap-2">
+            <button
+              type="button"
+              disabled={!canAfford || survivorBusy}
+              onClick={() => onCraftNow(recipe.id, quantity, selectedSurvivorId)}
+              className="h-11 rounded-[5px] border border-[#d8d54c] bg-gradient-to-b from-[#466326] to-[#244719] text-[#fffbdc] font-black text-[14px] flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(208,211,69,.2)] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <Hammer className="w-4 h-4" /> Craft
+            </button>
+            <button
+              type="button"
+              disabled={!canAfford}
+              onClick={() => onAddToQueue(recipe.id, quantity, selectedSurvivorId)}
+              className="h-11 rounded-[5px] border border-[#4a6554] bg-[#0d2923] text-[#e4dfd0] font-bold text-[12px] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer hover:bg-[#13342c]"
+            >
+              Add to Queue
+            </button>
           </div>
         </div>
-
-        {/* 5. Primary Action Buttons */}
-        <div className="grid grid-cols-2 gap-2">
-          {/* Add to Queue button */}
-          <button
-            type="button"
-            disabled={!canAfford}
-            onClick={() => onAddToQueue(recipe.id, quantity, selectedSurvivorId)}
-            className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border border-[#3b6d51]/70 bg-gradient-to-b from-[#183929] to-[#0f241a] hover:from-[#214e38] hover:to-[#143224] text-[#dcebe1] font-bold text-xs shadow-md transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-          >
-            <Clock3 className="w-3.5 h-3.5 text-[#5eead4]" />
-            <span>ADD TO QUEUE</span>
-          </button>
-
-          {/* Craft Now button */}
-          <button
-            type="button"
-            disabled={!canAfford || isSurvivorBusy}
-            onClick={() => onCraftNow(recipe.id, quantity, selectedSurvivorId)}
-            className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border border-[#4ade80]/60 bg-gradient-to-b from-[#166534] via-[#15803d] to-[#14532d] hover:from-[#15803d] hover:to-[#166534] text-[#ffffff] font-extrabold text-xs shadow-[0_2px_10px_rgba(34,197,94,0.3)] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer active:scale-98"
-          >
-            <Hammer className="w-3.5 h-3.5 text-[#ffffff]" />
-            <span>CRAFT NOW</span>
-          </button>
-        </div>
-
-        {/* Warning messages */}
-        {!canAfford && (
-          <div className="flex items-center gap-1.5 text-[10.5px] text-[#f87171] justify-center">
-            <AlertTriangle className="w-3 h-3" />
-            <span>Missing required ingredients to craft this item.</span>
-          </div>
-        )}
-        {canAfford && isSurvivorBusy && (
-          <div className="flex items-center gap-1.5 text-[10.5px] text-[#fbbf24] justify-center">
-            <AlertTriangle className="w-3 h-3" />
-            <span>Assigned survivor is busy. Use &apos;Add to Queue&apos; instead.</span>
-          </div>
-        )}
       </div>
-    </div>
+    </section>
   );
 };
