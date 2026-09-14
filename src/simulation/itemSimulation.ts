@@ -3,7 +3,7 @@ import '../types/craftingSimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { addItemToInventory } from './inventorySystem';
 import { formatTimeOfDay } from './timeSystem';
-import { applyComponentWear } from './componentWearSystem';
+import { applyComponentWear, type ToolWearTask } from './componentWearSystem';
 
 export interface SpoilageAnalysis {
   effectiveDailyRate: number;
@@ -153,9 +153,15 @@ export function calculateToolWear(
   return { wearAmount: Math.max(0.5, wearAmount), notes };
 }
 
+function inferWearTask(user: SurvivorState): ToolWearTask {
+  if (user.currentAction.type === 'gathering') return 'gathering';
+  if (user.currentAction.type === 'building') return 'building';
+  return 'crafting';
+}
+
 /**
- * Wear now damages real components. A failed critical component disables the
- * tool but the item remains in inventory for repair, replacement or dismantling.
+ * Wear damages the physical components appropriate to the survivor's real job.
+ * A failed critical component disables the tool but the item remains repairable.
  */
 export function applyToolWear(
   state: GameState,
@@ -168,11 +174,8 @@ export function applyToolWear(
   const def = ITEMS_DATABASE[tool.itemId];
   if (!def || (!def.toolProperties && def.category !== 'tool')) return { isBroken: false, salvagedItems: [] };
 
-  const result = applyComponentWear(tool, def, 'crafting', wearAmount, state);
-  // Callers calculate wear for a task but legacy API does not pass it here.
-  // The aggregate amount already encodes task severity; component load defaults
-  // to crafting in this compatibility path. Dedicated task callers can migrate
-  // to applyComponentWear directly later.
+  const task = inferWearTask(user);
+  const result = applyComponentWear(tool, def, task, wearAmount, state);
 
   if (result.operationalBefore && !result.operationalAfter) {
     const failedText = result.failedComponentNames.length > 0 ? result.failedComponentNames.join(', ') : 'critical component';
