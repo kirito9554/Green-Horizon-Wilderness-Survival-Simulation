@@ -1,16 +1,5 @@
 import React from 'react';
-import {
-  Brain,
-  Lightbulb,
-  Clock,
-  Zap,
-  BookMarked,
-  ArrowUp,
-  X,
-  Plus,
-  Compass,
-  Sparkles,
-} from 'lucide-react';
+import { Brain, Clock, Zap, BookMarked, ArrowUp, X, Plus, Sparkles, Leaf, Search } from 'lucide-react';
 import { ResearchQueueItem } from '../../types/crafting';
 
 interface ResearchSidebarProps {
@@ -27,6 +16,14 @@ interface ResearchSidebarProps {
   onAddToQueueClick?: () => void;
 }
 
+const formatTime = (seconds: number) => {
+  const sec = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
+
 export const ResearchSidebar: React.FC<ResearchSidebarProps> = ({
   knowledgePoints = 12,
   recipesDiscoveredCount = 28,
@@ -40,189 +37,23 @@ export const ResearchSidebar: React.FC<ResearchSidebarProps> = ({
   onMoveUpQueueItem,
   onAddToQueueClick,
 }) => {
-  const formatTime = (seconds: number) => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
   return (
-    <div className="flex flex-col h-full gap-3 select-none">
-      {/* 1. RESEARCH INFO WIDGET */}
-      <div className="p-3 rounded-xl bg-[#0a1712]/90 border border-[#214232]/80 flex flex-col gap-2.5 shadow-sm">
-        <div className="flex items-center gap-2 pb-1.5 border-b border-[#1b3629]">
-          <Brain className="w-4 h-4 text-[#fbbf24]" />
-          <h3 className="text-xs font-black uppercase tracking-wider text-[#d4e4db]">
-            RESEARCH INFO
-          </h3>
+    <div className="h-full min-h-0 flex flex-col gap-2 overflow-hidden select-none">
+      <section className="shrink-0 border border-[#40503d] bg-[#0b201a]"><PanelTitle icon={<Brain className="w-4 h-4" />} title="RESEARCH INFO" /><div className="p-3 space-y-1.5 text-[11px]"><Stat label="Knowledge Points" value={`${knowledgePoints}`} /><Stat label="Recipes Discovered" value={`${recipesDiscoveredCount} / ${maxRecipesDiscovered}`} /><Stat label="Materials Identified" value={`${materialsIdentifiedCount} / ${maxMaterialsIdentified}`} /><Stat label="Research Speed" value={`+${researchSpeedBonusPct}%`} /></div></section>
+
+      <section className="min-h-0 flex-1 border border-[#40503d] bg-[#0b201a] flex flex-col">
+        <PanelTitle icon={<BookMarked className="w-4 h-4" />} title={`RESEARCH QUEUE  ${queue.length} / ${maxQueueSlots}`} />
+        <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1.5">
+          {queue.length === 0 ? <div className="h-full min-h-[90px] border border-dashed border-[#354a3c] bg-[#07150f] flex items-center justify-center text-[10px] italic text-[#758176]">Queue is empty</div> : queue.slice(0, maxQueueSlots).map((item, index) => <div key={item.id} className="h-[72px] p-2 border border-[#344c3d] bg-[#081914] flex flex-col justify-between"><div className="flex items-center gap-2"><span className="text-[9px] font-mono text-[#8b958c]">#{index + 1}</span><span className="min-w-0 flex-1 text-[10.5px] font-bold text-[#ebe5d7] truncate">{item.name}</span>{index > 0 && <button type="button" onClick={() => onMoveUpQueueItem(item.id)} className="w-6 h-6 border border-[#50614e] text-[#c9c1ad] flex items-center justify-center cursor-pointer"><ArrowUp className="w-3 h-3" /></button>}<button type="button" onClick={() => onCancelQueueItem(item.id)} className="w-6 h-6 border border-[#8b4537] text-[#ef6656] flex items-center justify-center cursor-pointer"><X className="w-3 h-3" /></button></div><div className="flex items-center gap-2"><div className="h-1.5 flex-1 bg-[#17261f] overflow-hidden"><div className="h-full bg-[#62c95a]" style={{ width: `${item.progressPct}%` }} /></div><span className="text-[9px] font-mono text-[#c8bfad]">{formatTime(item.remainingSeconds)}</span></div></div>)}
         </div>
+        {onAddToQueueClick && <button type="button" onClick={onAddToQueueClick} disabled={queue.length >= maxQueueSlots} className="h-11 shrink-0 m-2 mt-0 border border-dashed border-[#536a56] bg-[#0b251e] text-[11px] text-[#d8d0bd] flex items-center justify-center gap-2 disabled:opacity-40 cursor-pointer"><Plus className="w-4 h-4" /> Add to Queue</button>}
+      </section>
 
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          {/* Knowledge Points */}
-          <div className="p-2 rounded-lg bg-[#07130e] border border-[#1a3326] flex flex-col">
-            <span className="text-[10px] text-[#718d7d] font-semibold uppercase">Knowledge Points</span>
-            <span className="text-sm font-bold text-[#fbbf24] font-mono mt-0.5">
-              {knowledgePoints} KP
-            </span>
-          </div>
-
-          {/* Recipes Discovered */}
-          <div className="p-2 rounded-lg bg-[#07130e] border border-[#1a3326] flex flex-col">
-            <span className="text-[10px] text-[#718d7d] font-semibold uppercase">Recipes Discovered</span>
-            <span className="text-sm font-bold text-[#86efac] font-mono mt-0.5">
-              {recipesDiscoveredCount} / {maxRecipesDiscovered}
-            </span>
-          </div>
-
-          {/* Materials Identified */}
-          <div className="p-2 rounded-lg bg-[#07130e] border border-[#1a3326] flex flex-col">
-            <span className="text-[10px] text-[#718d7d] font-semibold uppercase">Materials Identified</span>
-            <span className="text-sm font-bold text-[#67e8f9] font-mono mt-0.5">
-              {materialsIdentifiedCount} / {maxMaterialsIdentified}
-            </span>
-          </div>
-
-          {/* Research Speed */}
-          <div className="p-2 rounded-lg bg-[#07130e] border border-[#1a3326] flex flex-col">
-            <span className="text-[10px] text-[#718d7d] font-semibold uppercase">Research Speed</span>
-            <span className="text-sm font-bold text-[#facc15] font-mono mt-0.5 flex items-center gap-1">
-              <Zap className="w-3.5 h-3.5" />
-              +{researchSpeedBonusPct}%
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. RESEARCH QUEUE WIDGET */}
-      <div className="p-3 rounded-xl bg-[#0a1712]/90 border border-[#214232]/80 flex flex-col gap-2 shadow-sm">
-        <div className="flex items-center justify-between pb-1.5 border-b border-[#1b3629]">
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-[#5eead4]" />
-            <h3 className="text-xs font-black uppercase tracking-wider text-[#d4e4db]">
-              RESEARCH QUEUE
-            </h3>
-          </div>
-          <span className="text-[10px] font-mono font-bold text-[#86efac] px-2 py-0.5 rounded bg-[#132c20] border border-[#27533c]">
-            {queue.length} / {maxQueueSlots}
-          </span>
-        </div>
-
-        {/* Queue Items */}
-        <div className="flex flex-col gap-2 min-h-[90px]">
-          {queue.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-6 text-center text-xs text-[#637d6e] italic">
-              Queue is currently empty.
-              <span className="text-[10px] text-[#50685a] mt-0.5">Select a candidate and press Start Research</span>
-            </div>
-          ) : (
-            queue.map((item, idx) => (
-              <div
-                key={item.id}
-                className="p-2.5 rounded-lg bg-[#07130e] border border-[#1b3528] flex flex-col gap-1.5"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[10px] font-mono text-[#718d7d] bg-[#102319] px-1.5 py-0.5 rounded">
-                      #{idx + 1}
-                    </span>
-                    <span className="text-xs font-bold text-[#f5ede0] truncate">
-                      {item.name}
-                    </span>
-                  </div>
-
-                  {/* Actions: Move Up & Cancel */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    {idx > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => onMoveUpQueueItem(item.id)}
-                        title="Prioritize"
-                        className="p-1 rounded bg-[#102319] hover:bg-[#1a3828] text-[#86a894] hover:text-[#fff] transition-colors cursor-pointer"
-                      >
-                        <ArrowUp className="w-3 h-3" />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => onCancelQueueItem(item.id)}
-                      title="Cancel research"
-                      className="p-1 rounded bg-[#102319] hover:bg-[#3b1212] text-[#86a894] hover:text-[#f87171] transition-colors cursor-pointer"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Progress bar + Countdown */}
-                <div className="flex items-center justify-between text-[10px] text-[#718d7d]">
-                  <span className="font-mono text-[#86efac]">{item.progressPct}% done</span>
-                  <span className="font-mono text-[#5eead4] flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {formatTime(item.remainingSeconds)}
-                  </span>
-                </div>
-                <div className="w-full h-1.5 rounded-full bg-[#050b08] overflow-hidden border border-[#162a20]">
-                  <div
-                    className="h-full bg-gradient-to-r from-[#10b981] to-[#34d399] rounded-full transition-all duration-300"
-                    style={{ width: `${item.progressPct}%` }}
-                  />
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Add to Queue Button */}
-        {onAddToQueueClick && (
-          <button
-            type="button"
-            onClick={onAddToQueueClick}
-            disabled={queue.length >= maxQueueSlots}
-            className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors border cursor-pointer ${
-              queue.length < maxQueueSlots
-                ? 'bg-[#10251c] hover:bg-[#163327] border-[#294c39] text-[#a4bdad] hover:text-[#f0faf4]'
-                : 'bg-[#0b1612]/60 border-[#1a2f24] text-[#556b5f] cursor-not-allowed'
-            }`}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Add to Queue</span>
-          </button>
-        )}
-      </div>
-
-      {/* 3. RESEARCH TIPS */}
-      <div className="p-3 rounded-xl bg-[#0a1712]/90 border border-[#214232]/80 flex flex-col gap-2 shadow-sm text-xs mt-auto">
-        <div className="flex items-center gap-2 pb-1 border-b border-[#1b3629]">
-          <Sparkles className="w-3.5 h-3.5 text-[#fbbf24]" />
-          <h4 className="font-bold uppercase text-[#d4e4db] text-[11px] tracking-wider">
-            RESEARCH TIPS
-          </h4>
-        </div>
-
-        <ul className="flex flex-col gap-1.5 text-[11px] text-[#90a89a] leading-relaxed">
-          <li className="flex items-start gap-1.5">
-            <span className="text-[#fbbf24] mt-0.5">•</span>
-            <span>Discover at least <strong>80%</strong> of a recipe&apos;s required materials to unlock it.</span>
-          </li>
-          <li className="flex items-start gap-1.5">
-            <span className="text-[#fbbf24] mt-0.5">•</span>
-            <span>Identify new materials by gathering and examining them in the wild.</span>
-          </li>
-          <li className="flex items-start gap-1.5">
-            <span className="text-[#fbbf24] mt-0.5">•</span>
-            <span>Some rare materials require deeper inland exploration.</span>
-          </li>
-          <li className="flex items-start gap-1.5">
-            <span className="text-[#fbbf24] mt-0.5">•</span>
-            <span>Track recipes to get hints from your surroundings.</span>
-          </li>
-        </ul>
-
-        <div className="pt-2 border-t border-[#1b3629] text-[10px] italic text-[#6f897a] text-center font-serif">
-          &ldquo;Knowledge turns the unknown into the possible.&rdquo;
-        </div>
-      </div>
+      <section className="shrink-0 border border-[#40503d] bg-[#0b201a]"><PanelTitle icon={<Sparkles className="w-4 h-4" />} title="RESEARCH TIPS" /><div className="p-3 space-y-2 text-[10px] leading-[1.35] text-[#b5b8ac]"><Tip icon={<Zap className="w-3.5 h-3.5" />} text="Discover at least 80% of a recipe's required materials to unlock it." /><Tip icon={<Leaf className="w-3.5 h-3.5" />} text="Identify new materials by gathering and examining them in the world." /><Tip icon={<Search className="w-3.5 h-3.5" />} text="Some rare materials require deeper exploration." /><Tip icon={<Clock className="w-3.5 h-3.5" />} text="Track recipes to receive hints from your surroundings." /></div></section>
     </div>
   );
 };
+
+const PanelTitle: React.FC<{ icon: React.ReactNode; title: string }> = ({ icon, title }) => <div className="h-10 px-3 flex items-center gap-2 border-b border-[#3b4c3a] bg-[#0d2721] text-[#eee6d5]"><span className="text-[#dfce6d]">{icon}</span><h3 className="text-[12px] font-black tracking-wide">{title}</h3></div>;
+const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => <div className="h-6 flex items-center border-b border-[#26392f] last:border-0"><span className="min-w-0 flex-1 text-[#b3b7aa]">{label}</span><strong className="text-[#e2cc57] font-mono">{value}</strong></div>;
+const Tip: React.FC<{ icon: React.ReactNode; text: string }> = ({ icon, text }) => <div className="flex items-start gap-2"><span className="mt-0.5 text-[#d6c567] shrink-0">{icon}</span><span>{text}</span></div>;
