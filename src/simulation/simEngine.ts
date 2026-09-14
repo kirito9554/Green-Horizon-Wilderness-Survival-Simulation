@@ -1,6 +1,7 @@
 import { GameState } from '../types';
 import '../types/craftingSimulation';
 import '../types/researchSimulation';
+import '../types/maintenanceSimulation';
 import { INITIAL_SURVIVORS } from '../data/survivors';
 import { getDefaultResourcePools } from './resourcePools';
 import { advanceTime } from './timeSystem';
@@ -11,6 +12,7 @@ import { tickExpeditions } from './expeditionSystem';
 import { tickItemSimulation } from './itemSimulation';
 import { tickCraftingAndResearch } from './craftingSystem';
 import { tickComponentBootstrap } from './componentBootstrapSystem';
+import { tickMaintenanceSystem } from './maintenanceSystem';
 
 export * from './inventorySystem';
 export * from './timeSystem';
@@ -22,36 +24,22 @@ export * from './taskHandlers';
 export * from './itemSimulation';
 export * from './craftingSystem';
 export * from './materialReservationSystem';
+export * from './jobReservationSystem';
 export * from './componentSystem';
+export * from './componentWearSystem';
 export * from './craftQualitySystem';
 export * from './workstationSystem';
 export * from './researchSystem';
+export * from './maintenanceSystem';
 
 export const INITIAL_GAME_STATE: GameState = {
-  saveVersion: 3,
+  saveVersion: 4,
   campName: 'Canopy Bay Settlement',
-  gameTime: {
-    day: 1,
-    minuteOfDay: 510,
-    speed: 1,
-  },
+  gameTime: { day: 1, minuteOfDay: 510, speed: 1 },
   weather: {
-    current: 'clear',
-    previous: 'clear',
-    next: 'cloudy',
-    temperatureC: 29,
-    humidityPercent: 72,
-    totalDurationMinutes: 180,
-    durationRemainingMinutes: 180,
-    transitionProgress: 0,
-    rainIntensity: 0,
-    cloudCover: 0.1,
-    wind: {
-      speedKmh: 8,
-      gustKmh: 12,
-      directionDeg: 45,
-      cardinal: 'NE',
-    },
+    current: 'clear', previous: 'clear', next: 'cloudy', temperatureC: 29, humidityPercent: 72,
+    totalDurationMinutes: 180, durationRemainingMinutes: 180, transitionProgress: 0, rainIntensity: 0, cloudCover: 0.1,
+    wind: { speedKmh: 8, gustKmh: 12, directionDeg: 45, cardinal: 'NE' },
   },
   survivors: JSON.parse(JSON.stringify(INITIAL_SURVIVORS)),
   inventory: {
@@ -65,14 +53,8 @@ export const INITIAL_GAME_STATE: GameState = {
       { instanceId: 'init_5', itemId: 'ITEM_PALM_LEAF', quantity: 4, qualityBreakdown: { standard: 3, prime: 1 } },
       { instanceId: 'init_6', itemId: 'ITEM_VINE_FIBER', quantity: 3, qualityBreakdown: { crude: 1, standard: 2 } },
       {
-        instanceId: 'init_7',
-        itemId: 'ITEM_SHARP_STONE',
-        quantity: 1,
-        quality: 'standard',
-        condition: 100,
-        conditionMax: 100,
-        originalConditionMax: 100,
-        reservedQuantity: 0,
+        instanceId: 'init_7', itemId: 'ITEM_SHARP_STONE', quantity: 1, quality: 'standard',
+        condition: 100, conditionMax: 100, originalConditionMax: 100, reservedQuantity: 0,
         reservedQualityBreakdown: { crude: 0, standard: 0, prime: 0, masterwork: 0 },
       },
     ],
@@ -83,76 +65,41 @@ export const INITIAL_GAME_STATE: GameState = {
     AREA_RIVERBANK: { knowledgePercent: 10, lastGatheredTime: {} },
     AREA_BAMBOO_GROVE: { knowledgePercent: 0, lastGatheredTime: {} },
   },
-  buildings: [
-    {
-      id: 'bld_campfire',
-      buildingId: 'BUILDING_CAMPFIRE_HEARTH',
-      condition: 100,
-      isBuilt: false,
-      buildProgressSeconds: 0,
-      totalBuildSeconds: 20,
-      areaId: 'AREA_CAMP_CLEARING',
-    },
-  ],
+  buildings: [{
+    id: 'bld_campfire', buildingId: 'BUILDING_CAMPFIRE_HEARTH', condition: 100, isBuilt: false,
+    buildProgressSeconds: 0, totalBuildSeconds: 20, areaId: 'AREA_CAMP_CLEARING',
+  }],
   poiStorages: {
     AREA_CAMP_CLEARING: {
-      maxWeightKg: 120,
-      maxVolumeL: 180,
+      maxWeightKg: 120, maxVolumeL: 180,
       items: [
         { instanceId: 'poi_camp_1', itemId: 'ITEM_DRIFTWOOD_BRANCH', quantity: 12, quality: 'standard', qualityBreakdown: { crude: 4, standard: 8 } },
         { instanceId: 'poi_camp_2', itemId: 'ITEM_RIVER_PEBBLE', quantity: 8, quality: 'standard', qualityBreakdown: { standard: 8 } },
         { instanceId: 'poi_camp_3', itemId: 'ITEM_PALM_LEAF', quantity: 10, quality: 'standard', qualityBreakdown: { standard: 10 } },
       ],
     },
-    AREA_COASTAL_SHALLOWS: {
-      maxWeightKg: 45,
-      maxVolumeL: 70,
-      items: [{ instanceId: 'poi_coast_1', itemId: 'ITEM_WILD_COCONUT', quantity: 4, quality: 'standard', qualityBreakdown: { standard: 4 } }],
-    },
-    AREA_RIVERBANK: {
-      maxWeightKg: 45,
-      maxVolumeL: 70,
-      items: [{ instanceId: 'poi_river_1', itemId: 'ITEM_RIVER_PEBBLE', quantity: 6, quality: 'standard', qualityBreakdown: { standard: 6 } }],
-    },
+    AREA_COASTAL_SHALLOWS: { maxWeightKg: 45, maxVolumeL: 70, items: [{ instanceId: 'poi_coast_1', itemId: 'ITEM_WILD_COCONUT', quantity: 4, quality: 'standard', qualityBreakdown: { standard: 4 } }] },
+    AREA_RIVERBANK: { maxWeightKg: 45, maxVolumeL: 70, items: [{ instanceId: 'poi_river_1', itemId: 'ITEM_RIVER_PEBBLE', quantity: 6, quality: 'standard', qualityBreakdown: { standard: 6 } }] },
     AREA_BAMBOO_GROVE: { maxWeightKg: 45, maxVolumeL: 70, items: [] },
   },
   expeditions: [],
   resourcePools: getDefaultResourcePools(),
   researches: {
-    RECIPE_BRAID_CORD: {
-      recipeId: 'RECIPE_BRAID_CORD',
-      status: 'completed',
-      progressSeconds: 15,
-      totalSeconds: 15,
-      evidenceScoreAtStart: 100,
-    },
+    RECIPE_BRAID_CORD: { recipeId: 'RECIPE_BRAID_CORD', status: 'completed', progressSeconds: 15, totalSeconds: 15, evidenceScoreAtStart: 100 },
   },
-  researchSystem: {
-    evidenceByRecipeId: {},
-    identifiedMaterialIds: [],
-    trackedRecipeIds: [],
-    recentDiscoveries: [],
-    knowledgePoints: 0,
-  },
+  researchSystem: { evidenceByRecipeId: {}, identifiedMaterialIds: [], trackedRecipeIds: [], recentDiscoveries: [], knowledgePoints: 0 },
   craftedRecipeCounts: {},
+  maintenanceSystem: { queue: [], history: [] },
   craftingQueue: [],
   discoveredRecipeIds: ['RECIPE_BRAID_CORD'],
-  logs: [
-    {
-      id: 'log_0',
-      day: 1,
-      timeStr: '08:30',
-      text: 'The tide has washed our wreckage ashore. We must secure drinking water and build a campfire before nightfall.',
-      type: 'info',
-    },
-  ],
+  logs: [{
+    id: 'log_0', day: 1, timeStr: '08:30',
+    text: 'The tide has washed our wreckage ashore. We must secure drinking water and build a campfire before nightfall.',
+    type: 'info',
+  }],
   settings: {
-    autoConsumeFood: true,
-    autoConsumeWater: true,
-    foodPolicy: 'normal',
-    waterPolicy: 'normal',
-    soundEnabled: true,
-    gameSpeedMultiplier: 1,
+    autoConsumeFood: true, autoConsumeWater: true, foodPolicy: 'normal', waterPolicy: 'normal',
+    soundEnabled: true, gameSpeedMultiplier: 1,
   },
 };
 
@@ -171,6 +118,10 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickSurvivors(next, deltaGameMinutes, deltaGameSeconds);
   tickExpeditions(next, deltaGameMinutes);
   tickItemSimulation(next, deltaGameMinutes);
+
+  // Maintenance claims eligible idle workers before normal crafting queue jobs.
+  // This makes repair work a real scheduling decision instead of a UI-only action.
+  tickMaintenanceSystem(next, deltaGameSeconds);
   tickCraftingAndResearch(next, deltaGameSeconds);
 
   if (next.logs.length > 35) next.logs = next.logs.slice(0, 35);
