@@ -5,6 +5,7 @@ import '../types/maintenanceSimulation';
 import '../types/upgradeSimulation';
 import '../types/buildingSimulation';
 import '../types/structureMaintenanceSimulation';
+import '../types/storageSimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { ensureToolComponentInstances } from '../simulation/componentSystem';
 import { rebuildReservationCounters } from '../simulation/materialReservationSystem';
@@ -13,8 +14,9 @@ import { ensureMaintenanceSystem, rebuildMaintenanceLocks } from '../simulation/
 import { ensureUpgradeSystem, rebuildUpgradeLocks } from '../simulation/upgradeSystem';
 import { rebuildJobReservationCounters } from '../simulation/jobReservationSystem';
 import { ensureBuildingSimulation, getOrCreatePoiBuildGrid } from '../simulation/buildGridSystem';
+import { ensureStorageSystem } from '../simulation/storageSystem';
 
-export const LATEST_SAVE_VERSION = 8;
+export const LATEST_SAVE_VERSION = 9;
 
 function stableStringSeed(value: string): number {
   let hash = 2166136261;
@@ -138,6 +140,11 @@ function migrateToV8(state: GameState): void {
   state.saveVersion = 8;
 }
 
+function migrateToV9(state: GameState): void {
+  ensureStorageSystem(state);
+  state.saveVersion = 9;
+}
+
 export function migrateGameState(rawState: GameState): GameState {
   const state = rawState;
   const fromVersion = Math.max(1, state.saveVersion || 1);
@@ -149,6 +156,7 @@ export function migrateGameState(rawState: GameState): GameState {
   if (fromVersion < 6) migrateToV6(state);
   if (fromVersion < 7) migrateToV7(state);
   if (fromVersion < 8) migrateToV8(state);
+  if (fromVersion < 9) migrateToV9(state);
 
   state.poiStorages = state.poiStorages || {};
   state.craftingQueue = state.craftingQueue || [];
@@ -179,9 +187,8 @@ export function migrateGameState(rawState: GameState): GameState {
   buildingSimulation.structureWorkJobs ||= [];
   buildingSimulation.structureWorkHistory ||= [];
   getOrCreatePoiBuildGrid(state, 'AREA_CAMP_CLEARING');
+  ensureStorageSystem(state);
 
-  // Rebuild reservations in deterministic ownership order. Later systems only
-  // see stock not already claimed by an earlier persistent job.
   rebuildReservationCounters(state);
 
   for (const job of maintenance.queue) {
@@ -213,8 +220,6 @@ export function migrateGameState(rawState: GameState): GameState {
     }
   }
 
-  // Structure work is rebuilt after construction so an old save cannot let a
-  // repair/modification claim material that a planned structure already owns.
   for (const job of buildingSimulation.structureWorkJobs) {
     job.materialReservations ||= [];
     job.blockedReasons ||= [];
