@@ -2,6 +2,7 @@ import { GameState } from '../types';
 import '../types/craftingSimulation';
 import '../types/researchSimulation';
 import '../types/maintenanceSimulation';
+import '../types/upgradeSimulation';
 import { INITIAL_SURVIVORS } from '../data/survivors';
 import { getDefaultResourcePools } from './resourcePools';
 import { advanceTime } from './timeSystem';
@@ -13,6 +14,7 @@ import { tickItemSimulation } from './itemSimulation';
 import { tickCraftingAndResearch } from './craftingSystem';
 import { tickComponentBootstrap } from './componentBootstrapSystem';
 import { tickMaintenanceSystem } from './maintenanceSystem';
+import { tickUpgradeSystem } from './upgradeSystem';
 
 export * from './inventorySystem';
 export * from './timeSystem';
@@ -31,9 +33,10 @@ export * from './craftQualitySystem';
 export * from './workstationSystem';
 export * from './researchSystem';
 export * from './maintenanceSystem';
+export * from './upgradeSystem';
 
 export const INITIAL_GAME_STATE: GameState = {
-  saveVersion: 4,
+  saveVersion: 5,
   campName: 'Canopy Bay Settlement',
   gameTime: { day: 1, minuteOfDay: 510, speed: 1 },
   weather: {
@@ -90,6 +93,7 @@ export const INITIAL_GAME_STATE: GameState = {
   researchSystem: { evidenceByRecipeId: {}, identifiedMaterialIds: [], trackedRecipeIds: [], recentDiscoveries: [], knowledgePoints: 0 },
   craftedRecipeCounts: {},
   maintenanceSystem: { queue: [], history: [] },
+  upgradeSystem: { queue: [], history: [] },
   craftingQueue: [],
   discoveredRecipeIds: ['RECIPE_BRAID_CORD'],
   logs: [{
@@ -119,9 +123,10 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickExpeditions(next, deltaGameMinutes);
   tickItemSimulation(next, deltaGameMinutes);
 
-  // Maintenance claims eligible idle workers before normal crafting queue jobs.
-  // This makes repair work a real scheduling decision instead of a UI-only action.
+  // Production systems compete for the same idle workers and reserved stock.
+  // Maintenance gets first claim, then upgrades, then normal production/research.
   tickMaintenanceSystem(next, deltaGameSeconds);
+  tickUpgradeSystem(next, deltaGameSeconds);
   tickCraftingAndResearch(next, deltaGameSeconds);
 
   if (next.logs.length > 35) next.logs = next.logs.slice(0, 35);
