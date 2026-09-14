@@ -1,4 +1,4 @@
-name: Typecheck and Build
+name: Typecheck, Simulation Smoke, and Build
 
 on:
   push:
@@ -25,6 +25,9 @@ jobs:
 
       - name: Typecheck
         run: npm run lint
+
+      - name: Deep production smoke test
+        run: npm run test:production
 
       - name: Production build
         run: npm run build
