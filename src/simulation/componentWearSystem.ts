@@ -133,6 +133,11 @@ export function applyComponentWear(
 
   syncAggregateConditionFromComponents(tool);
   const after = isToolOperational(tool, def);
+  // Generic schedulers still use aggregate condition as a fast availability
+  // check. Zero it while a critical component is failed; repair/replace later
+  // calls syncAggregateConditionFromComponents and restores the real aggregate.
+  if (!after) tool.condition = 0;
+
   return {
     operationalBefore: before,
     operationalAfter: after,
