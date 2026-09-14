@@ -1,4 +1,5 @@
 import type { ItemQuality } from './index';
+import type { MaterialReservation } from './craftingSimulation';
 
 export type StorageKind = 'ground_cache' | 'container' | 'rack' | 'bulk' | 'liquid' | 'structure';
 export type StoragePriority = 'low' | 'normal' | 'high' | 'critical';
@@ -22,6 +23,12 @@ export interface StorageEnvironmentProfile {
   accessibility: number;
 }
 
+export interface StorageStockRule {
+  itemId: string;
+  minQuantity: number;
+  maxQuantity?: number;
+}
+
 export interface StoragePolicy {
   priority: StoragePriority;
   autoHaul: boolean;
@@ -30,6 +37,7 @@ export interface StoragePolicy {
   forbiddenTags: string[];
   acceptDamaged: boolean;
   acceptSpoiled: boolean;
+  stockRules: StorageStockRule[];
 }
 
 export interface StorageLocation {
@@ -54,10 +62,29 @@ export interface StorageAlert {
   message: string;
 }
 
+export type StorageHaulJobStatus = 'waiting_worker' | 'in_progress' | 'blocked' | 'paused' | 'completed';
+
+export interface StorageHaulJob {
+  id: string;
+  poiId: string;
+  sourceLocationId: string;
+  targetLocationId: string;
+  itemId: string;
+  quantity: number;
+  materialReservations: MaterialReservation[];
+  assignedSurvivorId?: string;
+  progressSeconds: number;
+  totalSeconds: number;
+  status: StorageHaulJobStatus;
+  blockedReasons: string[];
+  createdAtGameMinute: number;
+}
+
 export interface StorageSystemState {
   version: number;
   locations: StorageLocation[];
   alerts: StorageAlert[];
+  haulJobs: StorageHaulJob[];
 }
 
 export interface StorageAcceptanceResult {
