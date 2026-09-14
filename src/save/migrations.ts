@@ -2,14 +2,16 @@ import type { GameState, InventoryItem } from '../types';
 import '../types/craftingSimulation';
 import '../types/researchSimulation';
 import '../types/maintenanceSimulation';
+import '../types/upgradeSimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { ensureToolComponentInstances } from '../simulation/componentSystem';
 import { rebuildReservationCounters } from '../simulation/materialReservationSystem';
 import { ensureResearchSystem, refreshResearchEvidence } from '../simulation/researchSystem';
 import { ensureMaintenanceSystem, rebuildMaintenanceLocks } from '../simulation/maintenanceSystem';
+import { ensureUpgradeSystem, rebuildUpgradeLocks } from '../simulation/upgradeSystem';
 import { rebuildJobReservationCounters } from '../simulation/jobReservationSystem';
 
-export const LATEST_SAVE_VERSION = 4;
+export const LATEST_SAVE_VERSION = 5;
 
 function stableStringSeed(value: string): number {
   let hash = 2166136261;
@@ -82,6 +84,19 @@ function migrateToV4(state: GameState): void {
   state.saveVersion = 4;
 }
 
+function migrateToV5(state: GameState): void {
+  const upgrades = ensureUpgradeSystem(state);
+  upgrades.queue ||= [];
+  upgrades.history ||= [];
+  for (const job of upgrades.queue) {
+    job.materialReservations ||= [];
+    job.blockedReasons ||= [];
+    job.materialsConsumed = Boolean(job.materialsConsumed);
+    job.deterministicSeed = job.deterministicSeed ?? stableStringSeed(job.id);
+  }
+  state.saveVersion = 5;
+}
+
 export function migrateGameState(rawState: GameState): GameState {
   const state = rawState;
   const fromVersion = Math.max(1, state.saveVersion || 1);
@@ -89,6 +104,7 @@ export function migrateGameState(rawState: GameState): GameState {
   if (fromVersion < 2) migrateToV2(state);
   if (fromVersion < 3) migrateToV3(state);
   if (fromVersion < 4) migrateToV4(state);
+  if (fromVersion < 5) migrateToV5(state);
 
   state.poiStorages = state.poiStorages || {};
   state.craftingQueue = state.craftingQueue || [];
@@ -109,10 +125,12 @@ export function migrateGameState(rawState: GameState): GameState {
   ensureResearchSystem(state);
   state.craftedRecipeCounts ||= {};
   const maintenance = ensureMaintenanceSystem(state);
+  const upgrades = ensureUpgradeSystem(state);
 
-  // Rebuild in deterministic order: crafting material reservations ->
-  // maintenance/upgrade material reservations -> exclusive target locks.
+  // Rebuild in deterministic order so every system sees the same canonical
+  // free stock after a load: Craft -> Repair -> Upgrade -> exclusive item locks.
   rebuildReservationCounters(state);
+
   for (const job of maintenance.queue) {
     if (!job.materialsConsumed) {
       job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations || []);
@@ -123,9 +141,22 @@ export function migrateGameState(rawState: GameState): GameState {
       job.materialReservations = [];
     }
   }
-  rebuildMaintenanceLocks(state);
 
+  for (const job of upgrades.queue) {
+    if (!job.materialsConsumed) {
+      job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations || []);
+      if (job.materialReservations.length === 0 && job.status !== 'in_progress' && job.status !== 'paused') {
+        job.status = 'waiting_materials';
+      }
+    } else {
+      job.materialReservations = [];
+    }
+  }
+
+  rebuildMaintenanceLocks(state);
+  rebuildUpgradeLocks(state);
   refreshResearchEvidence(state, { recordMaterialDiscoveries: false, recordIdeaDiscoveries: false });
+
   state.saveVersion = LATEST_SAVE_VERSION;
   return state;
 }
