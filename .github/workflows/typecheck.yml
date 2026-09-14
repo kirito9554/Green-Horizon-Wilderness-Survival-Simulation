@@ -29,5 +29,8 @@ jobs:
       - name: Deep production smoke test
         run: npm run test:production
 
+      - name: Spatial building smoke test
+        run: npm run test:building
+
       - name: Production build
         run: npm run build
