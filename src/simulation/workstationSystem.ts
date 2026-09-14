@@ -41,6 +41,9 @@ function inferKindFromRecipe(recipe: RecipeDefinition): WorkstationKind {
   if (recipe.requiredBuildingId && WORKSTATION_BY_BUILDING_ID[recipe.requiredBuildingId]) {
     return WORKSTATION_BY_BUILDING_ID[recipe.requiredBuildingId].kind;
   }
+  if (recipe.id === 'RECIPE_BOIL_WATER' || recipe.id === 'RECIPE_GRILL_FISH' || recipe.id === 'RECIPE_CHARCOAL_SHELLS') {
+    return 'campfire';
+  }
 
   const name = (recipe.workstationName || '').toLowerCase();
   if (name.includes('workbench') || name.includes('bench')) return 'workbench';
