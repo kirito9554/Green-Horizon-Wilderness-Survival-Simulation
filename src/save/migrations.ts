@@ -1,10 +1,12 @@
 import type { GameState, InventoryItem } from '../types';
 import '../types/craftingSimulation';
+import '../types/researchSimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { ensureToolComponentInstances } from '../simulation/componentSystem';
 import { rebuildReservationCounters } from '../simulation/materialReservationSystem';
+import { ensureResearchSystem, refreshResearchEvidence } from '../simulation/researchSystem';
 
-export const LATEST_SAVE_VERSION = 2;
+export const LATEST_SAVE_VERSION = 3;
 
 function stableStringSeed(value: string): number {
   let hash = 2166136261;
@@ -52,8 +54,6 @@ function migrateToV2(state: GameState): void {
     queueItem.blockedReasons = queueItem.blockedReasons || [];
     queueItem.deterministicSeed = queueItem.deterministicSeed ?? stableStringSeed(queueItem.id);
 
-    // Old queue implementation consumed the active unit up front. Preserve that
-    // fact so loading an old save never charges the same materials twice.
     if (!queueItem.reservationStatus) {
       queueItem.reservationStatus = (queueItem.activeIngredientQualities?.length || 0) > 0
         ? 'legacy_consumed'
@@ -64,18 +64,33 @@ function migrateToV2(state: GameState): void {
   state.saveVersion = 2;
 }
 
+function migrateToV3(state: GameState): void {
+  ensureResearchSystem(state);
+  state.craftedRecipeCounts ||= {};
+
+  // Existing completed research is treated as prior process experience. We do
+  // not fabricate production counts, but it still contributes through research
+  // status when evidence is recalculated.
+  refreshResearchEvidence(state, {
+    recordMaterialDiscoveries: false,
+    recordIdeaDiscoveries: false,
+  });
+
+  state.saveVersion = 3;
+}
+
 /**
- * Central save migration entry point. Migrations are intentionally mutative on
- * the parsed save object, then reservation counters are rebuilt from canonical
- * queue reservations so stale denormalized counters cannot survive a load.
+ * Central save migration entry point. Migrations mutate the parsed save once,
+ * then canonical reservation/evidence caches are rebuilt so stale derived data
+ * cannot survive a load.
  */
 export function migrateGameState(rawState: GameState): GameState {
   const state = rawState;
   const fromVersion = Math.max(1, state.saveVersion || 1);
 
   if (fromVersion < 2) migrateToV2(state);
+  if (fromVersion < 3) migrateToV3(state);
 
-  // Defensive normalization also applies to malformed/current-version saves.
   state.poiStorages = state.poiStorages || {};
   state.craftingQueue = state.craftingQueue || [];
   for (const item of state.inventory.items || []) normalizeInventoryItem(item);
@@ -92,7 +107,14 @@ export function migrateGameState(rawState: GameState): GameState {
     queueItem.reservationStatus = queueItem.reservationStatus || 'unreserved';
   }
 
+  ensureResearchSystem(state);
+  state.craftedRecipeCounts ||= {};
   rebuildReservationCounters(state);
+  refreshResearchEvidence(state, {
+    recordMaterialDiscoveries: false,
+    recordIdeaDiscoveries: false,
+  });
+
   state.saveVersion = LATEST_SAVE_VERSION;
   return state;
 }
