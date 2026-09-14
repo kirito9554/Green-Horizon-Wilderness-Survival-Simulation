@@ -5,6 +5,7 @@ import type { ClusterType } from '../types/buildingSimulation';
 import type { StructureMaintenanceMode } from '../types/structureMaintenanceSimulation';
 import '../types/buildingSimulation';
 import '../types/structureMaintenanceSimulation';
+import '../types/storageSimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { BUILDINGS_DATABASE } from '../data/buildings';
 import { AREAS_DATABASE } from '../data/areas';
@@ -31,6 +32,11 @@ import {
   queueStructureModification,
   togglePauseStructureWorkJob,
 } from './structureMaintenanceSystem';
+import {
+  storeAllInLocation,
+  storeItemInLocation,
+  takeItemFromLocation,
+} from './storageSystem';
 
 export function startGatheringTask(
   state: GameState,
@@ -119,6 +125,21 @@ function handleProductionCommand(state: GameState, survivorId: string, command: 
     const result = parts[1] ? dismantleTool(state, parts[1], survivorId || undefined) : null;
     return result?.state || state;
   }
+
+  if (opcode === '__storage_store__') {
+    const locationId = parts[1];
+    const instanceId = parts[2];
+    const quantity = parts[3] ? Number(parts[3]) : undefined;
+    return locationId && instanceId ? storeItemInLocation(state, locationId, instanceId, quantity) : state;
+  }
+  if (opcode === '__storage_take__') {
+    const locationId = parts[1];
+    const instanceId = parts[2];
+    const quantity = parts[3] ? Number(parts[3]) : undefined;
+    return locationId && instanceId ? takeItemFromLocation(state, locationId, instanceId, quantity) : state;
+  }
+  if (opcode === '__storage_store_all__') return parts[1] ? storeAllInLocation(state, parts[1]) : state;
+
   return state;
 }
 
@@ -185,12 +206,8 @@ function handleBuildingCommand(state: GameState, survivorId: string, command: st
       : state;
   }
 
-  if (opcode === '__construction_pause__') {
-    return parts[1] ? togglePauseSpatialConstruction(state, parts[1]) : state;
-  }
-  if (opcode === '__construction_cancel__') {
-    return parts[1] ? cancelSpatialConstruction(state, parts[1]) : state;
-  }
+  if (opcode === '__construction_pause__') return parts[1] ? togglePauseSpatialConstruction(state, parts[1]) : state;
+  if (opcode === '__construction_cancel__') return parts[1] ? cancelSpatialConstruction(state, parts[1]) : state;
 
   if (opcode === '__structure_maintenance__') {
     const mode = parts[1] as StructureMaintenanceMode;
@@ -207,12 +224,8 @@ function handleBuildingCommand(state: GameState, survivorId: string, command: st
       ? queueStructureModification(state, buildingInstanceId, modificationId, survivorId || undefined)
       : state;
   }
-  if (opcode === '__structure_work_pause__') {
-    return parts[1] ? togglePauseStructureWorkJob(state, parts[1]) : state;
-  }
-  if (opcode === '__structure_work_cancel__') {
-    return parts[1] ? cancelStructureWorkJob(state, parts[1]) : state;
-  }
+  if (opcode === '__structure_work_pause__') return parts[1] ? togglePauseStructureWorkJob(state, parts[1]) : state;
+  if (opcode === '__structure_work_cancel__') return parts[1] ? cancelStructureWorkJob(state, parts[1]) : state;
 
   return state;
 }
@@ -222,11 +235,6 @@ function totalAvailableForConstruction(state: GameState, areaId: string, itemId:
   return getAvailableInventoryStock(poiStorage, itemId) + getAvailableInventoryStock(state.inventory, itemId);
 }
 
-/**
- * Legacy direct construction path. New cluster-based construction is routed to
- * planSpatialConstruction above and therefore uses reservation -> hauling ->
- * staging -> phase consumption. This path remains for old saves/other screens.
- */
 export function startConstructionTask(
   state: GameState,
   survivorId: string,
