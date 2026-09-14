@@ -1,5 +1,6 @@
 import type { CraftingQueueItem, GameState, ItemQuality, RecipeDefinition, SurvivorState } from '../types';
 import '../types/craftingSimulation';
+import '../types/researchSimulation';
 import { RECIPES_DATABASE } from '../data/recipes';
 import { ITEMS_DATABASE } from '../data/items';
 import { addItemToInventory } from './inventorySystem';
@@ -18,6 +19,12 @@ import {
   findAvailableWorkstation,
   releaseWorkstation,
 } from './workstationSystem';
+import {
+  pauseEvidenceResearch,
+  refreshResearchEvidence,
+  startEvidenceResearch,
+  tickResearchEvidence,
+} from './researchSystem';
 
 const MAX_CRAFT_QUEUE_SLOTS = 3;
 
@@ -71,129 +78,21 @@ function findToolWithTag(state: GameState, tag: string) {
   });
 }
 
-/** Physical stock, including reserved slices. Research discovery cares about possession. */
 export function getItemStockInInventory(state: GameState, itemId: string): number {
   return state.inventory.items.reduce((total, item) => total + (item.itemId === itemId ? item.quantity : 0), 0);
 }
 
-// ---------------------------------------------------------------------------
-// Legacy discovery/research entry points. M3 replaces the discovery heuristic
-// with evidence while preserving these public functions for App compatibility.
-// ---------------------------------------------------------------------------
+// Public compatibility wrappers. The real implementation now lives in researchSystem.
 export function checkRecipeDiscoveries(state: GameState): boolean {
-  if (!state.researches) state.researches = {};
-  if (!state.discoveredRecipeIds) state.discoveredRecipeIds = [];
-  if (!state.craftingQueue) state.craftingQueue = [];
-
-  let anyNewDiscovery = false;
-  for (const recipe of Object.values(RECIPES_DATABASE)) {
-    if (recipe.type !== 'crafting') continue;
-
-    if (recipe.unlockedByDefault) {
-      if (!state.researches[recipe.id]) {
-        state.researches[recipe.id] = {
-          recipeId: recipe.id,
-          status: 'completed',
-          progressSeconds: recipe.researchTimeSeconds || 15,
-          totalSeconds: recipe.researchTimeSeconds || 15,
-        };
-      }
-      continue;
-    }
-
-    const current = state.researches[recipe.id];
-    if (current && ['completed', 'in_progress', 'paused', 'discovered'].includes(current.status)) continue;
-
-    const totalIngredients = recipe.ingredients.length;
-    const ownedDistinct = recipe.ingredients.filter(ingredient => getItemStockInInventory(state, ingredient.itemId) >= 1).length;
-    const threshold = totalIngredients === 1
-      ? 1
-      : totalIngredients === 2
-        ? 2
-        : Math.max(1, Math.floor(totalIngredients * 0.8));
-
-    if (ownedDistinct >= threshold) {
-      state.researches[recipe.id] = {
-        recipeId: recipe.id,
-        status: 'discovered',
-        progressSeconds: 0,
-        totalSeconds: recipe.researchTimeSeconds || 25,
-      };
-      if (!state.discoveredRecipeIds.includes(recipe.id)) state.discoveredRecipeIds.push(recipe.id);
-      state.logs.unshift({
-        id: `disc_${Date.now()}_${recipe.id}`,
-        day: state.gameTime.day,
-        timeStr: formatTimeOfDay(state.gameTime.minuteOfDay),
-        text: `[Ý niệm mới] Vật liệu thu thập được gợi mở bản vẽ "${recipe.name}".`,
-        type: 'success',
-      });
-      anyNewDiscovery = true;
-    }
-  }
-  return anyNewDiscovery;
+  return refreshResearchEvidence(state, { recordMaterialDiscoveries: true, recordIdeaDiscoveries: true });
 }
 
 export function startOrResumeResearch(state: GameState, recipeId: string, survivorId: string): GameState {
-  const next = JSON.parse(JSON.stringify(state)) as GameState;
-  if (!next.researches) next.researches = {};
-  const survivor = next.survivors.find(s => s.id === survivorId);
-  const recipe = RECIPES_DATABASE[recipeId];
-  if (!survivor || !recipe || survivor.currentAction.type !== 'idle') return state;
-
-  let research = next.researches[recipeId];
-  if (!research) {
-    research = {
-      recipeId,
-      status: 'discovered',
-      progressSeconds: 0,
-      totalSeconds: recipe.researchTimeSeconds || 25,
-    };
-    next.researches[recipeId] = research;
-  }
-  if (research.status === 'completed') return state;
-
-  research.status = 'in_progress';
-  research.assignedSurvivorId = survivorId;
-  survivor.currentAction = {
-    type: 'researching',
-    description: `Nghiên cứu bản vẽ: ${recipe.name}`,
-    targetId: recipeId,
-    progressSeconds: research.progressSeconds,
-    totalSeconds: research.totalSeconds,
-    resultPayload: { recipeId },
-  };
-
-  next.logs.unshift({
-    id: `res_start_${Date.now()}`,
-    day: next.gameTime.day,
-    timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
-    text: `${survivor.name} bắt đầu nghiên cứu "${recipe.name}" (${Math.round((research.progressSeconds / research.totalSeconds) * 100)}%).`,
-    type: 'info',
-  });
-  return next;
+  return startEvidenceResearch(state, recipeId, survivorId);
 }
 
 export function pauseResearch(state: GameState, recipeId: string): GameState {
-  const next = JSON.parse(JSON.stringify(state)) as GameState;
-  const research = next.researches?.[recipeId];
-  if (!research || research.status !== 'in_progress') return state;
-
-  if (research.assignedSurvivorId) {
-    const survivor = next.survivors.find(s => s.id === research.assignedSurvivorId);
-    if (survivor?.currentAction.type === 'researching' && survivor.currentAction.targetId === recipeId) {
-      research.progressSeconds = Math.max(research.progressSeconds, survivor.currentAction.progressSeconds);
-      setIdle(survivor);
-    }
-  }
-  research.status = 'paused';
-  next.logs.unshift({
-    id: `res_pause_${Date.now()}`,
-    day: next.gameTime.day,
-    timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
-    text: `Đã tạm dừng nghiên cứu "${RECIPES_DATABASE[recipeId]?.name || recipeId}". Tiến độ được bảo lưu.`,
-    type: 'info',
-  });
-  return next;
+  return pauseEvidenceResearch(state, recipeId);
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +172,7 @@ export function cancelCraftingQueueItem(state: GameState, queueItemId: string): 
     day: next.gameTime.day,
     timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
     text: hadConsumedWork
-      ? `Đã hủy ${recipe?.name || queueItem.recipeId}. Vật liệu chưa dùng được giải phóng; vật liệu của công đoạn đang làm đã thành phế hao.`
+      ? `Đã hủy ${recipe?.name || queueItem.recipeId}. Vật liệu chưa dùng được giải phóng; vật liệu công đoạn đang làm đã thành phế hao.`
       : `Đã hủy ${recipe?.name || queueItem.recipeId}; toàn bộ vật liệu đang giữ đã được giải phóng.`,
     type: hadConsumedWork ? 'warning' : 'info',
   });
@@ -366,13 +265,7 @@ function calculateEffectiveCraftTime(
   const environmentPenalty = calculateEnvironmentalPenalty(state, queueItem);
   const weatherFactor = 1 + environmentPenalty / 45;
   const workstationSpeed = Math.max(0.35, queueItem.workstationSpeedMultiplier || 1);
-
-  return Math.max(
-    1,
-    Math.round(
-      recipe.craftTimeSeconds * skillFactor * fatigueFactor * needsFactor * moraleFactor * weatherFactor / workstationSpeed * 10
-    ) / 10,
-  );
+  return Math.max(1, Math.round(recipe.craftTimeSeconds * skillFactor * fatigueFactor * needsFactor * moraleFactor * weatherFactor / workstationSpeed * 10) / 10);
 }
 
 function addCraftOutputs(
@@ -384,7 +277,6 @@ function addCraftOutputs(
   unitIndex: number,
 ): void {
   const seed = queueItem.deterministicSeed || stableStringSeed(queueItem.id);
-
   recipe.outputs.forEach((output, outputIndex) => {
     if (output.chance !== undefined && deterministicRoll(seed, unitIndex, 20 + outputIndex) > output.chance) return;
 
@@ -413,39 +305,6 @@ function addCraftOutputs(
   });
 }
 
-function completeResearchIfReady(state: GameState, deltaGameSeconds: number): void {
-  if (!state.researches) return;
-  for (const research of Object.values(state.researches)) {
-    if (research.status !== 'in_progress' || !research.assignedSurvivorId) continue;
-    const survivor = state.survivors.find(s => s.id === research.assignedSurvivorId);
-    if (!survivor) {
-      research.status = 'paused';
-      continue;
-    }
-
-    const actionStillResearching = survivor.currentAction.type === 'researching' && survivor.currentAction.targetId === research.recipeId;
-    if (!actionStillResearching && research.progressSeconds + deltaGameSeconds < research.totalSeconds) {
-      research.status = 'paused';
-      continue;
-    }
-
-    research.progressSeconds = Math.min(research.totalSeconds, research.progressSeconds + deltaGameSeconds);
-    if (actionStillResearching) survivor.currentAction.progressSeconds = research.progressSeconds;
-    if (research.progressSeconds >= research.totalSeconds) {
-      research.status = 'completed';
-      survivor.skills.crafting = (survivor.skills.crafting || 1) + 0.12;
-      setIdle(survivor);
-      state.logs.unshift({
-        id: `res_done_${Date.now()}_${research.recipeId}`,
-        day: state.gameTime.day,
-        timeStr: formatTimeOfDay(state.gameTime.minuteOfDay),
-        text: `[Nghiên cứu hoàn tất] ${survivor.name} đã hoàn thiện bản vẽ "${RECIPES_DATABASE[research.recipeId]?.name || research.recipeId}".`,
-        type: 'success',
-      });
-    }
-  }
-}
-
 function finishCraftUnit(
   state: GameState,
   queueItem: CraftingQueueItem,
@@ -470,6 +329,9 @@ function finishCraftUnit(
   }
 
   survivor.skills.crafting = (survivor.skills.crafting || 1) + 0.08;
+  state.craftedRecipeCounts ||= {};
+  state.craftedRecipeCounts[recipe.id] = (state.craftedRecipeCounts[recipe.id] || 0) + 1;
+
   queueItem.completedCount += 1;
   queueItem.progressSeconds = 0;
   queueItem.currentUnitIngredientQualities = undefined;
@@ -484,7 +346,7 @@ function finishCraftUnit(
     type: craftQuality === 'masterwork' || craftQuality === 'prime' ? 'success' : 'info',
   });
 
-  state.recentlyCrafted = state.recentlyCrafted || [];
+  state.recentlyCrafted ||= [];
   state.recentlyCrafted.unshift({
     id: `recent_${Date.now()}_${queueItem.id}_${unitIndex}`,
     recipeId: recipe.id,
@@ -513,7 +375,6 @@ function finishCraftUnit(
 
 function advanceRunningCrafts(state: GameState, deltaGameSeconds: number): void {
   if (!state.craftingQueue) return;
-
   for (let i = state.craftingQueue.length - 1; i >= 0; i--) {
     const queueItem = state.craftingQueue[i];
     if (queueItem.status !== 'in_progress' || !queueItem.assignedSurvivorId) continue;
@@ -528,8 +389,6 @@ function advanceRunningCrafts(state: GameState, deltaGameSeconds: number): void 
       continue;
     }
 
-    // A physical workstation can fail mid-job. Preserve consumed material and
-    // progress, but return the job to pending until a valid station is found.
     if (queueItem.assignedWorkstationId) {
       const station = state.buildings.find(building => building.id === queueItem.assignedWorkstationId);
       if (!station || !station.isBuilt || station.condition <= 0) {
@@ -559,7 +418,6 @@ function advanceRunningCrafts(state: GameState, deltaGameSeconds: number): void 
 
 function activatePendingCrafts(state: GameState): void {
   if (!state.craftingQueue) return;
-
   for (const queueItem of state.craftingQueue) {
     if (queueItem.status !== 'pending') continue;
     const recipe = RECIPES_DATABASE[queueItem.recipeId];
@@ -595,7 +453,7 @@ function activatePendingCrafts(state: GameState): void {
     }
 
     const oldTotal = Math.max(1, queueItem.totalSeconds || recipe.craftTimeSeconds);
-    const oldProgressFraction = Math.max(0, Math.min(1, queueItem.progressSeconds / oldTotal));
+    const oldFraction = Math.max(0, Math.min(1, queueItem.progressSeconds / oldTotal));
     assignWorkstation(queueItem, workstationResult.assignment);
 
     if (!hasCurrentConsumedUnit) {
@@ -613,10 +471,8 @@ function activatePendingCrafts(state: GameState): void {
       queueItem.progressSeconds = 0;
       queueItem.totalSeconds = calculateEffectiveCraftTime(state, recipe, worker, queueItem);
     } else {
-      // Resume/reassign: a different workstation or worker changes remaining
-      // speed without erasing the fraction of work already completed.
       queueItem.totalSeconds = calculateEffectiveCraftTime(state, recipe, worker, queueItem);
-      queueItem.progressSeconds = queueItem.totalSeconds * oldProgressFraction;
+      queueItem.progressSeconds = queueItem.totalSeconds * oldFraction;
     }
 
     queueItem.status = 'in_progress';
@@ -647,11 +503,9 @@ function activatePendingCrafts(state: GameState): void {
 }
 
 export function tickCraftingAndResearch(state: GameState, deltaGameSeconds: number): void {
-  checkRecipeDiscoveries(state);
   if (!state.researches) state.researches = {};
   if (!state.craftingQueue) state.craftingQueue = [];
-
-  completeResearchIfReady(state, deltaGameSeconds);
+  tickResearchEvidence(state, deltaGameSeconds);
   advanceRunningCrafts(state, deltaGameSeconds);
   activatePendingCrafts(state);
 }
