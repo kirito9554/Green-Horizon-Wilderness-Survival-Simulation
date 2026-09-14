@@ -1,5 +1,6 @@
 import { GameState } from '../types';
 import '../types/craftingSimulation';
+import '../types/researchSimulation';
 import { INITIAL_SURVIVORS } from '../data/survivors';
 import { getDefaultResourcePools } from './resourcePools';
 import { advanceTime } from './timeSystem';
@@ -11,7 +12,6 @@ import { tickItemSimulation } from './itemSimulation';
 import { tickCraftingAndResearch } from './craftingSystem';
 import { tickComponentBootstrap } from './componentBootstrapSystem';
 
-// Re-export subsystems to maintain complete backward compatibility across components
 export * from './inventorySystem';
 export * from './timeSystem';
 export * from './weatherSystem';
@@ -24,9 +24,11 @@ export * from './craftingSystem';
 export * from './materialReservationSystem';
 export * from './componentSystem';
 export * from './craftQualitySystem';
+export * from './workstationSystem';
+export * from './researchSystem';
 
 export const INITIAL_GAME_STATE: GameState = {
-  saveVersion: 2,
+  saveVersion: 3,
   campName: 'Canopy Bay Settlement',
   gameTime: {
     day: 1,
@@ -56,43 +58,12 @@ export const INITIAL_GAME_STATE: GameState = {
     maxWeightKg: 50,
     maxVolumeL: 80,
     items: [
-      {
-        instanceId: 'init_1',
-        itemId: 'ITEM_WILD_COCONUT',
-        quantity: 3,
-        qualityBreakdown: { standard: 2, prime: 1 },
-      },
-      {
-        instanceId: 'init_2',
-        itemId: 'ITEM_OPEN_COCONUT',
-        quantity: 2,
-        freshness: 100,
-        qualityBreakdown: { standard: 2 },
-      },
-      {
-        instanceId: 'init_3',
-        itemId: 'ITEM_DRIFTWOOD_BRANCH',
-        quantity: 6,
-        qualityBreakdown: { crude: 2, standard: 3, prime: 1 },
-      },
-      {
-        instanceId: 'init_4',
-        itemId: 'ITEM_RIVER_PEBBLE',
-        quantity: 4,
-        qualityBreakdown: { crude: 1, standard: 3 },
-      },
-      {
-        instanceId: 'init_5',
-        itemId: 'ITEM_PALM_LEAF',
-        quantity: 4,
-        qualityBreakdown: { standard: 3, prime: 1 },
-      },
-      {
-        instanceId: 'init_6',
-        itemId: 'ITEM_VINE_FIBER',
-        quantity: 3,
-        qualityBreakdown: { crude: 1, standard: 2 },
-      },
+      { instanceId: 'init_1', itemId: 'ITEM_WILD_COCONUT', quantity: 3, qualityBreakdown: { standard: 2, prime: 1 } },
+      { instanceId: 'init_2', itemId: 'ITEM_OPEN_COCONUT', quantity: 2, freshness: 100, qualityBreakdown: { standard: 2 } },
+      { instanceId: 'init_3', itemId: 'ITEM_DRIFTWOOD_BRANCH', quantity: 6, qualityBreakdown: { crude: 2, standard: 3, prime: 1 } },
+      { instanceId: 'init_4', itemId: 'ITEM_RIVER_PEBBLE', quantity: 4, qualityBreakdown: { crude: 1, standard: 3 } },
+      { instanceId: 'init_5', itemId: 'ITEM_PALM_LEAF', quantity: 4, qualityBreakdown: { standard: 3, prime: 1 } },
+      { instanceId: 'init_6', itemId: 'ITEM_VINE_FIBER', quantity: 3, qualityBreakdown: { crude: 1, standard: 2 } },
       {
         instanceId: 'init_7',
         itemId: 'ITEM_SHARP_STONE',
@@ -128,60 +99,22 @@ export const INITIAL_GAME_STATE: GameState = {
       maxWeightKg: 120,
       maxVolumeL: 180,
       items: [
-        {
-          instanceId: 'poi_camp_1',
-          itemId: 'ITEM_DRIFTWOOD_BRANCH',
-          quantity: 12,
-          quality: 'standard',
-          qualityBreakdown: { crude: 4, standard: 8 },
-        },
-        {
-          instanceId: 'poi_camp_2',
-          itemId: 'ITEM_RIVER_PEBBLE',
-          quantity: 8,
-          quality: 'standard',
-          qualityBreakdown: { standard: 8 },
-        },
-        {
-          instanceId: 'poi_camp_3',
-          itemId: 'ITEM_PALM_LEAF',
-          quantity: 10,
-          quality: 'standard',
-          qualityBreakdown: { standard: 10 },
-        },
+        { instanceId: 'poi_camp_1', itemId: 'ITEM_DRIFTWOOD_BRANCH', quantity: 12, quality: 'standard', qualityBreakdown: { crude: 4, standard: 8 } },
+        { instanceId: 'poi_camp_2', itemId: 'ITEM_RIVER_PEBBLE', quantity: 8, quality: 'standard', qualityBreakdown: { standard: 8 } },
+        { instanceId: 'poi_camp_3', itemId: 'ITEM_PALM_LEAF', quantity: 10, quality: 'standard', qualityBreakdown: { standard: 10 } },
       ],
     },
     AREA_COASTAL_SHALLOWS: {
       maxWeightKg: 45,
       maxVolumeL: 70,
-      items: [
-        {
-          instanceId: 'poi_coast_1',
-          itemId: 'ITEM_WILD_COCONUT',
-          quantity: 4,
-          quality: 'standard',
-          qualityBreakdown: { standard: 4 },
-        },
-      ],
+      items: [{ instanceId: 'poi_coast_1', itemId: 'ITEM_WILD_COCONUT', quantity: 4, quality: 'standard', qualityBreakdown: { standard: 4 } }],
     },
     AREA_RIVERBANK: {
       maxWeightKg: 45,
       maxVolumeL: 70,
-      items: [
-        {
-          instanceId: 'poi_river_1',
-          itemId: 'ITEM_RIVER_PEBBLE',
-          quantity: 6,
-          quality: 'standard',
-          qualityBreakdown: { standard: 6 },
-        },
-      ],
+      items: [{ instanceId: 'poi_river_1', itemId: 'ITEM_RIVER_PEBBLE', quantity: 6, quality: 'standard', qualityBreakdown: { standard: 6 } }],
     },
-    AREA_BAMBOO_GROVE: {
-      maxWeightKg: 45,
-      maxVolumeL: 70,
-      items: [],
-    },
+    AREA_BAMBOO_GROVE: { maxWeightKg: 45, maxVolumeL: 70, items: [] },
   },
   expeditions: [],
   resourcePools: getDefaultResourcePools(),
@@ -191,8 +124,17 @@ export const INITIAL_GAME_STATE: GameState = {
       status: 'completed',
       progressSeconds: 15,
       totalSeconds: 15,
+      evidenceScoreAtStart: 100,
     },
   },
+  researchSystem: {
+    evidenceByRecipeId: {},
+    identifiedMaterialIds: [],
+    trackedRecipeIds: [],
+    recentDiscoveries: [],
+    knowledgePoints: 0,
+  },
+  craftedRecipeCounts: {},
   craftingQueue: [],
   discoveredRecipeIds: ['RECIPE_BRAID_CORD'],
   logs: [
@@ -225,11 +167,7 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   advanceTime(next, deltaGameMinutes);
   tickWeather(next, deltaGameMinutes);
   tickResourceSystem(next, deltaGameMinutes);
-
-  // Ensure every durable item has real component instances before any task can
-  // wear, repair or reserve it during this tick.
   tickComponentBootstrap(next);
-
   tickSurvivors(next, deltaGameMinutes, deltaGameSeconds);
   tickExpeditions(next, deltaGameMinutes);
   tickItemSimulation(next, deltaGameMinutes);
