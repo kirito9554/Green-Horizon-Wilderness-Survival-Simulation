@@ -57,6 +57,8 @@ export interface CraftQualityProfile {
 export interface MaterialReservationSource {
   kind: 'party' | 'poi';
   areaId?: string;
+  /** Optional physical sub-location inside a canonical POI inventory. */
+  storageLocationId?: string;
 }
 
 export type MaterialReservationOwnerType =
@@ -66,7 +68,8 @@ export type MaterialReservationOwnerType =
   | 'research'
   | 'construction'
   | 'structure_maintenance'
-  | 'structure_modify';
+  | 'structure_modify'
+  | 'storage_haul';
 
 /**
  * A reservation never removes an item from inventory. It marks an exact slice
