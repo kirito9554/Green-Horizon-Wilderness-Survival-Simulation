@@ -501,7 +501,7 @@ export function findStructurePlacement(state: GameState, clusterId: string, buil
     cell.roots > 62
   );
   const reasons: string[] = [];
-  if (needsPrep) reasons.push('Vị trí cần chuẩn bị nhẹ trước khi thi công');
+  if (needsPrep) reasons.push('Vị trí cần chuẩn bị nhẹ; thời gian thi công sẽ tăng');
   if (average(selectedCells, cell => cell.drainage) >= profile.preferredDrainage) reasons.push('Thoát nước phù hợp');
   if (average(selectedCells, cell => cell.bearingCapacity) >= profile.minBearing + 15) reasons.push('Nền chịu tải tốt');
 
@@ -520,7 +520,7 @@ export function reserveStructurePlacement(
   buildingId: string,
 ): StructurePlacementResult {
   const result = findStructurePlacement(state, clusterId, buildingId);
-  if (result.status !== 'available') return result;
+  if (result.status !== 'available' && result.status !== 'preparation_required') return result;
   const cluster = state.buildingSimulation?.clusters.find(candidate => candidate.id === clusterId);
   if (!cluster) return { ...result, status: 'no_space', allocations: [] };
   const grid = getOrCreatePoiBuildGrid(state, cluster.poiId);
