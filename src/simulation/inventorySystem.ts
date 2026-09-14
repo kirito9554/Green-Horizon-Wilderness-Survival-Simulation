@@ -1,7 +1,74 @@
 import { GameState, InventoryItem, ItemQuality, QualityBreakdown, StorageInventory } from '../types';
+import '../types/craftingSimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { BUILDINGS_DATABASE } from '../data/buildings';
 import { mergeQualityBreakdown, deductFromQualityBreakdown } from '../utils/qualityUtils';
+
+const QUALITY_ORDER: ItemQuality[] = ['crude', 'standard', 'prime', 'masterwork'];
+
+function emptyBreakdown(): QualityBreakdown {
+  return { crude: 0, standard: 0, prime: 0, masterwork: 0 };
+}
+
+function sumBreakdown(value?: QualityBreakdown): number {
+  if (!value) return 0;
+  return QUALITY_ORDER.reduce((sum, quality) => sum + (value[quality] || 0), 0);
+}
+
+function normalizeBreakdown(item: InventoryItem): QualityBreakdown {
+  if (item.qualityBreakdown && sumBreakdown(item.qualityBreakdown) > 0) {
+    return {
+      crude: item.qualityBreakdown.crude || 0,
+      standard: item.qualityBreakdown.standard || 0,
+      prime: item.qualityBreakdown.prime || 0,
+      masterwork: item.qualityBreakdown.masterwork || 0,
+    };
+  }
+  const result = emptyBreakdown();
+  result[item.quality || 'standard'] = item.quantity;
+  return result;
+}
+
+function subtractBreakdownExact(base: QualityBreakdown | undefined, subtraction: QualityBreakdown): QualityBreakdown {
+  const result = emptyBreakdown();
+  for (const quality of QUALITY_ORDER) {
+    result[quality] = Math.max(0, (base?.[quality] || 0) - (subtraction[quality] || 0));
+  }
+  return result;
+}
+
+function getAvailableBreakdown(item: InventoryItem): QualityBreakdown {
+  return subtractBreakdownExact(normalizeBreakdown(item), item.reservedQualityBreakdown || emptyBreakdown());
+}
+
+function extractAvailableQualitySlice(item: InventoryItem, amount: number): QualityBreakdown | null {
+  const available = getAvailableBreakdown(item);
+  if (sumBreakdown(available) < amount) return null;
+
+  const slice = emptyBreakdown();
+  let remaining = amount;
+  for (const quality of QUALITY_ORDER) {
+    if (remaining <= 0) break;
+    const take = Math.min(available[quality] || 0, remaining);
+    slice[quality] = take;
+    remaining -= take;
+  }
+  return remaining === 0 ? slice : null;
+}
+
+export function getAvailableInventoryItemQuantity(item: InventoryItem): number {
+  return Math.max(0, item.quantity - (item.reservedQuantity || 0));
+}
+
+export function getAvailableInventoryStock(
+  inventory: { items: InventoryItem[] },
+  itemId: string,
+): number {
+  return inventory.items.reduce((sum, item) => {
+    if (item.itemId !== itemId) return sum;
+    return sum + getAvailableInventoryItemQuantity(item);
+  }, 0);
+}
 
 // Helper: Calculate total current weight and volume
 export function calculateInventoryOccupancy(items: InventoryItem[]): { weight: number; volume: number } {
@@ -22,8 +89,8 @@ export function calculateInventoryOccupancy(items: InventoryItem[]): { weight: n
 
 // Helper: Add items safely to inventory considering stacks and quality
 export function addItemToInventory(
-  inventory: GameState['inventory'], 
-  itemId: string, 
+  inventory: GameState['inventory'],
+  itemId: string,
   quantity: number,
   quality: ItemQuality = 'standard'
 ): { success: boolean; added: number; remainder: number } {
@@ -34,18 +101,15 @@ export function addItemToInventory(
   const itemWeight = def.weight * quantity;
   const itemVolume = def.volume * quantity;
 
-  // Check capacity limits
   if (current.weight + itemWeight > inventory.maxWeightKg || current.volume + itemVolume > inventory.maxVolumeL) {
-    // Inventory is full
     return { success: false, added: 0, remainder: quantity };
   }
 
-  // Với công cụ (tool) có durability: Mỗi món chiếm 1 ô riêng biệt để lưu đúng durability & quality
+  // Durable tools are unique instances; provenance/condition must never be stacked.
   if (def.category === 'tool' || def.toolProperties) {
     const durMult = quality === 'prime' ? 1.5 : quality === 'masterwork' ? 2.2 : quality === 'crude' ? 0.7 : 1.0;
     const baseDur = def.toolProperties?.durabilityMax || 100;
     const conditionMax = Math.round(baseDur * durMult);
-    const condition = conditionMax;
 
     for (let i = 0; i < quantity; i++) {
       inventory.items.push({
@@ -53,44 +117,39 @@ export function addItemToInventory(
         itemId,
         quantity: 1,
         quality,
-        condition,
+        condition: conditionMax,
         conditionMax,
+        originalConditionMax: conditionMax,
+        reservedQuantity: 0,
+        reservedQualityBreakdown: emptyBreakdown(),
       });
     }
     return { success: true, added: quantity, remainder: 0 };
   }
 
   let remaining = quantity;
-
-  // Try filling existing stacks first
   for (const invItem of inventory.items) {
     if (invItem.itemId === itemId && invItem.quantity < def.stackSize) {
       const spaceInStack = def.stackSize - invItem.quantity;
       const amountToAdd = Math.min(spaceInStack, remaining);
       invItem.quantity += amountToAdd;
-      
-      // Update quality breakdown for this stack
       invItem.qualityBreakdown = mergeQualityBreakdown(invItem.qualityBreakdown, quality, amountToAdd);
-
       remaining -= amountToAdd;
       if (remaining <= 0) break;
     }
   }
 
-  // Create new stacks if needed
   while (remaining > 0) {
     const amountInNewStack = Math.min(def.stackSize, remaining);
-    const initialBreakdown: QualityBreakdown = {
-      [quality]: amountInNewStack,
-    };
-
     inventory.items.push({
       instanceId: `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       itemId,
       quantity: amountInNewStack,
-      qualityBreakdown: initialBreakdown,
+      qualityBreakdown: { [quality]: amountInNewStack },
       quality,
       freshness: def.freshnessMaxDays ? 100 : undefined,
+      reservedQuantity: 0,
+      reservedQualityBreakdown: emptyBreakdown(),
     });
     remaining -= amountInNewStack;
   }
@@ -98,13 +157,17 @@ export function addItemToInventory(
   return { success: true, added: quantity, remainder: 0 };
 }
 
-// Helper: Sửa chữa công cụ bằng cách mài sắc hoặc quấn lại dây buộc
+// Legacy quick repair. Deep component repair is implemented in a later milestone,
+// but this path is now reservation-safe.
 export function repairToolItem(
   inventory: GameState['inventory'],
   toolInstanceId: string
 ): { success: boolean; repairedAmount: number; message: string } {
   const tool = inventory.items.find(i => i.instanceId === toolInstanceId);
   if (!tool) return { success: false, repairedAmount: 0, message: 'Không tìm thấy công cụ trong kho' };
+  if ((tool.reservedQuantity || 0) > 0) {
+    return { success: false, repairedAmount: 0, message: 'Công cụ đang được giữ cho một công việc khác' };
+  }
 
   const def = ITEMS_DATABASE[tool.itemId];
   if (!def || !def.toolProperties) return { success: false, repairedAmount: 0, message: 'Vật phẩm không phải công cụ' };
@@ -114,74 +177,70 @@ export function repairToolItem(
     return { success: false, repairedAmount: 0, message: 'Công cụ vẫn còn rất mới, chưa cần sửa chữa' };
   }
 
-  // Kiểm tra nguyên liệu sửa chữa (Cần 1x Dây buộc hoặc 1x Đá cuội ghè mài)
-  const hasFiber = inventory.items.some(i => (i.itemId === 'ITEM_VINE_FIBER' || i.itemId === 'ITEM_CORD_ROPE') && i.quantity > 0);
-  const hasStone = inventory.items.some(i => i.itemId === 'ITEM_RIVER_PEBBLE' && i.quantity > 0);
-
+  const hasFiber = getAvailableInventoryStock(inventory, 'ITEM_VINE_FIBER') > 0 || getAvailableInventoryStock(inventory, 'ITEM_CORD_ROPE') > 0;
+  const hasStone = getAvailableInventoryStock(inventory, 'ITEM_RIVER_PEBBLE') > 0;
   if (!hasFiber && !hasStone) {
-    return { success: false, repairedAmount: 0, message: 'Cần ít nhất 1x Dây rừng hoặc 1x Đá cuội để mài/buộc lại công cụ' };
+    return { success: false, repairedAmount: 0, message: 'Cần ít nhất 1x Dây rừng hoặc 1x Đá cuội chưa được giữ cho công việc khác' };
   }
 
-  // Tiêu thụ 1 nguyên liệu sửa chữa
   if (hasFiber) {
-    const fiberItem = inventory.items.find(i => (i.itemId === 'ITEM_VINE_FIBER' || i.itemId === 'ITEM_CORD_ROPE') && i.quantity > 0);
-    if (fiberItem) deductItemFromInventory(inventory, fiberItem.itemId, 1);
-  } else if (hasStone) {
+    const materialId = getAvailableInventoryStock(inventory, 'ITEM_VINE_FIBER') > 0 ? 'ITEM_VINE_FIBER' : 'ITEM_CORD_ROPE';
+    deductItemFromInventory(inventory, materialId, 1);
+  } else {
     deductItemFromInventory(inventory, 'ITEM_RIVER_PEBBLE', 1);
   }
 
-  // Hồi phục 50% độ bền tối đa
   const healAmount = Math.round(maxCond * 0.5);
   const oldCond = tool.condition || 0;
   tool.condition = Math.min(maxCond, oldCond + healAmount);
   const actualRepaired = tool.condition - oldCond;
 
-  return { 
-    success: true, 
-    repairedAmount: actualRepaired, 
-    message: `Đã gia cố và mài lại ${def.name}, hồi phục +${actualRepaired} độ bền!` 
+  return {
+    success: true,
+    repairedAmount: actualRepaired,
+    message: `Đã gia cố và mài lại ${def.name}, hồi phục +${actualRepaired} độ bền!`,
   };
 }
 
-// Helper: Deduct items from inventory (with quality breakdown support)
+/**
+ * Deduct only unreserved quantities. Reserved slices are invisible to generic
+ * consumers, preventing crafting queues from being invalidated by transfer,
+ * discard, repair or another queue.
+ */
 export function deductItemFromInventory(
-  inventory: GameState['inventory'], 
-  itemId: string, 
+  inventory: GameState['inventory'],
+  itemId: string,
   quantity: number
 ): boolean {
   let needed = quantity;
-  // First verify availability
-  let available = 0;
-  for (const item of inventory.items) {
-    if (item.itemId === itemId) available += item.quantity;
-  }
+  const available = getAvailableInventoryStock(inventory, itemId);
   if (available < needed) return false;
 
-  for (let i = inventory.items.length - 1; i >= 0; i--) {
+  for (let i = inventory.items.length - 1; i >= 0 && needed > 0; i--) {
     const item = inventory.items[i];
-    if (item.itemId === itemId) {
-      if (item.quantity <= needed) {
-        needed -= item.quantity;
-        inventory.items.splice(i, 1);
-      } else {
-        item.quantity -= needed;
-        if (item.qualityBreakdown) {
-          const { updated } = deductFromQualityBreakdown(item.qualityBreakdown, needed);
-          item.qualityBreakdown = updated;
-        }
-        needed = 0;
-      }
-      if (needed <= 0) break;
+    if (item.itemId !== itemId) continue;
+
+    const availableOnItem = getAvailableInventoryItemQuantity(item);
+    if (availableOnItem <= 0) continue;
+    const take = Math.min(availableOnItem, needed);
+    const qualitySlice = extractAvailableQualitySlice(item, take);
+    if (!qualitySlice) continue;
+
+    item.quantity -= take;
+    if (item.qualityBreakdown) {
+      item.qualityBreakdown = subtractBreakdownExact(item.qualityBreakdown, qualitySlice);
     }
+    needed -= take;
+
+    if (item.quantity <= 0) inventory.items.splice(i, 1);
   }
-  return true;
+
+  return needed <= 0;
 }
 
 // Helper: Lấy hoặc khởi tạo kho bãi riêng cho một POI
 export function getOrCreatePoiStorage(state: GameState, areaId: string): StorageInventory {
-  if (!state.poiStorages) {
-    state.poiStorages = {};
-  }
+  if (!state.poiStorages) state.poiStorages = {};
   if (!state.poiStorages[areaId]) {
     const isCamp = areaId === 'AREA_CAMP_CLEARING';
     const baseWeight = isCamp ? 120 : 45;
@@ -193,7 +252,7 @@ export function getOrCreatePoiStorage(state: GameState, areaId: string): Storage
       for (const b of state.buildings) {
         if (b.isBuilt && (b.areaId === areaId || (!b.areaId && isCamp))) {
           const bDef = BUILDINGS_DATABASE[b.buildingId];
-          if (bDef && bDef.maxCapacityIncrease) {
+          if (bDef?.maxCapacityIncrease) {
             extraWeight += bDef.maxCapacityIncrease.weightKg || 0;
             extraVolume += bDef.maxCapacityIncrease.volumeL || 0;
           }
@@ -201,31 +260,24 @@ export function getOrCreatePoiStorage(state: GameState, areaId: string): Storage
       }
     }
 
-    // Một số địa điểm hoang sơ có thể có sẵn một số vật phẩm tích lũy tự nhiên
     const initialItems: InventoryItem[] = [];
     if (isCamp) {
       initialItems.push(
         {
-          instanceId: `camp_init_1`,
-          itemId: 'ITEM_DRIFTWOOD_BRANCH',
-          quantity: 12,
-          quality: 'standard',
-          qualityBreakdown: { crude: 4, standard: 8 },
+          instanceId: 'camp_init_1', itemId: 'ITEM_DRIFTWOOD_BRANCH', quantity: 12,
+          quality: 'standard', qualityBreakdown: { crude: 4, standard: 8 },
+          reservedQuantity: 0, reservedQualityBreakdown: emptyBreakdown(),
         },
         {
-          instanceId: `camp_init_2`,
-          itemId: 'ITEM_RIVER_PEBBLE',
-          quantity: 8,
-          quality: 'standard',
-          qualityBreakdown: { standard: 8 },
+          instanceId: 'camp_init_2', itemId: 'ITEM_RIVER_PEBBLE', quantity: 8,
+          quality: 'standard', qualityBreakdown: { standard: 8 },
+          reservedQuantity: 0, reservedQualityBreakdown: emptyBreakdown(),
         },
         {
-          instanceId: `camp_init_3`,
-          itemId: 'ITEM_PALM_LEAF',
-          quantity: 10,
-          quality: 'standard',
-          qualityBreakdown: { standard: 10 },
-        }
+          instanceId: 'camp_init_3', itemId: 'ITEM_PALM_LEAF', quantity: 10,
+          quality: 'standard', qualityBreakdown: { standard: 10 },
+          reservedQuantity: 0, reservedQualityBreakdown: emptyBreakdown(),
+        },
       );
     }
 
@@ -238,6 +290,45 @@ export function getOrCreatePoiStorage(state: GameState, areaId: string): Storage
   return state.poiStorages[areaId];
 }
 
+function mergeQualitySliceIntoTarget(
+  targetInv: { items: InventoryItem[] },
+  sourceItem: InventoryItem,
+  defStackSize: number,
+  qualitySlice: QualityBreakdown,
+): void {
+  for (const quality of QUALITY_ORDER) {
+    let remaining = qualitySlice[quality] || 0;
+    while (remaining > 0) {
+      const existing = targetInv.items.find(item => item.itemId === sourceItem.itemId && item.quantity < defStackSize && (item.reservedQuantity || 0) === 0);
+      if (existing) {
+        const amount = Math.min(defStackSize - existing.quantity, remaining);
+        existing.quantity += amount;
+        existing.qualityBreakdown = mergeQualityBreakdown(existing.qualityBreakdown, quality, amount);
+        if (sourceItem.freshness !== undefined) {
+          existing.freshness = Math.min(existing.freshness ?? sourceItem.freshness, sourceItem.freshness);
+        }
+        remaining -= amount;
+      } else {
+        const amount = Math.min(defStackSize, remaining);
+        targetInv.items.push({
+          instanceId: `tr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          itemId: sourceItem.itemId,
+          quantity: amount,
+          quality,
+          qualityBreakdown: { [quality]: amount },
+          freshness: sourceItem.freshness,
+          condition: sourceItem.condition,
+          conditionMax: sourceItem.conditionMax,
+          originalConditionMax: sourceItem.originalConditionMax,
+          reservedQuantity: 0,
+          reservedQualityBreakdown: emptyBreakdown(),
+        });
+        remaining -= amount;
+      }
+    }
+  }
+}
+
 // Helper: Chuyển vật phẩm giữa 2 kho (Party Inventory <-> POI Storage)
 export function transferItemBetweenInventories(
   sourceInv: { maxWeightKg: number; maxVolumeL: number; items: InventoryItem[] },
@@ -246,94 +337,50 @@ export function transferItemBetweenInventories(
   quantityToMove?: number
 ): { success: boolean; moved: number; message: string } {
   const sourceIndex = sourceInv.items.findIndex(i => i.instanceId === instanceId);
-  if (sourceIndex === -1) {
-    return { success: false, moved: 0, message: 'Không tìm thấy vật phẩm' };
-  }
+  if (sourceIndex === -1) return { success: false, moved: 0, message: 'Không tìm thấy vật phẩm' };
 
   const sourceItem = sourceInv.items[sourceIndex];
   const def = ITEMS_DATABASE[sourceItem.itemId];
-  if (!def) {
-    return { success: false, moved: 0, message: 'Dữ liệu vật phẩm không hợp lệ' };
+  if (!def) return { success: false, moved: 0, message: 'Dữ liệu vật phẩm không hợp lệ' };
+
+  const availableQuantity = getAvailableInventoryItemQuantity(sourceItem);
+  if (availableQuantity <= 0) {
+    return { success: false, moved: 0, message: `${def.name} đang được giữ cho một công việc khác` };
   }
+  const moveQty = Math.max(1, Math.min(availableQuantity, quantityToMove ?? availableQuantity));
 
-  const moveQty = Math.max(1, Math.min(sourceItem.quantity, quantityToMove ?? sourceItem.quantity));
-
-  // Kiểm tra tải trọng kho đích
   const targetOcc = calculateInventoryOccupancy(targetInv.items);
   const addWeight = def.weight * moveQty;
   const addVolume = def.volume * moveQty;
-
   if (targetOcc.weight + addWeight > targetInv.maxWeightKg) {
-    return { 
-      success: false, 
-      moved: 0, 
-      message: `Kho đích quá tải trọng lượng! (${(targetOcc.weight + addWeight).toFixed(1)} / ${targetInv.maxWeightKg} kg)` 
-    };
+    return { success: false, moved: 0, message: `Kho đích quá tải trọng lượng! (${(targetOcc.weight + addWeight).toFixed(1)} / ${targetInv.maxWeightKg} kg)` };
   }
   if (targetOcc.volume + addVolume > targetInv.maxVolumeL) {
-    return { 
-      success: false, 
-      moved: 0, 
-      message: `Kho đích không đủ thể tích chứa! (${(targetOcc.volume + addVolume).toFixed(1)} / ${targetInv.maxVolumeL} L)` 
-    };
+    return { success: false, moved: 0, message: `Kho đích không đủ thể tích chứa! (${(targetOcc.volume + addVolume).toFixed(1)} / ${targetInv.maxVolumeL} L)` };
   }
 
-  // Chuyển đối với công cụ đơn chiếc
   if (def.category === 'tool' || def.toolProperties) {
-    targetInv.items.push({
-      ...sourceItem,
-      quantity: 1,
-    });
+    if ((sourceItem.reservedQuantity || 0) > 0) {
+      return { success: false, moved: 0, message: `${def.name} đang được giữ cho một công việc khác` };
+    }
+    targetInv.items.push({ ...sourceItem, reservedQuantity: 0, reservedQualityBreakdown: emptyBreakdown() });
     sourceInv.items.splice(sourceIndex, 1);
     return { success: true, moved: 1, message: `Đã chuyển 1x ${def.name}` };
   }
 
-  // Chuyển đối với stack
-  let remainingToMove = moveQty;
-  for (const tItem of targetInv.items) {
-    if (tItem.itemId === sourceItem.itemId && tItem.quantity < def.stackSize) {
-      const space = def.stackSize - tItem.quantity;
-      const amount = Math.min(space, remainingToMove);
-      tItem.quantity += amount;
+  const qualitySlice = extractAvailableQualitySlice(sourceItem, moveQty);
+  if (!qualitySlice) return { success: false, moved: 0, message: `Không thể tách phần chưa được giữ của ${def.name}` };
 
-      const dominantQ = sourceItem.quality || 'standard';
-      tItem.qualityBreakdown = mergeQualityBreakdown(tItem.qualityBreakdown, dominantQ, amount);
-      remainingToMove -= amount;
-      if (remainingToMove <= 0) break;
-    }
+  mergeQualitySliceIntoTarget(targetInv, sourceItem, def.stackSize, qualitySlice);
+  sourceItem.quantity -= moveQty;
+  if (sourceItem.qualityBreakdown) {
+    sourceItem.qualityBreakdown = subtractBreakdownExact(sourceItem.qualityBreakdown, qualitySlice);
   }
-
-  while (remainingToMove > 0) {
-    const stackAmount = Math.min(def.stackSize, remainingToMove);
-    const dominantQ = sourceItem.quality || 'standard';
-    targetInv.items.push({
-      instanceId: `tr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      itemId: sourceItem.itemId,
-      quantity: stackAmount,
-      quality: dominantQ,
-      qualityBreakdown: { [dominantQ]: stackAmount },
-      freshness: sourceItem.freshness,
-      condition: sourceItem.condition,
-      conditionMax: sourceItem.conditionMax,
-    });
-    remainingToMove -= stackAmount;
-  }
-
-  // Khấu trừ ở kho nguồn
-  if (sourceItem.quantity <= moveQty) {
-    sourceInv.items.splice(sourceIndex, 1);
-  } else {
-    sourceItem.quantity -= moveQty;
-    if (sourceItem.qualityBreakdown) {
-      const { updated } = deductFromQualityBreakdown(sourceItem.qualityBreakdown, moveQty);
-      sourceItem.qualityBreakdown = updated;
-    }
-  }
+  if (sourceItem.quantity <= 0) sourceInv.items.splice(sourceIndex, 1);
 
   return { success: true, moved: moveQty, message: `Đã chuyển ${moveQty}x ${def.name}` };
 }
 
-// Helper: Chuyển toàn bộ vật phẩm có thể chuyển từ kho nguồn sang kho đích
 export function transferAllItems(
   sourceInv: { maxWeightKg: number; maxVolumeL: number; items: InventoryItem[] },
   targetInv: { maxWeightKg: number; maxVolumeL: number; items: InventoryItem[] }
@@ -343,14 +390,11 @@ export function transferAllItems(
 
   for (const id of instanceIds) {
     const res = transferItemBetweenInventories(sourceInv, targetInv, id);
-    if (res.success) {
-      movedCount += res.moved;
-    }
+    if (res.success) movedCount += res.moved;
   }
 
   if (movedCount > 0) {
-    return { success: true, movedCount, message: `Đã chuyển thành công ${movedCount} vật phẩm sang kho!` };
+    return { success: true, movedCount, message: `Đã chuyển thành công ${movedCount} vật phẩm chưa được giữ sang kho!` };
   }
-  return { success: false, movedCount: 0, message: 'Không thể chuyển (kho đích đã đầy hoặc kho nguồn trống)!' };
+  return { success: false, movedCount: 0, message: 'Không thể chuyển (kho đích đầy, kho trống, hoặc toàn bộ vật phẩm đang được giữ)!' };
 }
-
