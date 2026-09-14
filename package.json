@@ -11,7 +11,8 @@
     "lint": "tsc --noEmit",
     "test:production": "tsx scripts/deep-production-smoke.ts",
     "test:building": "tsx scripts/building-simulation-smoke.ts",
-    "test:structure": "tsx scripts/structure-lifecycle-smoke.ts"
+    "test:structure": "tsx scripts/structure-lifecycle-smoke.ts",
+    "test:structure-work": "tsx scripts/structure-maintenance-smoke.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
