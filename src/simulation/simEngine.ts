@@ -1,4 +1,5 @@
 import { GameState } from '../types';
+import '../types/craftingSimulation';
 import { INITIAL_SURVIVORS } from '../data/survivors';
 import { getDefaultResourcePools } from './resourcePools';
 import { advanceTime } from './timeSystem';
@@ -8,6 +9,7 @@ import { tickSurvivors } from './survivorSystem';
 import { tickExpeditions } from './expeditionSystem';
 import { tickItemSimulation } from './itemSimulation';
 import { tickCraftingAndResearch } from './craftingSystem';
+import { tickComponentBootstrap } from './componentBootstrapSystem';
 
 // Re-export subsystems to maintain complete backward compatibility across components
 export * from './inventorySystem';
@@ -19,13 +21,16 @@ export * from './expeditionSystem';
 export * from './taskHandlers';
 export * from './itemSimulation';
 export * from './craftingSystem';
+export * from './materialReservationSystem';
+export * from './componentSystem';
+export * from './craftQualitySystem';
 
 export const INITIAL_GAME_STATE: GameState = {
-  saveVersion: 1,
+  saveVersion: 2,
   campName: 'Canopy Bay Settlement',
   gameTime: {
     day: 1,
-    minuteOfDay: 510, // 08:30 AM
+    minuteOfDay: 510,
     speed: 1,
   },
   weather: {
@@ -51,50 +56,53 @@ export const INITIAL_GAME_STATE: GameState = {
     maxWeightKg: 50,
     maxVolumeL: 80,
     items: [
-      { 
-        instanceId: 'init_1', 
-        itemId: 'ITEM_WILD_COCONUT', 
-        quantity: 3, 
-        qualityBreakdown: { standard: 2, prime: 1 } 
+      {
+        instanceId: 'init_1',
+        itemId: 'ITEM_WILD_COCONUT',
+        quantity: 3,
+        qualityBreakdown: { standard: 2, prime: 1 },
       },
-      { 
-        instanceId: 'init_2', 
-        itemId: 'ITEM_OPEN_COCONUT', 
-        quantity: 2, 
-        freshness: 100, 
-        qualityBreakdown: { standard: 2 } 
+      {
+        instanceId: 'init_2',
+        itemId: 'ITEM_OPEN_COCONUT',
+        quantity: 2,
+        freshness: 100,
+        qualityBreakdown: { standard: 2 },
       },
-      { 
-        instanceId: 'init_3', 
-        itemId: 'ITEM_DRIFTWOOD_BRANCH', 
-        quantity: 6, 
-        qualityBreakdown: { crude: 2, standard: 3, prime: 1 } 
+      {
+        instanceId: 'init_3',
+        itemId: 'ITEM_DRIFTWOOD_BRANCH',
+        quantity: 6,
+        qualityBreakdown: { crude: 2, standard: 3, prime: 1 },
       },
-      { 
-        instanceId: 'init_4', 
-        itemId: 'ITEM_RIVER_PEBBLE', 
-        quantity: 4, 
-        qualityBreakdown: { crude: 1, standard: 3 } 
+      {
+        instanceId: 'init_4',
+        itemId: 'ITEM_RIVER_PEBBLE',
+        quantity: 4,
+        qualityBreakdown: { crude: 1, standard: 3 },
       },
-      { 
-        instanceId: 'init_5', 
-        itemId: 'ITEM_PALM_LEAF', 
-        quantity: 4, 
-        qualityBreakdown: { standard: 3, prime: 1 } 
+      {
+        instanceId: 'init_5',
+        itemId: 'ITEM_PALM_LEAF',
+        quantity: 4,
+        qualityBreakdown: { standard: 3, prime: 1 },
       },
-      { 
-        instanceId: 'init_6', 
-        itemId: 'ITEM_VINE_FIBER', 
-        quantity: 3, 
-        qualityBreakdown: { crude: 1, standard: 2 } 
+      {
+        instanceId: 'init_6',
+        itemId: 'ITEM_VINE_FIBER',
+        quantity: 3,
+        qualityBreakdown: { crude: 1, standard: 2 },
       },
-      { 
-        instanceId: 'init_7', 
-        itemId: 'ITEM_SHARP_STONE', 
-        quantity: 1, 
-        quality: 'standard', 
+      {
+        instanceId: 'init_7',
+        itemId: 'ITEM_SHARP_STONE',
+        quantity: 1,
+        quality: 'standard',
         condition: 100,
-        conditionMax: 100
+        conditionMax: 100,
+        originalConditionMax: 100,
+        reservedQuantity: 0,
+        reservedQualityBreakdown: { crude: 0, standard: 0, prime: 0, masterwork: 0 },
       },
     ],
   },
@@ -105,7 +113,6 @@ export const INITIAL_GAME_STATE: GameState = {
     AREA_BAMBOO_GROVE: { knowledgePercent: 0, lastGatheredTime: {} },
   },
   buildings: [
-    // Pre-seed a blueprint ready for construction
     {
       id: 'bld_campfire',
       buildingId: 'BUILDING_CAMPFIRE_HEARTH',
@@ -207,41 +214,27 @@ export const INITIAL_GAME_STATE: GameState = {
   },
 };
 
-// Orchestration Engine: Ticks all simulation subsystems in sequence
 export function tickSimulation(state: GameState, deltaRealSeconds: number): GameState {
   if (state.gameTime.speed === 0) return state;
 
   const next = JSON.parse(JSON.stringify(state)) as GameState;
   const speedMult = state.gameTime.speed * (state.settings.gameSpeedMultiplier || 1);
-  // 1 real second = 0.5 game minute at 1x speed (smooth simulation pace)
-  const deltaGameMinutes = (deltaRealSeconds * 0.5) * speedMult;
+  const deltaGameMinutes = deltaRealSeconds * 0.5 * speedMult;
   const deltaGameSeconds = deltaRealSeconds * speedMult;
 
-  // 1. Time Advancement
   advanceTime(next, deltaGameMinutes);
-
-  // 2. Weather Tick
   tickWeather(next, deltaGameMinutes);
-
-  // 3. Resource Pools & Passive Collection
   tickResourceSystem(next, deltaGameMinutes);
 
-  // 4. Survivor Needs & Task Progress
+  // Ensure every durable item has real component instances before any task can
+  // wear, repair or reserve it during this tick.
+  tickComponentBootstrap(next);
+
   tickSurvivors(next, deltaGameMinutes, deltaGameSeconds);
-
-  // 5. Active Expeditions Tick
   tickExpeditions(next, deltaGameMinutes);
-
-  // 6. Dynamic Item Spoilage & Environmental Decomposition
   tickItemSimulation(next, deltaGameMinutes);
-
-  // 7. Crafting Queue & Blueprint Research Tick
   tickCraftingAndResearch(next, deltaGameSeconds);
 
-  // Keep logs at max 35 entries
-  if (next.logs.length > 35) {
-    next.logs = next.logs.slice(0, 35);
-  }
-
+  if (next.logs.length > 35) next.logs = next.logs.slice(0, 35);
   return next;
 }
