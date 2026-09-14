@@ -8,7 +8,7 @@ import {
   queueStructureModification,
   tickStructureWorkRuntime,
 } from '../src/simulation/structureMaintenanceSystem';
-import { getAvailableInventoryStock, getOrCreatePoiStorage } from '../src/simulation/inventorySystem';
+import { addItemToInventory, getAvailableInventoryStock, getOrCreatePoiStorage } from '../src/simulation/inventorySystem';
 
 function component(
   id: string,
@@ -41,7 +41,6 @@ function freshState(): { state: GameState; buildingId: string } {
   simulation.structureWorkJobs = [];
   simulation.structureWorkHistory = [];
 
-  // Remove the legacy under-construction campfire so only the smoke structure is relevant.
   state.buildings = [];
   const buildingId = 'structure_work_smoke';
   state.buildings.push({
@@ -135,11 +134,17 @@ function testPhysicalModificationChangesAssembly(): void {
   const frameAfter = building.structureComponents!.find(entry => entry.id === 'frame_smoke')!.conditionMax;
   assert.ok(frameAfter > frameBefore, 'cross bracing must physically raise frame ceiling');
   assert.ok(building.structureModifications?.some(record => record.modificationId === 'MOD_CROSS_BRACING'));
+  assert.equal(building.structureComponents!.some(entry => entry.name === 'Windbreak'), false, 'cross bracing must not create a fake Windbreak fixture');
 
-  // A completed modification cannot be queued twice on the same structure.
   const countBefore = state.buildingSimulation!.structureWorkJobs!.length;
   const duplicate = queueStructureModification(state, buildingId, 'MOD_CROSS_BRACING', state.survivors[0].id);
   assert.equal(duplicate.buildingSimulation!.structureWorkJobs!.length, countBefore, 'same modification must not stack infinitely');
+
+  addItemToInventory(getOrCreatePoiStorage(state, 'AREA_CAMP_CLEARING'), 'ITEM_VINE_FIBER', 2, 'standard');
+  state = queueStructureModification(state, buildingId, 'MOD_WINDBREAK', state.survivors[0].id);
+  finishActiveJob(state);
+  assert.ok(state.buildings[0].structureComponents!.some(entry => entry.name === 'Windbreak'), 'actual windbreak modification must create its own physical fixture');
+  assert.ok(state.buildings[0].structureModifications?.some(record => record.modificationId === 'MOD_WINDBREAK'));
 }
 
 function main(): void {
