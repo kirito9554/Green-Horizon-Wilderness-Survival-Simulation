@@ -120,6 +120,13 @@ export function ensureToolComponentInstances(item: InventoryItem, def: ItemDefin
   return item;
 }
 
+/**
+ * Aggregate durability is a compatibility/UI summary. Physical component state
+ * is canonical. Permanent part damage lowers the whole tool's current ceiling
+ * in proportion to that part's share of the original assembly; reinforcement
+ * can raise it again. We always scale from originalConditionMax so repeated
+ * syncs cannot ratchet the ceiling downward every tick.
+ */
 export function deriveAggregateConditionFromComponents(item: InventoryItem): { condition: number; conditionMax: number } {
   if (!item.components || item.components.length === 0) {
     return {
@@ -129,16 +136,22 @@ export function deriveAggregateConditionFromComponents(item: InventoryItem): { c
   }
 
   let current = 0;
-  let max = 0;
+  let currentComponentMax = 0;
+  let originalComponentMax = 0;
   for (const component of item.components) {
     current += component.condition;
-    max += component.conditionMax;
+    currentComponentMax += component.conditionMax;
+    originalComponentMax += Math.max(1, component.originalConditionMax || component.conditionMax);
   }
-  const ratio = max > 0 ? current / max : 0;
-  const aggregateMax = item.conditionMax || item.originalConditionMax || 100;
+
+  const conditionRatio = currentComponentMax > 0 ? current / currentComponentMax : 0;
+  const ceilingRatio = originalComponentMax > 0 ? currentComponentMax / originalComponentMax : 1;
+  const aggregateOriginalMax = Math.max(1, item.originalConditionMax || item.conditionMax || 100);
+  const aggregateMax = Math.max(1, aggregateOriginalMax * ceilingRatio);
+
   return {
-    condition: Math.round(aggregateMax * ratio * 10) / 10,
-    conditionMax: aggregateMax,
+    condition: Math.round(aggregateMax * conditionRatio * 10) / 10,
+    conditionMax: Math.round(aggregateMax * 10) / 10,
   };
 }
 
