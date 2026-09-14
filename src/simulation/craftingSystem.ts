@@ -1,37 +1,77 @@
-import { GameState, ItemQuality, RecipeDefinition, RecipeResearchState, CraftingQueueItem } from '../types';
+import type { CraftingQueueItem, GameState, ItemQuality, RecipeDefinition, SurvivorState } from '../types';
+import '../types/craftingSimulation';
 import { RECIPES_DATABASE } from '../data/recipes';
 import { ITEMS_DATABASE } from '../data/items';
-import { addItemToInventory, deductItemFromInventory } from './inventorySystem';
+import { addItemToInventory } from './inventorySystem';
 import { formatTimeOfDay } from './timeSystem';
 import { QUALITY_CONFIG } from '../utils/qualityUtils';
-import { calculateToolWear, applyToolWear, synthesizeCraftedQuality } from './itemSimulation';
+import { calculateToolWear, applyToolWear } from './itemSimulation';
+import {
+  consumeReservedMaterialsForUnit,
+  getAvailableItemStock,
+  releaseCraftingReservations,
+  reserveRecipeMaterialsForJob,
+} from './materialReservationSystem';
+import { deriveCraftQuality, deterministicRoll } from './craftQualitySystem';
+import { ensureToolComponentInstances } from './componentSystem';
 
-/**
- * Kiểm tra xem kho đồ có đủ công cụ yêu cầu bởi thẻ tag (ví dụ: 'sharp') không
- */
+const MAX_CRAFT_QUEUE_SLOTS = 3;
+
+function stableStringSeed(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function setIdle(survivor: SurvivorState): void {
+  survivor.currentAction = {
+    type: 'idle',
+    description: 'Ready for new assignment',
+    progressSeconds: 0,
+    totalSeconds: 0,
+  };
+}
+
+function itemName(itemId: string): string {
+  return ITEMS_DATABASE[itemId]?.name || itemId;
+}
+
+function formatReservationMissing(missing: Array<{ itemId: string; needed: number; available: number }>): string[] {
+  return missing.map(entry => `Missing ${itemName(entry.itemId)}: ${entry.available}/${entry.needed}`);
+}
+
 export function hasToolWithTag(state: GameState, tag: string): boolean {
   return state.inventory.items.some(item => {
     const def = ITEMS_DATABASE[item.itemId];
-    return def && def.tags.includes(tag) && (item.condition === undefined || item.condition > 0);
+    return Boolean(
+      def &&
+      def.tags.includes(tag) &&
+      (item.condition === undefined || item.condition > 0) &&
+      item.quantity > (item.reservedQuantity || 0)
+    );
   });
 }
 
-/**
- * Đếm số lượng tồn kho của một nguyên liệu
- */
-export function getItemStockInInventory(state: GameState, itemId: string): number {
-  let total = 0;
-  for (const item of state.inventory.items) {
-    if (item.itemId === itemId) total += item.quantity;
-  }
-  return total;
+function findToolWithTag(state: GameState, tag: string) {
+  return state.inventory.items.find(item => {
+    const def = ITEMS_DATABASE[item.itemId];
+    return Boolean(
+      def &&
+      def.tags.includes(tag) &&
+      (item.condition === undefined || item.condition > 0) &&
+      item.quantity > (item.reservedQuantity || 0)
+    );
+  });
 }
 
-/**
- * 1. HỆ THỐNG KHÁM PHÁ Ý NIỆM CÔNG THỨC (DISCOVERY SYSTEM)
- * Tự động quét kho đồ: khi sở hữu >= 80% (hoặc 2/3) chủng loại nguyên liệu của công thức chế tạo,
- * người chơi sẽ nảy ra ý niệm bản vẽ và mở trạng thái 'discovered' để nghiên cứu.
- */
+/** Physical stock, including reserved material. Research discovery cares about possession. */
+export function getItemStockInInventory(state: GameState, itemId: string): number {
+  return state.inventory.items.reduce((total, item) => total + (item.itemId === itemId ? item.quantity : 0), 0);
+}
+
 export function checkRecipeDiscoveries(state: GameState): boolean {
   if (!state.researches) state.researches = {};
   if (!state.discoveredRecipeIds) state.discoveredRecipeIds = [];
@@ -40,10 +80,8 @@ export function checkRecipeDiscoveries(state: GameState): boolean {
   let anyNewDiscovery = false;
 
   for (const recipe of Object.values(RECIPES_DATABASE)) {
-    // Chỉ các công thức chế tạo/lắp ráp (crafting) mới cần quy trình nghiên cứu bản vẽ
     if (recipe.type !== 'crafting') continue;
 
-    // Nếu công thức được đánh dấu mở sẵn từ đầu (ví dụ: bện dây thừng)
     if (recipe.unlockedByDefault) {
       if (!state.researches[recipe.id]) {
         state.researches[recipe.id] = {
@@ -57,30 +95,18 @@ export function checkRecipeDiscoveries(state: GameState): boolean {
     }
 
     const currentResearch = state.researches[recipe.id];
-    // Nếu đã hoàn thành hoặc đang nghiên cứu dở dang thì bỏ qua
-    if (currentResearch && (currentResearch.status === 'completed' || currentResearch.status === 'in_progress' || currentResearch.status === 'paused' || currentResearch.status === 'discovered')) {
-      continue;
-    }
+    if (currentResearch && ['completed', 'in_progress', 'paused', 'discovered'].includes(currentResearch.status)) continue;
 
-    // Tính tỷ lệ chủng loại nguyên liệu đang có trong kho đồ
     const totalIngredients = recipe.ingredients.length;
     let ownedDistinctCount = 0;
-
-    for (const ing of recipe.ingredients) {
-      const stock = getItemStockInInventory(state, ing.itemId);
-      if (stock >= 1) {
-        ownedDistinctCount++;
-      }
+    for (const ingredient of recipe.ingredients) {
+      if (getItemStockInInventory(state, ingredient.itemId) >= 1) ownedDistinctCount++;
     }
 
-    // Quy tắc 80% chủng loại nguyên liệu:
-    // 1 nguyên liệu: cần 1 (100%)
-    // 2 nguyên liệu: cần 2 (100% >= 80%)
-    // 3 nguyên liệu: cần >= 2 (2/3 = 66.7% ~ 80% cận biên, đủ để nảy sinh ý tưởng kết hợp)
-    const threshold = totalIngredients === 1 
-      ? 1 
-      : totalIngredients === 2 
-        ? 2 
+    const threshold = totalIngredients === 1
+      ? 1
+      : totalIngredients === 2
+        ? 2
         : Math.max(1, Math.floor(totalIngredients * 0.8));
 
     if (ownedDistinctCount >= threshold) {
@@ -90,19 +116,14 @@ export function checkRecipeDiscoveries(state: GameState): boolean {
         progressSeconds: 0,
         totalSeconds: recipe.researchTimeSeconds || 25,
       };
-
-      if (!state.discoveredRecipeIds.includes(recipe.id)) {
-        state.discoveredRecipeIds.push(recipe.id);
-      }
-
+      if (!state.discoveredRecipeIds.includes(recipe.id)) state.discoveredRecipeIds.push(recipe.id);
       state.logs.unshift({
         id: `disc_${Date.now()}_${recipe.id}`,
         day: state.gameTime.day,
         timeStr: formatTimeOfDay(state.gameTime.minuteOfDay),
-        text: `[Ý niệm mới] Thu thập đủ vật liệu khơi gợi ý tưởng: Bản vẽ "${recipe.name}" đã được phát hiện! Hãy phân công thợ nghiên cứu để mở khóa chế tác.`,
+        text: `[Ý niệm mới] Vật liệu thu thập được gợi mở bản vẽ "${recipe.name}". Hãy phân công nghiên cứu để hoàn thiện quy trình.`,
         type: 'success',
       });
-
       anyNewDiscovery = true;
     }
   }
@@ -110,14 +131,7 @@ export function checkRecipeDiscoveries(state: GameState): boolean {
   return anyNewDiscovery;
 }
 
-/**
- * 2. BẮT ĐẦU HOẶC TIẾP TỤC NGHIÊN CỨU BẢN VẼ (RESEARCH)
- */
-export function startOrResumeResearch(
-  state: GameState,
-  recipeId: string,
-  survivorId: string
-): GameState {
+export function startOrResumeResearch(state: GameState, recipeId: string, survivorId: string): GameState {
   const next = JSON.parse(JSON.stringify(state)) as GameState;
   if (!next.researches) next.researches = {};
 
@@ -135,12 +149,10 @@ export function startOrResumeResearch(
     };
     next.researches[recipeId] = research;
   }
-
   if (research.status === 'completed') return state;
 
   research.status = 'in_progress';
   research.assignedSurvivorId = survivorId;
-
   survivor.currentAction = {
     type: 'researching',
     description: `Nghiên cứu bản vẽ: ${recipe.name}`,
@@ -154,80 +166,57 @@ export function startOrResumeResearch(
     id: `res_start_${Date.now()}`,
     day: next.gameTime.day,
     timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
-    text: `${survivor.name} đã bắt đầu nghiên cứu bản vẽ "${recipe.name}" (${Math.round((research.progressSeconds / research.totalSeconds) * 100)}%).`,
+    text: `${survivor.name} bắt đầu nghiên cứu "${recipe.name}" (${Math.round((research.progressSeconds / research.totalSeconds) * 100)}%).`,
     type: 'info',
   });
-
   return next;
 }
 
-/**
- * 3. TẠM DỪNG TIẾN TRÌNH NGHIÊN CỨU (PAUSE RESEARCH)
- * Giữ nguyên tiến độ đã đạt được, trả thợ về trạng thái rảnh rỗi để làm việc khác
- */
 export function pauseResearch(state: GameState, recipeId: string): GameState {
   const next = JSON.parse(JSON.stringify(state)) as GameState;
-  if (!next.researches || !next.researches[recipeId]) return state;
+  const research = next.researches?.[recipeId];
+  if (!research || research.status !== 'in_progress') return state;
 
-  const research = next.researches[recipeId];
-  const recipe = RECIPES_DATABASE[recipeId];
-  if (research.status !== 'in_progress') return state;
-
-  // Đồng bộ tiến độ từ người thực hiện nếu đang thao tác
   if (research.assignedSurvivorId) {
     const survivor = next.survivors.find(s => s.id === research.assignedSurvivorId);
-    if (survivor && survivor.currentAction.type === 'researching' && survivor.currentAction.targetId === recipeId) {
-      research.progressSeconds = survivor.currentAction.progressSeconds;
-      survivor.currentAction = {
-        type: 'idle',
-        description: 'Nghỉ ngơi',
-        progressSeconds: 0,
-        totalSeconds: 0,
-      };
+    if (survivor?.currentAction.type === 'researching' && survivor.currentAction.targetId === recipeId) {
+      research.progressSeconds = Math.max(research.progressSeconds, survivor.currentAction.progressSeconds);
+      setIdle(survivor);
     }
   }
-
   research.status = 'paused';
 
   next.logs.unshift({
     id: `res_pause_${Date.now()}`,
     day: next.gameTime.day,
     timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
-    text: `Đã tạm dừng nghiên cứu bản vẽ "${recipe ? recipe.name : recipeId}". Tiến độ đạt ${Math.round((research.progressSeconds / research.totalSeconds) * 100)}% được bảo lưu an toàn.`,
+    text: `Đã tạm dừng nghiên cứu "${RECIPES_DATABASE[recipeId]?.name || recipeId}". Tiến độ được bảo lưu.`,
     type: 'info',
   });
-
   return next;
 }
 
-/**
- * 4. THÊM MỤC VÀO HÀNG ĐỢI CHẾ TÁC (ADD TO CRAFTING QUEUE)
- */
 export function addCraftingQueueItem(
   state: GameState,
   recipeId: string,
   quantity: number = 1,
-  assignedSurvivorId?: string
+  assignedSurvivorId?: string,
 ): GameState {
   const next = JSON.parse(JSON.stringify(state)) as GameState;
   if (!next.craftingQueue) next.craftingQueue = [];
-
   const recipe = RECIPES_DATABASE[recipeId];
   if (!recipe) return state;
+  if (next.craftingQueue.length >= MAX_CRAFT_QUEUE_SLOTS) return state;
 
-  // Kiểm tra điều kiện mở khoá đối với công thức chế tạo phức tạp
   if (recipe.type === 'crafting') {
-    const research = next.researches ? next.researches[recipeId] : null;
-    const isCompleted = research?.status === 'completed' || recipe.unlockedByDefault;
-    if (!isCompleted) {
-      return state;
-    }
+    const research = next.researches?.[recipeId];
+    if (!(research?.status === 'completed' || recipe.unlockedByDefault)) return state;
   }
 
   const cleanQuantity = Math.max(1, Math.min(20, Math.floor(quantity)));
-
+  const id = `queue_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const newItem: CraftingQueueItem = {
-    id: `queue_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    id,
     recipeId,
     quantity: cleanQuantity,
     completedCount: 0,
@@ -236,366 +225,392 @@ export function addCraftingQueueItem(
     totalSeconds: recipe.craftTimeSeconds,
     status: 'pending',
     createdAt: Date.now(),
+    materialReservations: [],
+    reservationStatus: 'unreserved',
+    blockedReasons: [],
+    deterministicSeed: stableStringSeed(id),
   };
 
   next.craftingQueue.push(newItem);
+  const reservation = reserveRecipeMaterialsForJob(next, newItem, recipe);
+  if (!reservation.success) newItem.blockedReasons = formatReservationMissing(reservation.missing);
 
   const assignedSurvivor = next.survivors.find(s => s.id === assignedSurvivorId);
   next.logs.unshift({
     id: `q_add_${Date.now()}`,
     day: next.gameTime.day,
     timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
-    text: `Đã thêm vào hàng đợi: ${cleanQuantity}x ${recipe.name}${assignedSurvivor ? ` (Phụ trách: ${assignedSurvivor.name})` : ' (Tự động nhận thợ)'}.`,
-    type: 'info',
+    text: reservation.success
+      ? `Đã giữ nguyên liệu và thêm: ${cleanQuantity}x ${recipe.name}${assignedSurvivor ? ` (${assignedSurvivor.name})` : ''}.`
+      : `Đã thêm ${cleanQuantity}x ${recipe.name} vào hàng đợi, nhưng đang chờ đủ nguyên liệu.`,
+    type: reservation.success ? 'info' : 'warning',
   });
-
   return next;
 }
 
-/**
- * 5. HỦY MỤC TRONG HÀNG ĐỢI (CANCEL QUEUE ITEM)
- * Hoàn lại nguyên liệu đang tạm giữ của đơn vị đang dở nếu có
- */
 export function cancelCraftingQueueItem(state: GameState, queueItemId: string): GameState {
   const next = JSON.parse(JSON.stringify(state)) as GameState;
   if (!next.craftingQueue) return state;
+  const index = next.craftingQueue.findIndex(item => item.id === queueItemId);
+  if (index < 0) return state;
 
-  const itemIdx = next.craftingQueue.findIndex(q => q.id === queueItemId);
-  if (itemIdx === -1) return state;
-
-  const queueItem = next.craftingQueue[itemIdx];
+  const queueItem = next.craftingQueue[index];
   const recipe = RECIPES_DATABASE[queueItem.recipeId];
+  const hadConsumedWork = Boolean(queueItem.currentUnitIngredientQualities?.length || queueItem.activeIngredientQualities?.length);
 
-  // Nếu đang chế tạo dở, trả thợ về idle và hoàn trả nguyên liệu của lượt hiện tại
-  if (queueItem.status === 'in_progress' && queueItem.assignedSurvivorId) {
+  if (queueItem.assignedSurvivorId) {
     const survivor = next.survivors.find(s => s.id === queueItem.assignedSurvivorId);
-    if (survivor && survivor.currentAction.type === 'crafting') {
-      survivor.currentAction = {
-        type: 'idle',
-        description: 'Nghỉ ngơi',
-        progressSeconds: 0,
-        totalSeconds: 0,
-      };
-    }
-
-    if (recipe) {
-      for (const ing of recipe.ingredients) {
-        addItemToInventory(next.inventory, ing.itemId, ing.quantity);
-      }
-    }
+    if (survivor?.currentAction.type === 'crafting' && survivor.currentAction.targetId === queueItem.id) setIdle(survivor);
   }
 
-  next.craftingQueue.splice(itemIdx, 1);
+  // Unconsumed reservations were never removed from inventory, so releasing is exact.
+  releaseCraftingReservations(next, queueItem);
+  next.craftingQueue.splice(index, 1);
 
   next.logs.unshift({
     id: `q_cancel_${Date.now()}`,
     day: next.gameTime.day,
     timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
-    text: `Đã hủy công việc trong hàng đợi: ${recipe ? recipe.name : queueItem.recipeId}.`,
-    type: 'info',
+    text: hadConsumedWork
+      ? `Đã hủy ${recipe?.name || queueItem.recipeId}. Vật liệu chưa dùng được giải phóng; vật liệu của công đoạn đang làm đã trở thành phế hao.`
+      : `Đã hủy ${recipe?.name || queueItem.recipeId}; toàn bộ vật liệu đang giữ đã được giải phóng.`,
+    type: hadConsumedWork ? 'warning' : 'info',
   });
-
   return next;
 }
 
-/**
- * 6. TẠM DỪNG / TIẾP TỤC MỤC HÀNG ĐỢI (PAUSE / RESUME QUEUE ITEM)
- */
 export function togglePauseCraftingQueueItem(state: GameState, queueItemId: string): GameState {
   const next = JSON.parse(JSON.stringify(state)) as GameState;
-  if (!next.craftingQueue) return state;
-
-  const item = next.craftingQueue.find(q => q.id === queueItemId);
+  const item = next.craftingQueue?.find(q => q.id === queueItemId);
   if (!item) return state;
 
   if (item.status === 'in_progress') {
-    // Tạm dừng
     item.status = 'paused';
     if (item.assignedSurvivorId) {
       const survivor = next.survivors.find(s => s.id === item.assignedSurvivorId);
-      if (survivor && survivor.currentAction.type === 'crafting') {
-        survivor.currentAction = {
-          type: 'idle',
-          description: 'Nghỉ ngơi',
-          progressSeconds: 0,
-          totalSeconds: 0,
-        };
-      }
+      if (survivor?.currentAction.type === 'crafting' && survivor.currentAction.targetId === item.id) setIdle(survivor);
     }
   } else if (item.status === 'paused') {
     item.status = 'pending';
   }
-
   return next;
 }
 
-/**
- * 7. THAY ĐỔI THỨ TỰ ƯU TIÊN TRONG HÀNG ĐỢI
- */
 export function reorderCraftingQueue(state: GameState, queueItemId: string, direction: 'up' | 'down'): GameState {
   const next = JSON.parse(JSON.stringify(state)) as GameState;
   if (!next.craftingQueue) return state;
-
   const index = next.craftingQueue.findIndex(q => q.id === queueItemId);
-  if (index === -1) return state;
-
+  if (index < 0) return state;
   const targetIndex = direction === 'up' ? index - 1 : index + 1;
   if (targetIndex < 0 || targetIndex >= next.craftingQueue.length) return state;
-
-  // Đổi chỗ
-  const temp = next.craftingQueue[index];
-  next.craftingQueue[index] = next.craftingQueue[targetIndex];
-  next.craftingQueue[targetIndex] = temp;
-
+  [next.craftingQueue[index], next.craftingQueue[targetIndex]] = [next.craftingQueue[targetIndex], next.craftingQueue[index]];
   return next;
 }
 
-/**
- * 8. GÁN LẠI THỢ PHỤ TRÁCH MỤC TRONG HÀNG ĐỢI
- */
 export function assignArtisanToQueueItem(state: GameState, queueItemId: string, survivorId?: string): GameState {
   const next = JSON.parse(JSON.stringify(state)) as GameState;
-  if (!next.craftingQueue) return state;
-
-  const item = next.craftingQueue.find(q => q.id === queueItemId);
+  const item = next.craftingQueue?.find(q => q.id === queueItemId);
   if (!item) return state;
 
+  if (item.status === 'in_progress' && item.assignedSurvivorId) {
+    const previous = next.survivors.find(s => s.id === item.assignedSurvivorId);
+    if (previous?.currentAction.type === 'crafting' && previous.currentAction.targetId === item.id) setIdle(previous);
+    item.status = 'pending';
+  }
   item.assignedSurvivorId = survivorId || undefined;
   return next;
 }
 
-/**
- * 9. TIẾN TRÌNH MÔ PHỎNG THỜI GIAN THỰC CHO NGHIÊN CỨU & HÀNG ĐỢI CHẾ TÁC
- * Được gọi trong mỗi tick của simEngine
- */
-export function tickCraftingAndResearch(state: GameState, deltaGameSeconds: number): void {
-  // 1. Quét tự động phát hiện bản vẽ mới dựa trên 80% nguyên liệu
-  checkRecipeDiscoveries(state);
+function workerMeetsRecipeSkill(worker: SurvivorState, recipe: RecipeDefinition): boolean {
+  if (!recipe.requiredSkill) return true;
+  return (worker.skills[recipe.requiredSkill.skill] || 0) >= recipe.requiredSkill.level;
+}
 
-  if (!state.researches) state.researches = {};
-  if (!state.craftingQueue) state.craftingQueue = [];
+function selectCraftWorker(state: GameState, queueItem: CraftingQueueItem, recipe: RecipeDefinition): SurvivorState | null {
+  if (queueItem.assignedSurvivorId) {
+    const assigned = state.survivors.find(s => s.id === queueItem.assignedSurvivorId);
+    if (assigned && assigned.currentAction.type === 'idle' && workerMeetsRecipeSkill(assigned, recipe)) return assigned;
+    return null;
+  }
 
-  const hasCampfire = state.buildings.some(b => b.buildingId === 'BUILDING_CAMPFIRE_HEARTH' && b.isBuilt);
+  return state.survivors
+    .filter(s => s.currentAction.type === 'idle' && s.jobPriorities.craft !== 'disabled' && workerMeetsRecipeSkill(s, recipe))
+    .sort((a, b) => (b.skills.crafting || 0) - (a.skills.crafting || 0))[0] || null;
+}
 
-  // 2. XỬ LÝ TIẾN TRÌNH NGHIÊN CỨU BẢN VẼ
-  for (const survivor of state.survivors) {
-    if (survivor.currentAction.type === 'researching' && survivor.currentAction.targetId) {
-      const recipeId = survivor.currentAction.targetId;
-      const research = state.researches[recipeId];
-      const recipe = RECIPES_DATABASE[recipeId];
+function builtRequirementExists(state: GameState, recipe: RecipeDefinition): boolean {
+  if (recipe.requiredBuildingId) {
+    return state.buildings.some(building => building.buildingId === recipe.requiredBuildingId && building.isBuilt && building.condition > 0);
+  }
+  if (recipe.id === 'RECIPE_BOIL_WATER' || recipe.id === 'RECIPE_GRILL_FISH') {
+    return state.buildings.some(building => building.buildingId === 'BUILDING_CAMPFIRE_HEARTH' && building.isBuilt && building.condition > 0);
+  }
+  return true;
+}
 
-      if (research && research.status === 'in_progress') {
-        survivor.currentAction.progressSeconds += deltaGameSeconds;
-        research.progressSeconds = survivor.currentAction.progressSeconds;
+function calculateEffectiveCraftTime(state: GameState, recipe: RecipeDefinition, worker: SurvivorState): number {
+  const skill = Math.max(0.5, worker.skills.crafting || 1);
+  const skillFactor = 1 / (1 + Math.max(0, skill - 1) * 0.10);
+  const fatigueFactor = worker.fatigue > 75 ? 1.38 : worker.fatigue > 55 ? 1.16 : 1;
+  const needsFactor = worker.hunger > 75 || worker.thirst > 70 ? 1.18 : 1;
+  const moraleFactor = worker.morale < 30 ? 1.14 : worker.morale > 75 ? 0.94 : 1;
+  const weatherFactor =
+    recipe.workstationName?.toLowerCase().includes('handcraft') &&
+    (state.weather.current === 'heavy_rain' || state.weather.current === 'storm')
+      ? 1.22
+      : 1;
+  return Math.max(1, Math.round(recipe.craftTimeSeconds * skillFactor * fatigueFactor * needsFactor * moraleFactor * weatherFactor * 10) / 10);
+}
 
-        if (research.progressSeconds >= research.totalSeconds) {
-          // Hoàn thành nghiên cứu!
-          research.status = 'completed';
-          research.progressSeconds = research.totalSeconds;
-          survivor.skills.crafting = (survivor.skills.crafting || 1) + 0.12;
+function addCraftOutputs(
+  state: GameState,
+  recipe: RecipeDefinition,
+  quality: ItemQuality,
+  profile: ReturnType<typeof deriveCraftQuality>['profile'],
+  queueItem: CraftingQueueItem,
+  unitIndex: number,
+): void {
+  const seed = queueItem.deterministicSeed || stableStringSeed(queueItem.id);
 
-          survivor.currentAction = {
-            type: 'idle',
-            description: 'Nghỉ ngơi',
-            progressSeconds: 0,
-            totalSeconds: 0,
-          };
+  recipe.outputs.forEach((output, outputIndex) => {
+    if (output.chance !== undefined && deterministicRoll(seed, unitIndex, 20 + outputIndex) > output.chance) return;
 
-          state.logs.unshift({
-            id: `res_done_${Date.now()}_${recipeId}`,
-            day: state.gameTime.day,
-            timeStr: formatTimeOfDay(state.gameTime.minuteOfDay),
-            text: `[Nghiên cứu hoàn tất] ${survivor.name} đã hoàn thành bản vẽ "${recipe ? recipe.name : recipeId}"! Công thức hiện đã sẵn sàng để sản xuất trong xưởng.`,
-            type: 'success',
-          });
+    const beforeIds = new Set(state.inventory.items.map(item => item.instanceId));
+    const result = addItemToInventory(state.inventory, output.itemId, output.quantity, quality);
+    if (!result.success) {
+      state.logs.unshift({
+        id: `q_output_full_${Date.now()}_${queueItem.id}_${outputIndex}`,
+        day: state.gameTime.day,
+        timeStr: formatTimeOfDay(state.gameTime.minuteOfDay),
+        text: `[Kho đầy] ${recipe.name} hoàn tất nhưng không đủ chỗ chứa ${output.quantity}x ${itemName(output.itemId)}.`,
+        type: 'warning',
+      });
+      return;
+    }
+
+    const def = ITEMS_DATABASE[output.itemId];
+    if (def?.toolProperties || def?.category === 'tool') {
+      for (const item of state.inventory.items) {
+        if (!beforeIds.has(item.instanceId) && item.itemId === output.itemId) {
+          item.craftQualityProfile = { ...profile };
+          ensureToolComponentInstances(item, def);
         }
       }
     }
+  });
+}
+
+function completeResearchIfReady(state: GameState, deltaGameSeconds: number): void {
+  if (!state.researches) return;
+
+  for (const research of Object.values(state.researches)) {
+    if (research.status !== 'in_progress' || !research.assignedSurvivorId) continue;
+    const survivor = state.survivors.find(s => s.id === research.assignedSurvivorId);
+    if (!survivor) {
+      research.status = 'paused';
+      continue;
+    }
+
+    const actionStillResearching = survivor.currentAction.type === 'researching' && survivor.currentAction.targetId === research.recipeId;
+    // survivorSystem may reset the action on the exact final tick. In that case
+    // the research object is still one delta short, so allow the final delta.
+    if (!actionStillResearching && research.progressSeconds + deltaGameSeconds < research.totalSeconds) {
+      research.status = 'paused';
+      continue;
+    }
+
+    research.progressSeconds = Math.min(research.totalSeconds, research.progressSeconds + deltaGameSeconds);
+    if (actionStillResearching) survivor.currentAction.progressSeconds = research.progressSeconds;
+
+    if (research.progressSeconds >= research.totalSeconds) {
+      research.status = 'completed';
+      survivor.skills.crafting = (survivor.skills.crafting || 1) + 0.12;
+      setIdle(survivor);
+      state.logs.unshift({
+        id: `res_done_${Date.now()}_${research.recipeId}`,
+        day: state.gameTime.day,
+        timeStr: formatTimeOfDay(state.gameTime.minuteOfDay),
+        text: `[Nghiên cứu hoàn tất] ${survivor.name} đã hoàn thiện bản vẽ "${RECIPES_DATABASE[research.recipeId]?.name || research.recipeId}".`,
+        type: 'success',
+      });
+    }
+  }
+}
+
+function finishCraftUnit(
+  state: GameState,
+  queueItem: CraftingQueueItem,
+  recipe: RecipeDefinition,
+  survivor: SurvivorState,
+): boolean {
+  const ingredientQualities = queueItem.currentUnitIngredientQualities || queueItem.activeIngredientQualities || [];
+  const seed = queueItem.deterministicSeed || stableStringSeed(queueItem.id);
+  const unitIndex = queueItem.completedCount;
+  const qualityResult = deriveCraftQuality(ingredientQualities, survivor, seed, unitIndex);
+  const craftQuality = qualityResult.quality;
+
+  addCraftOutputs(state, recipe, craftQuality, qualityResult.profile, queueItem, unitIndex);
+
+  const tool = recipe.requiredToolTag ? findToolWithTag(state, recipe.requiredToolTag) : undefined;
+  if (tool) {
+    const wear = calculateToolWear(tool, 'crafting', survivor, state);
+    applyToolWear(state, tool.instanceId, wear.wearAmount, survivor);
   }
 
-  // 3. XỬ LÝ HÀNG ĐỢI CHẾ TÁC (CRAFTING QUEUE)
-  // Xử lý các món đang in_progress
+  survivor.skills.crafting = (survivor.skills.crafting || 1) + 0.08;
+  queueItem.completedCount += 1;
+  queueItem.progressSeconds = 0;
+  queueItem.currentUnitIngredientQualities = undefined;
+  queueItem.activeIngredientQualities = undefined;
+
+  const qualitySuffix = craftQuality === 'standard' ? '' : ` [${QUALITY_CONFIG[craftQuality].nameVi}]`;
+  state.logs.unshift({
+    id: `q_finish_unit_${Date.now()}_${queueItem.id}_${unitIndex}`,
+    day: state.gameTime.day,
+    timeStr: formatTimeOfDay(state.gameTime.minuteOfDay),
+    text: `${survivor.name} hoàn thành ${recipe.name}${qualitySuffix} (${queueItem.completedCount}/${queueItem.quantity}).`,
+    type: craftQuality === 'masterwork' || craftQuality === 'prime' ? 'success' : 'info',
+  });
+
+  state.recentlyCrafted = state.recentlyCrafted || [];
+  state.recentlyCrafted.unshift({
+    id: `recent_${Date.now()}_${queueItem.id}_${unitIndex}`,
+    recipeId: recipe.id,
+    name: recipe.name,
+    quantity: 1,
+    timestamp: Date.now(),
+    timeAgoText: 'Just now',
+  });
+  state.recentlyCrafted = state.recentlyCrafted.slice(0, 12);
+
+  if (queueItem.completedCount >= queueItem.quantity) {
+    releaseCraftingReservations(state, queueItem);
+    setIdle(survivor);
+    return true;
+  }
+
+  // A migrated legacy job only had the active unit consumed. Reserve the rest now.
+  if (queueItem.reservationStatus === 'legacy_consumed') {
+    queueItem.reservationStatus = 'unreserved';
+    queueItem.materialReservations = [];
+  }
+
+  queueItem.status = 'pending';
+  setIdle(survivor);
+  return false;
+}
+
+function advanceRunningCrafts(state: GameState, deltaGameSeconds: number): void {
+  if (!state.craftingQueue) return;
+
   for (let i = state.craftingQueue.length - 1; i >= 0; i--) {
     const queueItem = state.craftingQueue[i];
+    if (queueItem.status !== 'in_progress' || !queueItem.assignedSurvivorId) continue;
     const recipe = RECIPES_DATABASE[queueItem.recipeId];
     if (!recipe) continue;
 
-    if (queueItem.status === 'in_progress' && queueItem.assignedSurvivorId) {
-      const survivor = state.survivors.find(s => s.id === queueItem.assignedSurvivorId);
-      if (!survivor || survivor.currentAction.type !== 'crafting') {
-        // Mất thợ hoặc thợ bị gián đoạn, đưa về pending
-        queueItem.status = 'pending';
-        continue;
-      }
+    const survivor = state.survivors.find(s => s.id === queueItem.assignedSurvivorId);
+    if (!survivor) {
+      queueItem.status = 'pending';
+      queueItem.blockedReasons = ['Assigned survivor no longer exists'];
+      continue;
+    }
 
-      queueItem.progressSeconds += deltaGameSeconds;
-      survivor.currentAction.progressSeconds = queueItem.progressSeconds;
+    const actionStillCrafting = survivor.currentAction.type === 'crafting' && survivor.currentAction.targetId === queueItem.id;
+    if (!actionStillCrafting && queueItem.progressSeconds + deltaGameSeconds < queueItem.totalSeconds) {
+      queueItem.status = 'pending';
+      continue;
+    }
 
-      if (queueItem.progressSeconds >= queueItem.totalSeconds) {
-        // Hoàn tất chế tác 1 sản phẩm!
-        const ingredientQualities = queueItem.activeIngredientQualities || [];
-        const synth = synthesizeCraftedQuality(ingredientQualities, survivor);
-        const craftQuality = synth.quality;
+    queueItem.progressSeconds = Math.min(queueItem.totalSeconds, queueItem.progressSeconds + deltaGameSeconds);
+    if (actionStillCrafting) survivor.currentAction.progressSeconds = queueItem.progressSeconds;
 
-        for (const out of recipe.outputs) {
-          addItemToInventory(state.inventory, out.itemId, out.quantity, craftQuality);
-        }
-
-        survivor.skills.crafting = (survivor.skills.crafting || 1) + 0.08;
-        const qMeta = QUALITY_CONFIG[craftQuality];
-        const qualitySuffix = craftQuality !== 'standard' ? ` [${qMeta.nameVi}]` : '';
-
-        // Hao mòn công cụ phụ trợ nếu có
-        const knifeTool = state.inventory.items.find(it => {
-          const td = ITEMS_DATABASE[it.itemId];
-          return td && (td.tags.includes('knife') || td.tags.includes('sharp')) && (it.condition || 0) > 0;
-        });
-        if (knifeTool) {
-          const wear = calculateToolWear(knifeTool, 'crafting', survivor, state);
-          applyToolWear(state, knifeTool.instanceId, wear.wearAmount, survivor);
-        }
-
-        queueItem.completedCount += 1;
-        queueItem.progressSeconds = 0;
-        queueItem.activeIngredientQualities = undefined;
-
-        state.logs.unshift({
-          id: `q_finish_unit_${Date.now()}_${queueItem.id}`,
-          day: state.gameTime.day,
-          timeStr: formatTimeOfDay(state.gameTime.minuteOfDay),
-          text: `${survivor.name} đã chế tác thành công: ${recipe.name}${qualitySuffix} (${queueItem.completedCount}/${queueItem.quantity}).`,
-          type: craftQuality === 'masterwork' || craftQuality === 'prime' ? 'success' : 'info',
-        });
-
-        // Kiểm tra xem đã đủ số lượng yêu cầu của toàn bộ mục hàng đợi chưa
-        if (queueItem.completedCount >= queueItem.quantity) {
-          state.craftingQueue.splice(i, 1);
-          survivor.currentAction = {
-            type: 'idle',
-            description: 'Nghỉ ngơi',
-            progressSeconds: 0,
-            totalSeconds: 0,
-          };
-          continue;
-        }
-
-        // Nếu còn số lượng tiếp theo, kiểm tra xem có đủ nguyên liệu cho món kế tiếp không
-        let canAffordNext = true;
-        for (const ing of recipe.ingredients) {
-          if (getItemStockInInventory(state, ing.itemId) < ing.quantity) {
-            canAffordNext = false;
-            break;
-          }
-        }
-
-        if (canAffordNext) {
-          // Trừ nguyên liệu cho đơn vị tiếp theo
-          const nextQualities: ItemQuality[] = [];
-          for (const ing of recipe.ingredients) {
-            const matching = state.inventory.items.find(it => it.itemId === ing.itemId);
-            if (matching) {
-              const q = matching.quality || (matching.qualityBreakdown?.masterwork ? 'masterwork' : matching.qualityBreakdown?.prime ? 'prime' : matching.qualityBreakdown?.crude ? 'crude' : 'standard');
-              nextQualities.push(q);
-            }
-            deductItemFromInventory(state.inventory, ing.itemId, ing.quantity);
-          }
-          queueItem.activeIngredientQualities = nextQualities;
-          survivor.currentAction.progressSeconds = 0;
-        } else {
-          // Thiếu nguyên liệu, tạm dừng hàng đợi và giải phóng thợ
-          queueItem.status = 'paused';
-          survivor.currentAction = {
-            type: 'idle',
-            description: 'Nghỉ ngơi',
-            progressSeconds: 0,
-            totalSeconds: 0,
-          };
-          state.logs.unshift({
-            id: `q_pause_nomat_${Date.now()}`,
-            day: state.gameTime.day,
-            timeStr: formatTimeOfDay(state.gameTime.minuteOfDay),
-            text: `[Hàng đợi tạm dừng] Không đủ nguyên liệu để chế tác chiếc tiếp theo của "${recipe.name}".`,
-            type: 'warning',
-          });
-        }
-      }
+    if (queueItem.progressSeconds >= queueItem.totalSeconds) {
+      const done = finishCraftUnit(state, queueItem, recipe, survivor);
+      if (done) state.craftingQueue.splice(i, 1);
     }
   }
+}
 
-  // 4. KÍCH HOẠT CÁC MỤC ĐANG 'PENDING' TRONG HÀNG ĐỢI
+function activatePendingCrafts(state: GameState): void {
+  if (!state.craftingQueue) return;
+
   for (const queueItem of state.craftingQueue) {
     if (queueItem.status !== 'pending') continue;
-
     const recipe = RECIPES_DATABASE[queueItem.recipeId];
     if (!recipe) continue;
 
-    // Kiểm tra thợ khả dụng
-    let candidateSurvivor = null;
-    if (queueItem.assignedSurvivorId) {
-      const target = state.survivors.find(s => s.id === queueItem.assignedSurvivorId);
-      if (target && target.currentAction.type === 'idle') {
-        candidateSurvivor = target;
+    queueItem.blockedReasons = [];
+
+    const hasCurrentConsumedUnit = Boolean(queueItem.currentUnitIngredientQualities?.length || queueItem.activeIngredientQualities?.length);
+    if (!hasCurrentConsumedUnit && queueItem.reservationStatus !== 'legacy_consumed') {
+      if (!queueItem.materialReservations || queueItem.materialReservations.length === 0) {
+        const reservation = reserveRecipeMaterialsForJob(state, queueItem, recipe);
+        if (!reservation.success) {
+          queueItem.blockedReasons = formatReservationMissing(reservation.missing);
+          continue;
+        }
       }
-    } else {
-      // Tìm thợ đang rảnh có ưu tiên nghề craft hợp lệ
-      candidateSurvivor = state.survivors.find(
-        s => s.currentAction.type === 'idle' && s.jobPriorities.craft !== 'disabled'
-      );
     }
 
-    if (!candidateSurvivor) continue;
-
-    // Kiểm tra công cụ cần thiết
     if (recipe.requiredToolTag && !hasToolWithTag(state, recipe.requiredToolTag)) {
+      queueItem.blockedReasons.push(`Requires usable tool: ${recipe.requiredToolTag}`);
+      continue;
+    }
+    if (!builtRequirementExists(state, recipe)) {
+      queueItem.blockedReasons.push(recipe.requiredBuildingId ? `Requires building: ${recipe.requiredBuildingId}` : 'Requires a functioning Campfire');
       continue;
     }
 
-    // Kiểm tra lửa trại nếu công thức cần nhiệt
-    if ((recipe.id === 'RECIPE_BOIL_WATER' || recipe.id === 'RECIPE_GRILL_FISH') && !hasCampfire) {
+    const worker = selectCraftWorker(state, queueItem, recipe);
+    if (!worker) {
+      queueItem.blockedReasons.push(queueItem.assignedSurvivorId ? 'Assigned crafter is busy or under-skilled' : 'No eligible idle crafter');
       continue;
     }
 
-    // Kiểm tra nguyên liệu
-    let hasIngredients = true;
-    for (const ing of recipe.ingredients) {
-      if (getItemStockInInventory(state, ing.itemId) < ing.quantity) {
-        hasIngredients = false;
-        break;
+    if (!hasCurrentConsumedUnit) {
+      if (queueItem.reservationStatus === 'legacy_consumed' && queueItem.activeIngredientQualities?.length) {
+        queueItem.currentUnitIngredientQualities = [...queueItem.activeIngredientQualities];
+      } else {
+        const consume = consumeReservedMaterialsForUnit(state, queueItem, recipe);
+        if (!consume.success) {
+          queueItem.blockedReasons.push(consume.reason || 'Reserved materials are invalid');
+          continue;
+        }
+        queueItem.currentUnitIngredientQualities = consume.qualities;
       }
-    }
-    if (!hasIngredients) continue;
-
-    // Đủ điều kiện -> Khấu trừ nguyên liệu cho 1 đơn vị và bắt đầu!
-    const qualities: ItemQuality[] = [];
-    for (const ing of recipe.ingredients) {
-      const matching = state.inventory.items.find(it => it.itemId === ing.itemId);
-      if (matching) {
-        const q = matching.quality || (matching.qualityBreakdown?.masterwork ? 'masterwork' : matching.qualityBreakdown?.prime ? 'prime' : matching.qualityBreakdown?.crude ? 'crude' : 'standard');
-        qualities.push(q);
-      }
-      deductItemFromInventory(state.inventory, ing.itemId, ing.quantity);
+      queueItem.progressSeconds = 0;
+      queueItem.totalSeconds = calculateEffectiveCraftTime(state, recipe, worker);
     }
 
     queueItem.status = 'in_progress';
-    queueItem.assignedSurvivorId = candidateSurvivor.id;
-    queueItem.activeIngredientQualities = qualities;
-    queueItem.progressSeconds = 0;
-
-    candidateSurvivor.currentAction = {
+    queueItem.assignedSurvivorId = worker.id;
+    queueItem.blockedReasons = [];
+    worker.currentAction = {
       type: 'crafting',
       description: `Đang chế tác: ${recipe.name}`,
       targetId: queueItem.id,
-      progressSeconds: 0,
-      totalSeconds: recipe.craftTimeSeconds,
+      progressSeconds: queueItem.progressSeconds,
+      totalSeconds: queueItem.totalSeconds,
       resultPayload: { queueItemId: queueItem.id, recipeId: recipe.id },
     };
 
     state.logs.unshift({
-      id: `q_start_${Date.now()}_${queueItem.id}`,
+      id: `q_start_${Date.now()}_${queueItem.id}_${queueItem.completedCount}`,
       day: state.gameTime.day,
       timeStr: formatTimeOfDay(state.gameTime.minuteOfDay),
-      text: `${candidateSurvivor.name} đã bắt đầu chế tạo ${recipe.name} (${queueItem.completedCount + 1}/${queueItem.quantity}).`,
+      text: `${worker.name} bắt đầu ${recipe.name} (${queueItem.completedCount + 1}/${queueItem.quantity}), thời gian dự kiến ${queueItem.totalSeconds.toFixed(1)}s.`,
       type: 'info',
     });
   }
+}
+
+export function tickCraftingAndResearch(state: GameState, deltaGameSeconds: number): void {
+  checkRecipeDiscoveries(state);
+  if (!state.researches) state.researches = {};
+  if (!state.craftingQueue) state.craftingQueue = [];
+
+  completeResearchIfReady(state, deltaGameSeconds);
+  advanceRunningCrafts(state, deltaGameSeconds);
+  activatePendingCrafts(state);
 }
