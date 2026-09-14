@@ -83,10 +83,17 @@ export const CraftingCatalogGrid: React.FC<CraftingCatalogGridProps> = ({
         {recipes.map(({ recipe, canCraft, maxCraftable, isPinned, isUnlocked }) => {
           const selected = recipe.id === selectedRecipeId;
           return (
-            <button
+            <div
               key={recipe.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => onSelectRecipe(recipe.id)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onSelectRecipe(recipe.id);
+                }
+              }}
               className={`group relative min-w-0 p-1.5 rounded-[6px] border flex flex-col items-center justify-between transition-all cursor-pointer overflow-hidden ${
                 selected
                   ? 'bg-gradient-to-b from-[#17391f] to-[#0b2115] border-[#e1d54d] shadow-[0_0_13px_rgba(225,213,77,0.28),inset_0_0_0_1px_rgba(237,220,79,0.25)]'
@@ -127,7 +134,7 @@ export const CraftingCatalogGrid: React.FC<CraftingCatalogGridProps> = ({
                   {canCraft && maxCraftable > 0 && <span className="text-[#80d768]">x{maxCraftable}</span>}
                 </div>
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
