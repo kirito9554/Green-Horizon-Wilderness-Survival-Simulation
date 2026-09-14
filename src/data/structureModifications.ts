@@ -16,6 +16,14 @@ export interface StructureModificationDefinition {
     fireSafety?: number;
     addDrainageComponent?: boolean;
     addRaisedSurface?: boolean;
+    /** Storage-only derived effects. Values are points except capacity percentages. */
+    storageMoistureProtection?: number;
+    storageRainProtection?: number;
+    storagePestProtection?: number;
+    storageContaminationProtection?: number;
+    storageAccessibility?: number;
+    storageVolumePercent?: number;
+    storageWeightPercent?: number;
   };
 }
 
@@ -30,9 +38,6 @@ export const STRUCTURE_MODIFICATIONS: Record<string, StructureModificationDefini
       { itemId: 'ITEM_VINE_FIBER', quantity: 2 },
     ],
     durationSeconds: 18,
-    // Cross bracing protects against wind by physically strengthening the frame.
-    // `windProtection` is reserved for actual wind barriers because the runtime
-    // materializes that effect as a separate Windbreak fixture component.
     effects: { frameReinforcement: 18 },
   },
   MOD_DOUBLE_ROOF: {
@@ -57,7 +62,7 @@ export const STRUCTURE_MODIFICATIONS: Record<string, StructureModificationDefini
       { itemId: 'ITEM_DRIFTWOOD_BRANCH', quantity: 1 },
     ],
     durationSeconds: 22,
-    effects: { floodProtection: 30, addDrainageComponent: true },
+    effects: { floodProtection: 30, addDrainageComponent: true, storageMoistureProtection: 6 },
   },
   MOD_RAISED_FLOOR: {
     id: 'MOD_RAISED_FLOOR',
@@ -69,7 +74,7 @@ export const STRUCTURE_MODIFICATIONS: Record<string, StructureModificationDefini
       { itemId: 'ITEM_VINE_FIBER', quantity: 2 },
     ],
     durationSeconds: 24,
-    effects: { floodProtection: 22, functionality: 10, addRaisedSurface: true },
+    effects: { floodProtection: 22, functionality: 10, addRaisedSurface: true, storageMoistureProtection: 10, storageAccessibility: 4 },
   },
   MOD_WINDBREAK: {
     id: 'MOD_WINDBREAK',
@@ -83,6 +88,88 @@ export const STRUCTURE_MODIFICATIONS: Record<string, StructureModificationDefini
     ],
     durationSeconds: 20,
     effects: { windProtection: 24, functionality: 4 },
+  },
+
+  MOD_STORAGE_RAISED_BASE: {
+    id: 'MOD_STORAGE_RAISED_BASE',
+    name: 'Chân Kê Kho Nâng Cao',
+    description: 'Nâng đáy kho khỏi mặt đất bằng gỗ và đá kê, giảm hút ẩm nền và cản côn trùng bò trực tiếp vào vật tư.',
+    compatibleCategories: ['storage'],
+    cost: [
+      { itemId: 'ITEM_DRIFTWOOD_BRANCH', quantity: 2 },
+      { itemId: 'ITEM_RIVER_PEBBLE', quantity: 4 },
+      { itemId: 'ITEM_VINE_FIBER', quantity: 2 },
+    ],
+    durationSeconds: 18,
+    effects: {
+      floodProtection: 12,
+      storageMoistureProtection: 16,
+      storagePestProtection: 8,
+      storageAccessibility: 3,
+    },
+  },
+  MOD_STORAGE_RAIN_COVER: {
+    id: 'MOD_STORAGE_RAIN_COVER',
+    name: 'Mái Phủ Chống Mưa Kho',
+    description: 'Bổ sung lớp lá chồng và mép thoát nước trên storage để giảm mưa tạt và nước ngấm qua nắp, khe hoặc bề mặt chứa.',
+    compatibleCategories: ['storage'],
+    cost: [
+      { itemId: 'ITEM_PALM_LEAF', quantity: 6 },
+      { itemId: 'ITEM_VINE_FIBER', quantity: 2 },
+    ],
+    durationSeconds: 16,
+    effects: {
+      storageRainProtection: 24,
+      storageMoistureProtection: 14,
+    },
+  },
+  MOD_STORAGE_PEST_SCREEN: {
+    id: 'MOD_STORAGE_PEST_SCREEN',
+    name: 'Lưới Chắn Sinh Vật Nhỏ',
+    description: 'Đan nan tre và sợi thành lớp chắn quanh khe hở để hạn chế côn trùng, chuột nhỏ và bụi bẩn xâm nhập.',
+    compatibleCategories: ['storage'],
+    cost: [
+      { itemId: 'ITEM_BAMBOO_STRIP', quantity: 6 },
+      { itemId: 'ITEM_VINE_FIBER', quantity: 2 },
+    ],
+    durationSeconds: 16,
+    effects: {
+      storagePestProtection: 30,
+      storageContaminationProtection: 14,
+      storageAccessibility: -4,
+    },
+  },
+  MOD_STORAGE_DIVIDERS: {
+    id: 'MOD_STORAGE_DIVIDERS',
+    name: 'Vách Chia & Giá Phân Loại',
+    description: 'Thêm các ngăn nhỏ để lấy vật tư nhanh và tránh lẫn nhóm đồ, đổi lại một phần thể tích bị chiếm bởi khung phân loại.',
+    compatibleCategories: ['storage'],
+    cost: [
+      { itemId: 'ITEM_BAMBOO_SPLIT', quantity: 4 },
+      { itemId: 'ITEM_CORD_ROPE', quantity: 1 },
+    ],
+    durationSeconds: 14,
+    effects: {
+      storageAccessibility: 18,
+      storageContaminationProtection: 6,
+      storageVolumePercent: -8,
+    },
+  },
+  MOD_STORAGE_REINFORCED_FRAME: {
+    id: 'MOD_STORAGE_REINFORCED_FRAME',
+    name: 'Khung Kho Gia Cường',
+    description: 'Gia cố khung chịu lực và điểm buộc để kho chịu được vật tư nặng hơn mà không võng hoặc biến dạng.',
+    compatibleCategories: ['storage'],
+    cost: [
+      { itemId: 'ITEM_BAMBOO_SPLIT', quantity: 6 },
+      { itemId: 'ITEM_CORD_ROPE', quantity: 2 },
+    ],
+    durationSeconds: 20,
+    effects: {
+      frameReinforcement: 16,
+      storageWeightPercent: 25,
+      storageVolumePercent: 5,
+    },
   },
 };
 
