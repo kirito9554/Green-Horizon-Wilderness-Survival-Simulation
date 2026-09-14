@@ -38,6 +38,8 @@ const UI_FONT = '"Roboto Condensed", "Be Vietnam Pro", -apple-system, BlinkMacSy
 
 export const CraftingView: React.FC<CraftingViewProps> = ({
   state,
+  onStartResearch,
+  onPauseResearch,
   onAddToCraftingQueue,
   onCancelQueueItem,
   onTogglePauseQueueItem,
@@ -119,7 +121,7 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
       .filter(({ recipe, isPinned }) => {
         if (selectedCategory !== 'all') {
           if (selectedCategory === 'weapons') {
-            if (!(recipe.category === 'weapons' || recipe.id.includes('BOW') || recipe.id.includes('SPEAR') || recipe.id.includes('CLUB'))) return false;
+            if (!(recipe.id.includes('BOW') || recipe.id.includes('SPEAR') || recipe.id.includes('CLUB'))) return false;
           } else if (selectedCategory === 'shelter') {
             if (!(recipe.category === 'shelter' || recipe.id.includes('BED') || recipe.id.includes('SHELTER'))) return false;
           } else if (recipe.category !== selectedCategory) return false;
@@ -165,10 +167,7 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
   }, [allCraftingRecipes, craftingQueue.length, survivors, state.researches]);
 
   const recentHistory = useMemo<RecentlyCraftedEntry[]>(() => {
-    return (state.recentlyCrafted || []).map((entry) => ({
-      ...entry,
-      timeAgoText: entry.timeAgoText || 'Recently',
-    }));
+    return (state.recentlyCrafted || []).map((entry) => ({ ...entry, timeAgoText: entry.timeAgoText || 'Recently' }));
   }, [state.recentlyCrafted]);
 
   const togglePin = (recipeId: string) => {
@@ -180,10 +179,6 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
     });
   };
 
-  /**
-   * Craft is authoritative through the queue scheduler even for x1. This is
-   * required for material reservation, deterministic quality and pause/cancel.
-   */
   const handleCraftNow = (recipeId: string, quantity: number, survivorId: string) => {
     onAddToCraftingQueue?.(recipeId, quantity, survivorId || undefined);
   };
@@ -196,17 +191,8 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
   const timeText = `${String(Math.floor(minuteOfDay / 60)).padStart(2, '0')}:${String(Math.floor(minuteOfDay % 60)).padStart(2, '0')}`;
 
   return (
-    <div
-      className="crafting-reference-root w-full h-full min-h-0 flex flex-col overflow-hidden bg-[#06130f] text-[#e8e2d4] select-none"
-      style={{ fontFamily: UI_FONT, containerType: 'size' }}
-    >
-      <CraftingMasterHeader
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        day={state.gameTime.day || 1}
-        timeText={timeText}
-        islandName="GREENHAVEN ISLAND"
-      />
+    <div className="crafting-reference-root w-full h-full min-h-0 flex flex-col overflow-hidden bg-[#06130f] text-[#e8e2d4] select-none" style={{ fontFamily: UI_FONT, containerType: 'size' }}>
+      <CraftingMasterHeader activeTab={activeTab} onSelectTab={setActiveTab} day={state.gameTime.day || 1} timeText={timeText} islandName="GREENHAVEN ISLAND" />
 
       {activeTab === 'craft' && activeRecipe && (
         <div className="min-h-0 flex-1 grid grid-cols-[minmax(0,2.55fr)_minmax(300px,.95fr)] gap-2 p-2 overflow-hidden">
@@ -256,12 +242,7 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
               />
             </div>
 
-            <CraftingFavoritesAndHistory
-              recentHistory={recentHistory}
-              favoriteRecipeIds={Array.from(pinnedIds)}
-              allRecipes={allCraftingRecipes}
-              onSelectRecipe={(recipe) => setSelectedRecipeId(recipe.id)}
-            />
+            <CraftingFavoritesAndHistory recentHistory={recentHistory} favoriteRecipeIds={Array.from(pinnedIds)} allRecipes={allCraftingRecipes} onSelectRecipe={(recipe) => setSelectedRecipeId(recipe.id)} />
           </div>
 
           <CraftingQueueSidebar
@@ -278,7 +259,11 @@ export const CraftingView: React.FC<CraftingViewProps> = ({
         </div>
       )}
 
-      {activeTab === 'research' && <div className="min-h-0 flex-1 p-2 overflow-hidden"><ResearchView onUnlockRecipe={(candidateId) => console.log('Unlocked candidate:', candidateId)} /></div>}
+      {activeTab === 'research' && (
+        <div className="min-h-0 flex-1 p-2 overflow-hidden">
+          <ResearchView state={state} onStartResearch={onStartResearch} onPauseResearch={onPauseResearch} />
+        </div>
+      )}
       {activeTab === 'repair' && <div className="min-h-0 flex-1 p-2 overflow-hidden"><RepairView /></div>}
       {activeTab === 'upgrade' && <div className="min-h-0 flex-1 p-2 overflow-hidden"><UpgradeView /></div>}
     </div>
