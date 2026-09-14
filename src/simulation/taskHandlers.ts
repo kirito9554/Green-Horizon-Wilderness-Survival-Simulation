@@ -2,7 +2,9 @@ import { GameState, ItemQuality } from '../types';
 import type { MaintenanceMode } from '../types/maintenanceSimulation';
 import type { ComponentModification } from '../types/upgradeSimulation';
 import type { ClusterType } from '../types/buildingSimulation';
+import type { StructureMaintenanceMode } from '../types/structureMaintenanceSimulation';
 import '../types/buildingSimulation';
+import '../types/structureMaintenanceSimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { BUILDINGS_DATABASE } from '../data/buildings';
 import { AREAS_DATABASE } from '../data/areas';
@@ -17,8 +19,18 @@ import { analyzeResearchEvidence, toggleTrackResearch } from './researchSystem';
 import { cancelMaintenanceJob, queueMaintenanceJob, togglePauseMaintenanceJob } from './maintenanceSystem';
 import { cancelUpgradeJob, queueComponentModification, queueTierUpgrade, togglePauseUpgradeJob } from './upgradeSystem';
 import { dismantleTool } from './dismantleSystem';
-import { establishClusterAtCandidate, reserveStructurePlacement } from './buildingClusterSystem';
+import { establishClusterAtCandidate } from './buildingClusterSystem';
 import { planSpatialConstruction } from './buildingConstructionSystem';
+import {
+  cancelSpatialConstruction,
+  togglePauseSpatialConstruction,
+} from './buildingConstructionCommands';
+import {
+  cancelStructureWorkJob,
+  queueStructureMaintenance,
+  queueStructureModification,
+  togglePauseStructureWorkJob,
+} from './structureMaintenanceSystem';
 
 export function startGatheringTask(
   state: GameState,
@@ -152,7 +164,7 @@ export function startCraftingTask(state: GameState, survivorId: string, recipeId
 }
 
 function handleBuildingCommand(state: GameState, survivorId: string, command: string): GameState | null {
-  if (!command.startsWith('__cluster_')) return null;
+  if (!command.startsWith('__')) return null;
   const parts = command.split(':');
   const opcode = parts[0];
 
@@ -171,6 +183,35 @@ function handleBuildingCommand(state: GameState, survivorId: string, command: st
     return clusterId && buildingId
       ? planSpatialConstruction(state, survivorId || undefined, clusterId, buildingId)
       : state;
+  }
+
+  if (opcode === '__construction_pause__') {
+    return parts[1] ? togglePauseSpatialConstruction(state, parts[1]) : state;
+  }
+  if (opcode === '__construction_cancel__') {
+    return parts[1] ? cancelSpatialConstruction(state, parts[1]) : state;
+  }
+
+  if (opcode === '__structure_maintenance__') {
+    const mode = parts[1] as StructureMaintenanceMode;
+    const buildingInstanceId = parts[2];
+    const componentId = parts[3];
+    return buildingInstanceId && componentId
+      ? queueStructureMaintenance(state, buildingInstanceId, componentId, mode, survivorId || undefined)
+      : state;
+  }
+  if (opcode === '__structure_modify__') {
+    const buildingInstanceId = parts[1];
+    const modificationId = parts[2];
+    return buildingInstanceId && modificationId
+      ? queueStructureModification(state, buildingInstanceId, modificationId, survivorId || undefined)
+      : state;
+  }
+  if (opcode === '__structure_work_pause__') {
+    return parts[1] ? togglePauseStructureWorkJob(state, parts[1]) : state;
+  }
+  if (opcode === '__structure_work_cancel__') {
+    return parts[1] ? cancelStructureWorkJob(state, parts[1]) : state;
   }
 
   return state;
