@@ -131,7 +131,7 @@ export function findAvailableWorkstation(
         kind: buildingDescriptor.kind,
         speedMultiplier,
         precisionBonus,
-        weatherProtection: buildingDescriptor.weatherProtection,
+        weatherProtection: buildingDescriptor.weatherProtection * conditionRatio,
       },
     };
   }
@@ -147,6 +147,7 @@ export function assignWorkstation(queueItem: CraftingQueueItem, assignment: Work
   queueItem.assignedWorkstationKind = assignment.kind;
   queueItem.workstationSpeedMultiplier = assignment.speedMultiplier;
   queueItem.workstationPrecisionBonus = assignment.precisionBonus;
+  queueItem.workstationWeatherProtection = assignment.weatherProtection;
 }
 
 export function releaseWorkstation(queueItem: CraftingQueueItem): void {
@@ -154,4 +155,5 @@ export function releaseWorkstation(queueItem: CraftingQueueItem): void {
   queueItem.assignedWorkstationKind = undefined;
   queueItem.workstationSpeedMultiplier = undefined;
   queueItem.workstationPrecisionBonus = undefined;
+  queueItem.workstationWeatherProtection = undefined;
 }
