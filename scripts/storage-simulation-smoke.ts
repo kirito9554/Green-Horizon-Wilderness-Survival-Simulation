@@ -11,6 +11,7 @@ import {
   summarizeStorageLocation,
   takeItemFromLocation,
 } from '../src/simulation/storageSystem';
+import { queueStorageHaul, tickStorageHauling } from '../src/simulation/storageHaulSystem';
 import { addItemToInventory, getAvailableInventoryStock } from '../src/simulation/inventorySystem';
 import { migrateGameState } from '../src/save/migrations';
 
@@ -20,10 +21,32 @@ function fresh(): GameState {
   return state;
 }
 
+function addRack(state: GameState, id = 'storage_rack_smoke') {
+  state.buildings.push({
+    id,
+    buildingId: 'BUILDING_WOVEN_BASKET_RACK',
+    condition: 88,
+    isBuilt: true,
+    buildProgressSeconds: 30,
+    totalBuildSeconds: 30,
+    areaId: 'AREA_CAMP_CLEARING',
+  });
+  const rack = ensureStorageSystem(state).locations.find(location => location.buildingInstanceId === id)!;
+  rack.policy.autoHaul = false;
+  return rack;
+}
+
+function physicalPoiQuantity(state: GameState, itemId: string): number {
+  return state.poiStorages!.AREA_CAMP_CLEARING.items
+    .filter(item => item.itemId === itemId)
+    .reduce((sum, item) => sum + item.quantity, 0);
+}
+
 function testDynamicSlotsArePresentationOnly(): void {
   assert.equal(getDynamicStorageSlotCount(7, 5, false), 15, 'seven stacks should show occupied rows plus one empty row');
   assert.equal(getDynamicStorageSlotCount(10, 5, false), 15, 'full visual rows still get one empty drop row while capacity remains');
   assert.equal(getDynamicStorageSlotCount(10, 5, true), 10, 'full physical storage must not create active empty slots');
+  assert.equal(getDynamicStorageSlotCount(0, 5, true), 0, 'a physically full edge-case exposes zero fake empty slots');
 }
 
 function testStoreUsesLocationCapacityAndCanonicalPoiInventory(): void {
@@ -55,24 +78,14 @@ function testReservedStockCannotBeTaken(): void {
 
 function testPhysicalStorageStructureRegistersLocation(): void {
   const state = fresh();
-  state.buildings.push({
-    id: 'storage_rack_smoke',
-    buildingId: 'BUILDING_WOVEN_BASKET_RACK',
-    condition: 88,
-    isBuilt: true,
-    buildProgressSeconds: 30,
-    totalBuildSeconds: 30,
-    areaId: 'AREA_CAMP_CLEARING',
-  });
-  const system = ensureStorageSystem(state);
-  const rack = system.locations.find(location => location.buildingInstanceId === 'storage_rack_smoke');
+  const rack = addRack(state);
   assert.ok(rack, 'completed storage building should become a physical storage location');
-  assert.equal(rack!.capacity.maxVolumeL, 50);
-  assert.equal(rack!.condition, 88);
+  assert.equal(rack.capacity.maxVolumeL, 50);
+  assert.equal(rack.condition, 88);
 }
 
 function testCapacityCanBeFullWithoutSlotLimit(): void {
-  let state = fresh();
+  const state = fresh();
   const ground = state.storageSystem!.locations.find(location => location.id === 'storage_ground_AREA_CAMP_CLEARING')!;
   ground.capacity.maxWeightKg = 0.01;
   ground.capacity.maxVolumeL = 0.01;
@@ -100,20 +113,54 @@ function testV8MigrationCreatesStorageMetadataWithoutMovingItems(): void {
 
 function testStoreAllRespectsCompatibility(): void {
   const state = fresh();
-  state.buildings.push({
-    id: 'rack_compat_smoke',
-    buildingId: 'BUILDING_WOVEN_BASKET_RACK',
-    condition: 100,
-    isBuilt: true,
-    buildProgressSeconds: 30,
-    totalBuildSeconds: 30,
-    areaId: 'AREA_CAMP_CLEARING',
-  });
-  const rack = ensureStorageSystem(state).locations.find(location => location.buildingInstanceId === 'rack_compat_smoke')!;
+  const rack = addRack(state, 'rack_compat_smoke');
   addItemToInventory(state.inventory, 'ITEM_BOILED_WATER_BOWL', 1, 'standard');
   const water = state.inventory.items.find(item => item.itemId === 'ITEM_BOILED_WATER_BOWL')!;
   const acceptance = canStoreItemInLocation(state, rack.id, water, 1);
   assert.equal(acceptance.accepted, false, 'non-liquid rack must reject liquid-form storage');
+}
+
+function testPersistentHaulMovesLocationWithoutChangingPhysicalQuantity(): void {
+  let state = fresh();
+  const rack = addRack(state, 'rack_haul_smoke');
+  const ground = state.storageSystem!.locations.find(location => location.id === 'storage_ground_AREA_CAMP_CLEARING')!;
+  const beforePhysical = physicalPoiQuantity(state, 'ITEM_DRIFTWOOD_BRANCH');
+
+  state = queueStorageHaul(state, ground.id, rack.id, 'ITEM_DRIFTWOOD_BRANCH', 2, state.survivors[0].id);
+  const job = state.storageSystem!.haulJobs[0];
+  assert.ok(job, 'haul request must become a persistent job');
+  assert.equal(job.materialReservations.reduce((sum, reservation) => sum + reservation.quantity, 0), 2, 'haul job must reserve exact source quantity');
+  assert.equal(physicalPoiQuantity(state, 'ITEM_DRIFTWOOD_BRANCH'), beforePhysical, 'planning a haul must not move or consume stock');
+
+  tickStorageHauling(state, 0.1);
+  assert.equal(job.status, 'in_progress');
+  const worker = state.survivors.find(candidate => candidate.id === job.assignedSurvivorId)!;
+  assert.equal(worker.currentAction.type, 'hauling', 'real survivor must own the logistics task');
+
+  tickStorageHauling(state, job.totalSeconds + 0.1);
+  assert.equal(job.status, 'completed');
+  assert.equal(physicalPoiQuantity(state, 'ITEM_DRIFTWOOD_BRANCH'), beforePhysical, 'hauling changes physical location, never total stock');
+  assert.equal(
+    getStorageLocationItems(state, rack.id).filter(item => item.itemId === 'ITEM_DRIFTWOOD_BRANCH').reduce((sum, item) => sum + item.quantity, 0),
+    2,
+    'completed haul must deposit the reserved quantity in the destination location',
+  );
+  assert.equal(worker.currentAction.type, 'idle', 'completed haul must release its worker');
+}
+
+function testSaveLoadRebuildsHaulReservation(): void {
+  let state = fresh();
+  const rack = addRack(state, 'rack_save_smoke');
+  const ground = state.storageSystem!.locations.find(location => location.id === 'storage_ground_AREA_CAMP_CLEARING')!;
+  state = queueStorageHaul(state, ground.id, rack.id, 'ITEM_PALM_LEAF', 2);
+  const queued = state.storageSystem!.haulJobs[0];
+  assert.ok(queued?.materialReservations.length);
+
+  const migrated = migrateGameState(JSON.parse(JSON.stringify(state)) as GameState);
+  const restored = migrated.storageSystem!.haulJobs.find(job => job.id === queued.id)!;
+  assert.equal(restored.materialReservations.reduce((sum, reservation) => sum + reservation.quantity, 0), 2, 'load must rebuild exact haul reservations');
+  const sourceLeaf = getStorageLocationItems(migrated, ground.id).find(item => item.itemId === 'ITEM_PALM_LEAF')!;
+  assert.ok((sourceLeaf.reservedQuantity || 0) >= 2, 'source stack must remain locked after load');
 }
 
 function main(): void {
@@ -124,6 +171,8 @@ function main(): void {
   testCapacityCanBeFullWithoutSlotLimit();
   testV8MigrationCreatesStorageMetadataWithoutMovingItems();
   testStoreAllRespectsCompatibility();
+  testPersistentHaulMovesLocationWithoutChangingPhysicalQuantity();
+  testSaveLoadRebuildsHaulReservation();
   console.log('Storage simulation smoke tests passed.');
 }
 
