@@ -1,5 +1,20 @@
 import React from 'react';
-import { Clock3, Trash2, ChevronUp, ChevronDown, Hammer, BookOpen, Users, Zap, ArrowRight, Plus } from 'lucide-react';
+import {
+  Clock3,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  Hammer,
+  BookOpen,
+  Users,
+  Zap,
+  ArrowRight,
+  Plus,
+  Pause,
+  Play,
+  AlertTriangle,
+  LockKeyhole,
+} from 'lucide-react';
 import { CraftingQueueItem, RecipeDefinition, SurvivorState } from '../../types';
 import { CraftingStatsSummary } from '../../types/crafting';
 import { RECIPES_DATABASE } from '../../data/recipes';
@@ -27,12 +42,23 @@ const formatTime = (seconds: number) => {
     : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 };
 
+function getSchedulerLabel(item: CraftingQueueItem): { label: string; className: string; icon: React.ReactNode } {
+  if (item.status === 'paused') return { label: 'Paused', className: 'text-[#e9c46a]', icon: <Pause className="w-2.5 h-2.5" /> };
+  if (item.status === 'in_progress') return { label: 'In Progress', className: 'text-[#5eead4]', icon: <Hammer className="w-2.5 h-2.5" /> };
+  if ((item.blockedReasons || []).length > 0) return { label: 'Waiting', className: 'text-[#f4a261]', icon: <AlertTriangle className="w-2.5 h-2.5" /> };
+  if (item.reservationStatus === 'reserved' || item.reservationStatus === 'partially_consumed') {
+    return { label: 'Reserved', className: 'text-[#86efac]', icon: <LockKeyhole className="w-2.5 h-2.5" /> };
+  }
+  return { label: 'Pending', className: 'text-[#a6b4a9]', icon: <Clock3 className="w-2.5 h-2.5" /> };
+}
+
 export const CraftingQueueSidebar: React.FC<CraftingQueueSidebarProps> = ({
   queue,
   survivors,
   selectedRecipe,
   onSelectRecipe,
   onCancelQueueItem,
+  onTogglePauseQueueItem,
   onReorderQueue,
   onAddSelectedToQueue,
   stats,
@@ -52,7 +78,7 @@ export const CraftingQueueSidebar: React.FC<CraftingQueueSidebarProps> = ({
           <InfoRow icon={<BookOpen className="w-3.5 h-3.5" />} label="Total Known Recipes" value={`${stats?.totalKnownRecipes ?? 0} / ${stats?.maxRecipes ?? 18}`} />
           <InfoRow icon={<Clock3 className="w-3.5 h-3.5" />} label="Queued Crafts" value={`${queue.length} / ${stats?.maxQueueSlots ?? 3}`} />
           <InfoRow icon={<Users className="w-3.5 h-3.5" />} label="Idle Survivors" value={`${stats?.idleSurvivors ?? survivors.filter((s) => s.currentAction.type === 'idle').length}`} />
-          <InfoRow icon={<Zap className="w-3.5 h-3.5" />} label="Crafting Speed" value={`+${stats?.craftingSpeedBonusPct ?? 0}%`} />
+          <InfoRow icon={<Zap className="w-3.5 h-3.5" />} label="Skill Speed Bonus" value={`+${stats?.craftingSpeedBonusPct ?? 0}%`} />
         </div>
       </section>
 
@@ -71,20 +97,42 @@ export const CraftingQueueSidebar: React.FC<CraftingQueueSidebarProps> = ({
               const total = item.totalSeconds || recipe?.craftTimeSeconds || 1;
               const progress = Math.min(100, Math.round(((item.progressSeconds || 0) / total) * 100));
               const remaining = Math.max(0, total - (item.progressSeconds || 0));
+              const status = getSchedulerLabel(item);
+              const blockedReason = item.blockedReasons?.[0];
+              const reservedCount = (item.materialReservations || []).reduce((sum, reservation) => sum + reservation.quantity, 0);
+
               return (
-                <div key={item.id} className="h-[66px] px-2 flex items-center gap-2 border border-[#355040] bg-[#081914]">
+                <div key={item.id} className="min-h-[76px] px-2 py-1.5 flex items-center gap-2 border border-[#355040] bg-[#081914]">
                   <div className="w-10 h-10 shrink-0 rounded-[4px] border border-[#405546] bg-[#07120e] flex items-center justify-center">
                     <CraftedItemArt itemId={recipe?.outputs[0]?.itemId || ''} recipeId={recipe?.id} size={34} />
                   </div>
+
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2"><span className="text-[11px] font-bold text-[#eee7d8] truncate">{recipe?.name || item.recipeId}</span><span className="text-[9px] text-[#8d998e]">x{item.quantity}</span></div>
-                    <div className="mt-1 flex items-center gap-2">
-                      <div className="h-1.5 min-w-0 flex-1 rounded-full bg-[#17271f] overflow-hidden border border-[#2b4134]"><div className="h-full bg-[#3bc1c9]" style={{ width: `${Math.max(8, progress)}%` }} /></div>
-                      <span className="text-[9px] font-mono text-[#cdc4b1]">{formatTime(remaining)}</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold text-[#eee7d8] truncate">{recipe?.name || item.recipeId}</span>
+                      <span className="text-[9px] text-[#8d998e]">{item.completedCount}/{item.quantity}</span>
                     </div>
+
+                    <div className={`mt-0.5 flex items-center gap-1 text-[9px] font-bold ${status.className}`}>
+                      {status.icon}<span>{status.label}</span>
+                      {reservedCount > 0 && item.status !== 'in_progress' && <span className="font-normal text-[#70867a]">· {reservedCount} mats locked</span>}
+                    </div>
+
+                    {blockedReason ? (
+                      <div className="mt-1 text-[8.5px] text-[#e0a36c] truncate" title={item.blockedReasons?.join('\n')}>{blockedReason}</div>
+                    ) : (
+                      <div className="mt-1 flex items-center gap-2">
+                        <div className="h-1.5 min-w-0 flex-1 rounded-full bg-[#17271f] overflow-hidden border border-[#2b4134]"><div className="h-full bg-[#3bc1c9]" style={{ width: `${item.status === 'in_progress' ? Math.max(4, progress) : progress}%` }} /></div>
+                        <span className="text-[9px] font-mono text-[#cdc4b1]">{formatTime(remaining)}</span>
+                      </div>
+                    )}
                   </div>
+
                   <div className="flex flex-col gap-0.5 shrink-0">
                     {index > 0 && <button type="button" onClick={() => onReorderQueue?.(item.id, 'up')} className="w-6 h-5 flex items-center justify-center border border-[#50634e] text-[#d7d0bd] hover:text-white cursor-pointer"><ChevronUp className="w-3 h-3" /></button>}
+                    <button type="button" onClick={() => onTogglePauseQueueItem?.(item.id)} className="w-6 h-5 flex items-center justify-center border border-[#59694f] text-[#d8c985] hover:text-white cursor-pointer" title={item.status === 'paused' ? 'Resume' : 'Pause'}>
+                      {item.status === 'paused' ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+                    </button>
                     <button type="button" onClick={() => onCancelQueueItem?.(item.id)} className="w-6 h-5 flex items-center justify-center border border-[#8b493c] text-[#ef6b59] hover:text-red-300 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
                     {index < visibleQueue.length - 1 && <button type="button" onClick={() => onReorderQueue?.(item.id, 'down')} className="w-6 h-5 flex items-center justify-center border border-[#50634e] text-[#d7d0bd] hover:text-white cursor-pointer"><ChevronDown className="w-3 h-3" /></button>}
                   </div>
