@@ -8,6 +8,7 @@ import type {
 import '../types/storageSimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { STORAGE_TYPES, inferStorageForm, storageTypeForBuilding } from '../data/storageDefinitions';
+import { STRUCTURE_MODIFICATIONS } from '../data/structureModifications';
 import {
   calculateInventoryOccupancy,
   getAvailableInventoryItemQuantity,
@@ -21,6 +22,10 @@ const CAMP_POI_ID = 'AREA_CAMP_CLEARING';
 
 function cloneValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function clamp(value: number, min = 0, max = 100): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function groundLocationId(poiId: string): string {
@@ -55,6 +60,53 @@ function createGroundLocation(poiId: string): StorageLocation {
   };
 }
 
+function refreshBuiltStorageProfile(
+  location: StorageLocation,
+  building: GameState['buildings'][number],
+): void {
+  const type = storageTypeForBuilding(building.buildingId);
+  if (!type) return;
+
+  let weightPct = 0;
+  let volumePct = 0;
+  let moisture = 0;
+  let rain = 0;
+  let pest = 0;
+  let contamination = 0;
+  let accessibility = 0;
+
+  for (const record of building.structureModifications || []) {
+    const effects = STRUCTURE_MODIFICATIONS[record.modificationId]?.effects;
+    if (!effects) continue;
+    weightPct += effects.storageWeightPercent || 0;
+    volumePct += effects.storageVolumePercent || 0;
+    moisture += effects.storageMoistureProtection || 0;
+    rain += effects.storageRainProtection || 0;
+    pest += effects.storagePestProtection || 0;
+    contamination += effects.storageContaminationProtection || 0;
+    accessibility += effects.storageAccessibility || 0;
+  }
+
+  location.typeId = type.id;
+  location.kind = type.kind;
+  location.poiId = building.areaId || CAMP_POI_ID;
+  location.parentStructureId = building.clusterId;
+  location.capacity = {
+    ...type.capacity,
+    maxWeightKg: Math.max(1, type.capacity.maxWeightKg * (1 + weightPct / 100)),
+    maxVolumeL: Math.max(1, type.capacity.maxVolumeL * (1 + volumePct / 100)),
+  };
+  location.environment = {
+    ...type.environment,
+    moistureProtection: clamp(type.environment.moistureProtection + moisture),
+    rainProtection: clamp(type.environment.rainProtection + rain),
+    pestProtection: clamp(type.environment.pestProtection + pest),
+    contaminationProtection: clamp(type.environment.contaminationProtection + contamination),
+    accessibility: clamp(type.environment.accessibility + accessibility),
+  };
+  location.condition = clamp(building.condition || 100);
+}
+
 export function createStorageSystemState(): StorageSystemState {
   return { version: 2, locations: [createGroundLocation(CAMP_POI_ID)], alerts: [], haulJobs: [] };
 }
@@ -83,8 +135,7 @@ export function ensureStorageSystem(state: GameState): StorageSystemState {
     const locationId = `storage_building_${building.id}`;
     const existing = state.storageSystem.locations.find(location => location.id === locationId);
     if (existing) {
-      existing.condition = Math.max(0, Math.min(100, building.condition || 100));
-      existing.parentStructureId = building.clusterId;
+      refreshBuiltStorageProfile(existing, building);
       normalizePolicy(existing);
       continue;
     }
@@ -99,8 +150,9 @@ export function ensureStorageSystem(state: GameState): StorageSystemState {
       capacity: { ...type.capacity },
       environment: { ...type.environment },
       policy: cloneValue(type.policy),
-      condition: Math.max(0, Math.min(100, building.condition || 100)),
+      condition: clamp(building.condition || 100),
     };
+    refreshBuiltStorageProfile(created, building);
     normalizePolicy(created);
     state.storageSystem.locations.push(created);
   }
@@ -130,8 +182,6 @@ function syncPoiAggregateCapacity(state: GameState): void {
   }
   for (const [poiId, total] of totals.entries()) {
     const inventory = getOrCreatePoiStorage(state, poiId);
-    // POI inventories are canonical stock indexes. Their limits mirror the sum
-    // of currently registered physical locations, never a count of UI slots.
     inventory.maxWeightKg = total.weight;
     inventory.maxVolumeL = total.volume;
   }
@@ -318,13 +368,12 @@ export function tickStorageSimulation(state: GameState, deltaGameMinutes: number
   const alerts: StorageSystemState['alerts'] = [];
 
   for (const location of system.locations) {
-    const building = location.buildingInstanceId ? state.buildings.find(candidate => candidate.id === location.buildingInstanceId) : undefined;
-    if (building) location.condition = Math.max(0, Math.min(100, building.condition));
     const conditionRatio = Math.max(0.15, location.condition / 100);
     const moistureProtection = location.environment.moistureProtection * conditionRatio;
     const pestProtection = location.environment.pestProtection * conditionRatio;
+    const contaminationProtection = location.environment.contaminationProtection * conditionRatio;
     const temperatureBuffer = location.environment.temperatureBuffer * conditionRatio;
-    const preservationMultiplier = Math.max(0.38, 1.16 - moistureProtection * 0.0032 - pestProtection * 0.0014 - temperatureBuffer * 0.0022);
+    const preservationMultiplier = Math.max(0.36, 1.16 - moistureProtection * 0.0032 - pestProtection * 0.0014 - temperatureBuffer * 0.0022);
 
     const items = getStorageLocationItems(state, location.id);
     for (const item of items) {
@@ -332,9 +381,11 @@ export function tickStorageSimulation(state: GameState, deltaGameMinutes: number
       if (!def) continue;
       const targetMoisture = Math.max(4, state.weather.humidityPercent * (1 - moistureProtection / 135));
       const currentMoisture = item.moisture ?? targetMoisture;
-      item.moisture = Math.max(0, Math.min(100, currentMoisture + (targetMoisture - currentMoisture) * Math.min(1, deltaGameMinutes / 180)));
-      item.pestDamage = Math.max(0, Math.min(100, (item.pestDamage || 0) + Math.max(0, 35 - pestProtection) * deltaGameMinutes / 30000));
-      item.spoilageMultiplier = preservationMultiplier;
+      item.moisture = clamp(currentMoisture + (targetMoisture - currentMoisture) * Math.min(1, deltaGameMinutes / 180));
+      item.pestDamage = clamp((item.pestDamage || 0) + Math.max(0, 35 - pestProtection) * deltaGameMinutes / 30000);
+      const contaminationPressure = Math.max(0, 42 - contaminationProtection) + (item.pestDamage || 0) * 0.08;
+      item.contamination = clamp((item.contamination || 0) + contaminationPressure * deltaGameMinutes / 35000);
+      item.spoilageMultiplier = preservationMultiplier * (1 + (item.contamination || 0) / 240);
 
       if (def.freshnessMaxDays && item.freshness !== undefined) {
         const analysis = analyzeItemSpoilage(item, def, state);
@@ -351,6 +402,7 @@ export function tickStorageSimulation(state: GameState, deltaGameMinutes: number
     const summary = summarizeStorageLocation(state, location.id);
     if (summary?.isFull) alerts.push({ id: `full_${location.id}`, locationId: location.id, severity: 'warning', message: `${location.name} đã đầy dung tích hoặc tải trọng.` });
     if (items.some(item => (item.moisture || 0) > 75)) alerts.push({ id: `wet_${location.id}`, locationId: location.id, severity: 'warning', message: `${location.name} có vật phẩm đang quá ẩm.` });
+    if (items.some(item => (item.contamination || 0) > 55)) alerts.push({ id: `dirty_${location.id}`, locationId: location.id, severity: 'warning', message: `${location.name} có vật phẩm đang có nguy cơ nhiễm bẩn cao.` });
   }
 
   system.alerts = alerts.slice(0, 20);
