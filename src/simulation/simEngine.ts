@@ -5,6 +5,7 @@ import '../types/maintenanceSimulation';
 import '../types/upgradeSimulation';
 import '../types/buildingSimulation';
 import '../types/structureSimulation';
+import '../types/structureMaintenanceSimulation';
 import { INITIAL_SURVIVORS } from '../data/survivors';
 import { getDefaultResourcePools } from './resourcePools';
 import { advanceTime } from './timeSystem';
@@ -21,6 +22,7 @@ import { createBuildingSimulationState } from './buildGridSystem';
 import { tickBuildingPreparationRuntime } from './buildingPreparationRuntime';
 import { tickBuildingConstructionRuntime } from './buildingConstructionSystem';
 import { tickStructureLifecycle } from './structureLifecycleSystem';
+import { tickStructureWorkRuntime } from './structureMaintenanceSystem';
 import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
@@ -51,9 +53,10 @@ export * from './buildingPreparationRuntime';
 export * from './buildingConstructionSystem';
 export * from './structureComponentSystem';
 export * from './structureLifecycleSystem';
+export * from './structureMaintenanceSystem';
 
 export const INITIAL_GAME_STATE: GameState = {
-  saveVersion: 7,
+  saveVersion: 8,
   campName: 'Canopy Bay Settlement',
   gameTime: { day: 1, minuteOfDay: 510, speed: 1 },
   weather: {
@@ -141,18 +144,11 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickExpeditions(next, deltaGameMinutes);
   tickItemSimulation(next, deltaGameMinutes);
 
-  // Spatial building jobs share real survivors with the rest of the camp. Both
-  // runtimes own sentinel `building` actions after SurvivorSystem advances the
-  // clock, so legacy completion code cannot consume their targets accidentally.
   tickBuildingPreparationRuntime(next);
   tickBuildingConstructionRuntime(next);
-
-  // A completed phased construction becomes a physical component graph before
-  // environmental exposure is applied. Existing components then accumulate
-  // moisture, rot, flood and storm wear deterministically from their POI cells.
   tickStructureLifecycle(next, deltaGameMinutes);
+  tickStructureWorkRuntime(next);
 
-  // All production systems contend for the same physical workstation pool.
   prepareMaintenanceWorkstations(next);
   tickMaintenanceSystem(next, deltaGameSeconds);
   prepareUpgradeWorkstations(next);
