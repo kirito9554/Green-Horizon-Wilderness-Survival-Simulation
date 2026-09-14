@@ -108,6 +108,7 @@ declare module './index' {
     assignedWorkstationKind?: WorkstationKind;
     workstationSpeedMultiplier?: number;
     workstationPrecisionBonus?: number;
+    workstationWeatherProtection?: number;
   }
 }
 
