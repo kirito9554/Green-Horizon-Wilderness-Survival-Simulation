@@ -14,37 +14,25 @@ import {
 } from './inventorySystem';
 import { formatTimeOfDay } from './timeSystem';
 import { analyzeResearchEvidence, toggleTrackResearch } from './researchSystem';
-import {
-  cancelMaintenanceJob,
-  queueMaintenanceJob,
-  togglePauseMaintenanceJob,
-} from './maintenanceSystem';
-import {
-  cancelUpgradeJob,
-  queueComponentModification,
-  queueTierUpgrade,
-  togglePauseUpgradeJob,
-} from './upgradeSystem';
+import { cancelMaintenanceJob, queueMaintenanceJob, togglePauseMaintenanceJob } from './maintenanceSystem';
+import { cancelUpgradeJob, queueComponentModification, queueTierUpgrade, togglePauseUpgradeJob } from './upgradeSystem';
 import { dismantleTool } from './dismantleSystem';
-import {
-  establishClusterAtCandidate,
-  reserveStructurePlacement,
-} from './buildingClusterSystem';
+import { establishClusterAtCandidate, reserveStructurePlacement } from './buildingClusterSystem';
 
 export function startGatheringTask(
   state: GameState,
   survivorId: string,
   nodeId: string,
-  targetAreaId?: string
+  targetAreaId?: string,
 ): GameState {
   const next = JSON.parse(JSON.stringify(state)) as GameState;
-  const survivor = next.survivors.find(s => s.id === survivorId);
+  const survivor = next.survivors.find(candidate => candidate.id === survivorId);
   if (!survivor || survivor.currentAction.type !== 'idle') return state;
 
   let targetNode = null;
   let resolvedAreaId = targetAreaId || '';
   for (const area of Object.values(AREAS_DATABASE)) {
-    const found = area.nodes.find(n => n.id === nodeId);
+    const found = area.nodes.find(node => node.id === nodeId);
     if (found) {
       targetNode = found;
       if (!resolvedAreaId) resolvedAreaId = area.id;
@@ -53,18 +41,16 @@ export function startGatheringTask(
   }
   if (!targetNode) return state;
 
-  if (next.resourcePools && next.resourcePools[nodeId]) {
-    const pool = next.resourcePools[nodeId];
-    if (pool.currentStock < 1) {
-      next.logs.unshift({
-        id: `act_depleted_${Date.now()}`,
-        day: next.gameTime.day,
-        timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
-        text: `Bãi "${targetNode.name}" đã cạn kiệt (${Math.round(pool.currentStock * 10) / 10}/${pool.maxStock})! Hãy để hệ sinh thái phục hồi.`,
-        type: 'warning',
-      });
-      return next;
-    }
+  const pool = next.resourcePools?.[nodeId];
+  if (pool && pool.currentStock < 1) {
+    next.logs.unshift({
+      id: `act_depleted_${Date.now()}`,
+      day: next.gameTime.day,
+      timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
+      text: `Bãi "${targetNode.name}" đã cạn kiệt (${Math.round(pool.currentStock * 10) / 10}/${pool.maxStock})! Hãy để hệ sinh thái phục hồi.`,
+      type: 'warning',
+    });
+    return next;
   }
 
   survivor.currentAction = {
@@ -98,31 +84,24 @@ function handleProductionCommand(state: GameState, survivorId: string, command: 
   const parts = command.split(':');
   const opcode = parts[0];
 
-  if (opcode === '__research_analyze__') {
-    const recipeId = parts[1];
-    return recipeId ? analyzeResearchEvidence(state, recipeId, survivorId || undefined) : state;
-  }
-  if (opcode === '__research_track__') {
-    const recipeId = parts[1];
-    return recipeId ? toggleTrackResearch(state, recipeId) : state;
-  }
+  if (opcode === '__research_analyze__') return parts[1] ? analyzeResearchEvidence(state, parts[1], survivorId || undefined) : state;
+  if (opcode === '__research_track__') return parts[1] ? toggleTrackResearch(state, parts[1]) : state;
+
   if (opcode === '__maintenance__') {
     const mode = parts[1] as MaintenanceMode;
-    const instanceId = parts[2];
-    const componentId = parts[3] || undefined;
-    return instanceId ? queueMaintenanceJob(state, instanceId, mode, componentId, survivorId || undefined) : state;
+    return parts[2] ? queueMaintenanceJob(state, parts[2], mode, parts[3] || undefined, survivorId || undefined) : state;
   }
   if (opcode === '__maintenance_cancel__') return parts[1] ? cancelMaintenanceJob(state, parts[1]) : state;
   if (opcode === '__maintenance_pause__') return parts[1] ? togglePauseMaintenanceJob(state, parts[1]) : state;
+
   if (opcode === '__upgrade_tier__') return parts[1] ? queueTierUpgrade(state, parts[1], survivorId || undefined) : state;
   if (opcode === '__upgrade_mod__') {
     const modification = parts[1] as ComponentModification;
-    const instanceId = parts[2];
-    const componentId = parts[3] || undefined;
-    return instanceId ? queueComponentModification(state, instanceId, modification, componentId, survivorId || undefined) : state;
+    return parts[2] ? queueComponentModification(state, parts[2], modification, parts[3] || undefined, survivorId || undefined) : state;
   }
   if (opcode === '__upgrade_cancel__') return parts[1] ? cancelUpgradeJob(state, parts[1]) : state;
   if (opcode === '__upgrade_pause__') return parts[1] ? togglePauseUpgradeJob(state, parts[1]) : state;
+
   if (opcode === '__dismantle__') {
     const result = parts[1] ? dismantleTool(state, parts[1], survivorId || undefined) : null;
     return result?.state || state;
@@ -130,28 +109,27 @@ function handleProductionCommand(state: GameState, survivorId: string, command: 
   return state;
 }
 
-export function startCraftingTask(
-  state: GameState,
-  survivorId: string,
-  recipeId: string
-): GameState {
+export function startCraftingTask(state: GameState, survivorId: string, recipeId: string): GameState {
   const routed = handleProductionCommand(state, survivorId, recipeId);
   if (routed) return routed;
 
   const next = JSON.parse(JSON.stringify(state)) as GameState;
-  const survivor = next.survivors.find(s => s.id === survivorId);
+  const survivor = next.survivors.find(candidate => candidate.id === survivorId);
   const recipe = RECIPES_DATABASE[recipeId];
   if (!survivor || !recipe || survivor.currentAction.type !== 'idle') return state;
 
   const ingredientQualities: ItemQuality[] = [];
-  for (const ing of recipe.ingredients) {
-    const matching = next.inventory.items.find(i => i.itemId === ing.itemId && i.quantity > (i.reservedQuantity || 0));
+  for (const ingredient of recipe.ingredients) {
+    const matching = next.inventory.items.find(item => item.itemId === ingredient.itemId && item.quantity > (item.reservedQuantity || 0));
     if (matching) {
-      const q = matching.quality || (matching.qualityBreakdown?.masterwork ? 'masterwork' : matching.qualityBreakdown?.prime ? 'prime' : matching.qualityBreakdown?.crude ? 'crude' : 'standard');
-      ingredientQualities.push(q);
+      ingredientQualities.push(
+        matching.quality ||
+        (matching.qualityBreakdown?.masterwork ? 'masterwork' :
+          matching.qualityBreakdown?.prime ? 'prime' :
+            matching.qualityBreakdown?.crude ? 'crude' : 'standard'),
+      );
     }
-    const success = deductItemFromInventory(next.inventory, ing.itemId, ing.quantity);
-    if (!success) return state;
+    if (!deductItemFromInventory(next.inventory, ingredient.itemId, ingredient.quantity)) return state;
   }
 
   survivor.currentAction = {
@@ -162,7 +140,6 @@ export function startCraftingTask(
     totalSeconds: recipe.craftTimeSeconds,
     resultPayload: { recipeOutputs: recipe.outputs, recipeName: recipe.name, recipeId, ingredientQualities },
   };
-
   next.logs.unshift({
     id: `craft_${Date.now()}`,
     day: next.gameTime.day,
@@ -176,7 +153,9 @@ export function startCraftingTask(
 function handleBuildingCommand(state: GameState, survivorId: string, command: string): GameState | null {
   if (!command.startsWith('__cluster_')) return null;
   const parts = command.split(':');
-  if (parts[0] === '__cluster_establish__') {
+  const opcode = parts[0];
+
+  if (opcode === '__cluster_establish__') {
     const poiId = parts[1];
     const type = parts[2] as ClusterType;
     const candidateId = parts[3];
@@ -184,6 +163,15 @@ function handleBuildingCommand(state: GameState, survivorId: string, command: st
       ? establishClusterAtCandidate(state, poiId, type, candidateId, survivorId || undefined)
       : state;
   }
+
+  if (opcode === '__cluster_build__') {
+    const clusterId = parts[1];
+    const buildingId = parts[2];
+    return clusterId && buildingId
+      ? startConstructionTask(state, survivorId, buildingId, clusterId)
+      : state;
+  }
+
   return state;
 }
 
@@ -196,13 +184,13 @@ export function startConstructionTask(
   state: GameState,
   survivorId: string,
   buildingId: string,
-  areaOrClusterId: string = 'AREA_CAMP_CLEARING'
+  areaOrClusterId: string = 'AREA_CAMP_CLEARING',
 ): GameState {
   const routed = handleBuildingCommand(state, survivorId, buildingId);
   if (routed) return routed;
 
   const next = JSON.parse(JSON.stringify(state)) as GameState;
-  const survivor = next.survivors.find(s => s.id === survivorId);
+  const survivor = next.survivors.find(candidate => candidate.id === survivorId);
   const blueprint = BUILDINGS_DATABASE[buildingId];
   if (!survivor || !blueprint || survivor.currentAction.type !== 'idle') return state;
 
@@ -214,14 +202,11 @@ export function startConstructionTask(
   const poiStorage = getOrCreatePoiStorage(next, areaId);
 
   let building = next.buildings.find(candidate =>
-    !candidate.isBuilt &&
-    candidate.buildingId === buildingId &&
+    !candidate.isBuilt && candidate.buildingId === buildingId &&
     (clusterId ? candidate.clusterId === clusterId : candidate.areaId === areaId)
   );
 
   if (!building) {
-    // Validate the whole bill first so a failed construction can never partially
-    // consume materials from POI storage before discovering a later shortage.
     const missing = blueprint.cost.filter(cost => totalAvailableForConstruction(next, areaId, cost.itemId) < cost.quantity);
     if (missing.length) {
       next.logs.unshift({
