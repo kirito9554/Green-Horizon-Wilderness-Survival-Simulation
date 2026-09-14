@@ -21,25 +21,33 @@ function fresh(): GameState {
   return state;
 }
 
-function addRack(state: GameState, id = 'storage_rack_smoke') {
+function addStorageBuilding(state: GameState, buildingId: string, id: string, condition = 88) {
   state.buildings.push({
     id,
-    buildingId: 'BUILDING_WOVEN_BASKET_RACK',
-    condition: 88,
+    buildingId,
+    condition,
     isBuilt: true,
     buildProgressSeconds: 30,
     totalBuildSeconds: 30,
     areaId: 'AREA_CAMP_CLEARING',
   });
-  const rack = ensureStorageSystem(state).locations.find(location => location.buildingInstanceId === id)!;
-  rack.policy.autoHaul = false;
-  return rack;
+  const location = ensureStorageSystem(state).locations.find(candidate => candidate.buildingInstanceId === id)!;
+  location.policy.autoHaul = false;
+  return location;
+}
+
+function addRack(state: GameState, id = 'storage_rack_smoke') {
+  return addStorageBuilding(state, 'BUILDING_WOVEN_BASKET_RACK', id);
 }
 
 function physicalPoiQuantity(state: GameState, itemId: string): number {
   return state.poiStorages!.AREA_CAMP_CLEARING.items
     .filter(item => item.itemId === itemId)
     .reduce((sum, item) => sum + item.quantity, 0);
+}
+
+function carriedItem(state: GameState, itemId: string) {
+  return state.inventory.items.find(item => item.itemId === itemId)!;
 }
 
 function testDynamicSlotsArePresentationOnly(): void {
@@ -115,9 +123,36 @@ function testStoreAllRespectsCompatibility(): void {
   const state = fresh();
   const rack = addRack(state, 'rack_compat_smoke');
   addItemToInventory(state.inventory, 'ITEM_BOILED_WATER_BOWL', 1, 'standard');
-  const water = state.inventory.items.find(item => item.itemId === 'ITEM_BOILED_WATER_BOWL')!;
+  const water = carriedItem(state, 'ITEM_BOILED_WATER_BOWL');
   const acceptance = canStoreItemInLocation(state, rack.id, water, 1);
   assert.equal(acceptance.accepted, false, 'non-liquid rack must reject liquid-form storage');
+}
+
+function testSpecializedStorageProfiles(): void {
+  const state = fresh();
+  const crate = addStorageBuilding(state, 'BUILDING_BAMBOO_SUPPLY_CRATE', 'crate_profile_smoke');
+  const bulk = addStorageBuilding(state, 'BUILDING_BULK_MATERIAL_RACK', 'bulk_profile_smoke');
+  const medicine = addStorageBuilding(state, 'BUILDING_MEDICINE_STORAGE_CHEST', 'medicine_profile_smoke');
+  const waterTank = addStorageBuilding(state, 'BUILDING_BAMBOO_WATER_TANK', 'water_profile_smoke');
+
+  addItemToInventory(state.inventory, 'ITEM_BANDAGE', 2, 'standard');
+  addItemToInventory(state.inventory, 'ITEM_WATER_FLASK', 1, 'standard');
+  addItemToInventory(state.inventory, 'ITEM_BAMBOO_STALK', 2, 'standard');
+  addItemToInventory(state.inventory, 'ITEM_ROPE', 2, 'standard');
+
+  const bandage = carriedItem(state, 'ITEM_BANDAGE');
+  const water = carriedItem(state, 'ITEM_WATER_FLASK');
+  const bamboo = carriedItem(state, 'ITEM_BAMBOO_STALK');
+  const rope = carriedItem(state, 'ITEM_ROPE');
+
+  assert.equal(canStoreItemInLocation(state, medicine.id, bandage, 1).accepted, true, 'medicine chest must accept medicine');
+  assert.equal(canStoreItemInLocation(state, medicine.id, rope, 1).accepted, false, 'medicine chest must reject general materials');
+  assert.equal(canStoreItemInLocation(state, waterTank.id, water, 1).accepted, true, 'water tank must accept water/liquid-form stock');
+  assert.equal(canStoreItemInLocation(state, waterTank.id, bandage, 1).accepted, false, 'water tank must reject dry medical stock');
+  assert.equal(canStoreItemInLocation(state, bulk.id, bamboo, 1).accepted, true, 'bulk rack must accept long bamboo poles');
+  assert.equal(canStoreItemInLocation(state, bulk.id, rope, 1).accepted, false, 'bulk rack must reject small bundled material');
+  assert.equal(canStoreItemInLocation(state, crate.id, rope, 1).accepted, true, 'general supply crate must accept bundled material');
+  assert.equal(canStoreItemInLocation(state, crate.id, water, 1).accepted, false, 'general supply crate must reject liquid stock');
 }
 
 function testPersistentHaulMovesLocationWithoutChangingPhysicalQuantity(): void {
@@ -171,6 +206,7 @@ function main(): void {
   testCapacityCanBeFullWithoutSlotLimit();
   testV8MigrationCreatesStorageMetadataWithoutMovingItems();
   testStoreAllRespectsCompatibility();
+  testSpecializedStorageProfiles();
   testPersistentHaulMovesLocationWithoutChangingPhysicalQuantity();
   testSaveLoadRebuildsHaulReservation();
   console.log('Storage simulation smoke tests passed.');
