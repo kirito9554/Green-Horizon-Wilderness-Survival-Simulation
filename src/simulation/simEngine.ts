@@ -3,6 +3,7 @@ import '../types/craftingSimulation';
 import '../types/researchSimulation';
 import '../types/maintenanceSimulation';
 import '../types/upgradeSimulation';
+import '../types/buildingSimulation';
 import { INITIAL_SURVIVORS } from '../data/survivors';
 import { getDefaultResourcePools } from './resourcePools';
 import { advanceTime } from './timeSystem';
@@ -15,6 +16,8 @@ import { tickCraftingAndResearch } from './craftingSystem';
 import { tickComponentBootstrap } from './componentBootstrapSystem';
 import { tickMaintenanceSystem } from './maintenanceSystem';
 import { tickUpgradeSystem } from './upgradeSystem';
+import { createBuildingSimulationState } from './buildGridSystem';
+import { tickBuildingPreparationRuntime } from './buildingPreparationRuntime';
 import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
@@ -39,9 +42,12 @@ export * from './productionWorkstationCoordinator';
 export * from './researchSystem';
 export * from './maintenanceSystem';
 export * from './upgradeSystem';
+export * from './buildGridSystem';
+export * from './buildingClusterSystem';
+export * from './buildingPreparationRuntime';
 
 export const INITIAL_GAME_STATE: GameState = {
-  saveVersion: 5,
+  saveVersion: 6,
   campName: 'Canopy Bay Settlement',
   gameTime: { day: 1, minuteOfDay: 510, speed: 1 },
   weather: {
@@ -77,6 +83,7 @@ export const INITIAL_GAME_STATE: GameState = {
     id: 'bld_campfire', buildingId: 'BUILDING_CAMPFIRE_HEARTH', condition: 100, isBuilt: false,
     buildProgressSeconds: 0, totalBuildSeconds: 20, areaId: 'AREA_CAMP_CLEARING',
   }],
+  buildingSimulation: createBuildingSimulationState(),
   poiStorages: {
     AREA_CAMP_CLEARING: {
       maxWeightKg: 120, maxVolumeL: 180,
@@ -128,10 +135,12 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickExpeditions(next, deltaGameMinutes);
   tickItemSimulation(next, deltaGameMinutes);
 
-  // All production systems now contend for the same physical workstation pool.
-  // Priority remains Maintenance -> Upgrade -> Craft/Research. A heavy repair
-  // claims the workbench before upgrades/crafting; field maintenance/sharpening
-  // uses handcraft and therefore does not consume a physical station slot.
+  // Site-preparation jobs reuse real survivors and the existing build priority.
+  // They run after SurvivorSystem so their runtime can reconcile worker progress
+  // without introducing a second competing action scheduler.
+  tickBuildingPreparationRuntime(next);
+
+  // All production systems contend for the same physical workstation pool.
   prepareMaintenanceWorkstations(next);
   tickMaintenanceSystem(next, deltaGameSeconds);
   prepareUpgradeWorkstations(next);
