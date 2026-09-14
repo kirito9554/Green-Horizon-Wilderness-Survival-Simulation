@@ -1,11 +1,17 @@
 import { GameState, ItemQuality } from '../types';
 import type { MaintenanceMode } from '../types/maintenanceSimulation';
 import type { ComponentModification } from '../types/upgradeSimulation';
+import type { ClusterType } from '../types/buildingSimulation';
+import '../types/buildingSimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { BUILDINGS_DATABASE } from '../data/buildings';
 import { AREAS_DATABASE } from '../data/areas';
 import { RECIPES_DATABASE } from '../data/recipes';
-import { deductItemFromInventory, getOrCreatePoiStorage } from './inventorySystem';
+import {
+  deductItemFromInventory,
+  getAvailableInventoryStock,
+  getOrCreatePoiStorage,
+} from './inventorySystem';
 import { formatTimeOfDay } from './timeSystem';
 import { analyzeResearchEvidence, toggleTrackResearch } from './researchSystem';
 import {
@@ -20,6 +26,10 @@ import {
   togglePauseUpgradeJob,
 } from './upgradeSystem';
 import { dismantleTool } from './dismantleSystem';
+import {
+  establishClusterAtCandidate,
+  reserveStructurePlacement,
+} from './buildingClusterSystem';
 
 export function startGatheringTask(
   state: GameState,
@@ -80,17 +90,9 @@ export function startGatheringTask(
     text: `${survivor.name} bắt đầu khai thác ${targetNode.name} nhập kho địa điểm.`,
     type: 'info',
   });
-
   return next;
 }
 
-/**
- * Compatibility production command gateway.
- *
- * App and ManageCampModal historically expose one direct-craft callback. Deep
- * production systems reuse that callback for commands so the simulation stays
- * reducer-driven without forcing a breaking prop migration across the whole app.
- */
 function handleProductionCommand(state: GameState, survivorId: string, command: string): GameState | null {
   if (!command.startsWith('__')) return null;
   const parts = command.split(':');
@@ -104,45 +106,27 @@ function handleProductionCommand(state: GameState, survivorId: string, command: 
     const recipeId = parts[1];
     return recipeId ? toggleTrackResearch(state, recipeId) : state;
   }
-
   if (opcode === '__maintenance__') {
     const mode = parts[1] as MaintenanceMode;
     const instanceId = parts[2];
     const componentId = parts[3] || undefined;
-    return instanceId
-      ? queueMaintenanceJob(state, instanceId, mode, componentId, survivorId || undefined)
-      : state;
+    return instanceId ? queueMaintenanceJob(state, instanceId, mode, componentId, survivorId || undefined) : state;
   }
-  if (opcode === '__maintenance_cancel__') {
-    return parts[1] ? cancelMaintenanceJob(state, parts[1]) : state;
-  }
-  if (opcode === '__maintenance_pause__') {
-    return parts[1] ? togglePauseMaintenanceJob(state, parts[1]) : state;
-  }
-
-  if (opcode === '__upgrade_tier__') {
-    return parts[1] ? queueTierUpgrade(state, parts[1], survivorId || undefined) : state;
-  }
+  if (opcode === '__maintenance_cancel__') return parts[1] ? cancelMaintenanceJob(state, parts[1]) : state;
+  if (opcode === '__maintenance_pause__') return parts[1] ? togglePauseMaintenanceJob(state, parts[1]) : state;
+  if (opcode === '__upgrade_tier__') return parts[1] ? queueTierUpgrade(state, parts[1], survivorId || undefined) : state;
   if (opcode === '__upgrade_mod__') {
     const modification = parts[1] as ComponentModification;
     const instanceId = parts[2];
     const componentId = parts[3] || undefined;
-    return instanceId
-      ? queueComponentModification(state, instanceId, modification, componentId, survivorId || undefined)
-      : state;
+    return instanceId ? queueComponentModification(state, instanceId, modification, componentId, survivorId || undefined) : state;
   }
-  if (opcode === '__upgrade_cancel__') {
-    return parts[1] ? cancelUpgradeJob(state, parts[1]) : state;
-  }
-  if (opcode === '__upgrade_pause__') {
-    return parts[1] ? togglePauseUpgradeJob(state, parts[1]) : state;
-  }
-
+  if (opcode === '__upgrade_cancel__') return parts[1] ? cancelUpgradeJob(state, parts[1]) : state;
+  if (opcode === '__upgrade_pause__') return parts[1] ? togglePauseUpgradeJob(state, parts[1]) : state;
   if (opcode === '__dismantle__') {
     const result = parts[1] ? dismantleTool(state, parts[1], survivorId || undefined) : null;
     return result?.state || state;
   }
-
   return state;
 }
 
@@ -176,12 +160,7 @@ export function startCraftingTask(
     targetId: recipeId,
     progressSeconds: 0,
     totalSeconds: recipe.craftTimeSeconds,
-    resultPayload: {
-      recipeOutputs: recipe.outputs,
-      recipeName: recipe.name,
-      recipeId,
-      ingredientQualities,
-    },
+    resultPayload: { recipeOutputs: recipe.outputs, recipeName: recipe.name, recipeId, ingredientQualities },
   };
 
   next.logs.unshift({
@@ -191,58 +170,110 @@ export function startCraftingTask(
     text: `${survivor.name} bắt đầu chế tạo ${recipe.name}.`,
     type: 'info',
   });
-
   return next;
+}
+
+function handleBuildingCommand(state: GameState, survivorId: string, command: string): GameState | null {
+  if (!command.startsWith('__cluster_')) return null;
+  const parts = command.split(':');
+  if (parts[0] === '__cluster_establish__') {
+    const poiId = parts[1];
+    const type = parts[2] as ClusterType;
+    const candidateId = parts[3];
+    return poiId && type && candidateId
+      ? establishClusterAtCandidate(state, poiId, type, candidateId, survivorId || undefined)
+      : state;
+  }
+  return state;
+}
+
+function totalAvailableForConstruction(state: GameState, areaId: string, itemId: string): number {
+  const poiStorage = getOrCreatePoiStorage(state, areaId);
+  return getAvailableInventoryStock(poiStorage, itemId) + getAvailableInventoryStock(state.inventory, itemId);
 }
 
 export function startConstructionTask(
   state: GameState,
   survivorId: string,
   buildingId: string,
-  areaId: string = 'AREA_CAMP_CLEARING'
+  areaOrClusterId: string = 'AREA_CAMP_CLEARING'
 ): GameState {
+  const routed = handleBuildingCommand(state, survivorId, buildingId);
+  if (routed) return routed;
+
   const next = JSON.parse(JSON.stringify(state)) as GameState;
   const survivor = next.survivors.find(s => s.id === survivorId);
   const blueprint = BUILDINGS_DATABASE[buildingId];
   if (!survivor || !blueprint || survivor.currentAction.type !== 'idle') return state;
 
+  const cluster = areaOrClusterId.startsWith('cluster_')
+    ? next.buildingSimulation?.clusters.find(candidate => candidate.id === areaOrClusterId)
+    : undefined;
+  const clusterId = cluster?.id;
+  const areaId = cluster?.poiId || (areaOrClusterId.startsWith('AREA_') ? areaOrClusterId : 'AREA_CAMP_CLEARING');
   const poiStorage = getOrCreatePoiStorage(next, areaId);
-  let building = next.buildings.find(
-    b => b.buildingId === buildingId && (b.areaId === areaId || (!b.areaId && areaId === 'AREA_CAMP_CLEARING'))
+
+  let building = next.buildings.find(candidate =>
+    !candidate.isBuilt &&
+    candidate.buildingId === buildingId &&
+    (clusterId ? candidate.clusterId === clusterId : candidate.areaId === areaId)
   );
 
   if (!building) {
+    // Validate the whole bill first so a failed construction can never partially
+    // consume materials from POI storage before discovering a later shortage.
+    const missing = blueprint.cost.filter(cost => totalAvailableForConstruction(next, areaId, cost.itemId) < cost.quantity);
+    if (missing.length) {
+      next.logs.unshift({
+        id: `bld_missing_${Date.now()}`,
+        day: next.gameTime.day,
+        timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
+        text: `Chưa đủ vật liệu để xây ${blueprint.name}: ${missing.map(cost => `${ITEMS_DATABASE[cost.itemId]?.name || cost.itemId} ${totalAvailableForConstruction(next, areaId, cost.itemId)}/${cost.quantity}`).join(', ')}.`,
+        type: 'warning',
+      });
+      return next;
+    }
+
+    const placement = clusterId ? reserveStructurePlacement(next, clusterId, buildingId) : null;
+    if (clusterId && (!placement || !['available', 'preparation_required'].includes(placement.status))) {
+      next.logs.unshift({
+        id: `bld_space_${Date.now()}`,
+        day: next.gameTime.day,
+        timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
+        text: `Không thể bố trí ${blueprint.name} trong ${cluster?.name || 'cluster'}: ${placement?.reasons.join(', ') || 'không đủ mặt bằng phù hợp'}.`,
+        type: 'warning',
+      });
+      return next;
+    }
+
     for (const cost of blueprint.cost) {
       let needed = cost.quantity;
-      const poiCount = poiStorage.items
-        .filter(i => i.itemId === cost.itemId)
-        .reduce((sum, i) => sum + Math.max(0, i.quantity - (i.reservedQuantity || 0)), 0);
-      const fromPoi = Math.min(poiCount, needed);
+      const fromPoi = Math.min(getAvailableInventoryStock(poiStorage, cost.itemId), needed);
       if (fromPoi > 0) {
         deductItemFromInventory(poiStorage, cost.itemId, fromPoi);
         needed -= fromPoi;
       }
-
-      if (needed > 0) {
-        const partyOk = deductItemFromInventory(next.inventory, cost.itemId, needed);
-        if (!partyOk) return state;
-      }
+      if (needed > 0) deductItemFromInventory(next.inventory, cost.itemId, needed);
     }
 
+    const microPrepMultiplier = placement?.status === 'preparation_required' ? 1.25 : 1;
     building = {
       id: `bld_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       buildingId,
       condition: 100,
       isBuilt: false,
       buildProgressSeconds: 0,
-      totalBuildSeconds: blueprint.buildTimeSeconds,
+      totalBuildSeconds: Math.round(blueprint.buildTimeSeconds * microPrepMultiplier * 10) / 10,
       areaId,
+      clusterId,
+      placement: placement?.allocations,
+      footprintAreaM2: placement?.footprintAreaM2,
+      placementScore: placement?.score,
     };
     next.buildings.push(building);
   }
 
   if (building.isBuilt) return state;
-
   survivor.currentAction = {
     type: 'building',
     description: `Đang thi công: ${blueprint.name}`,
@@ -251,14 +282,13 @@ export function startConstructionTask(
     totalSeconds: building.totalBuildSeconds,
   };
 
-  const areaName = AREAS_DATABASE[areaId]?.name || 'khu vực';
+  const locationName = cluster?.name || AREAS_DATABASE[areaId]?.name || 'khu vực';
   next.logs.unshift({
     id: `bld_${Date.now()}`,
     day: next.gameTime.day,
     timeStr: formatTimeOfDay(next.gameTime.minuteOfDay),
-    text: `${survivor.name} đã bắt đầu xây dựng ${blueprint.name} tại ${areaName}.`,
+    text: `${survivor.name} đã bắt đầu xây dựng ${blueprint.name} tại ${locationName}.`,
     type: 'info',
   });
-
   return next;
 }
