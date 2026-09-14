@@ -36,6 +36,87 @@ interface CampOverviewViewProps {
 
 const UI_FONT = '"Roboto Condensed", "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
+/**
+ * ============================================================================
+ * BẢNG TUỲ CHỈNH NHANH TOẠ ĐỘ & KÍCH THƯỚC (CAMP OVERVIEW CALIBRATION CONFIG)
+ * ============================================================================
+ * Bạn có thể điều chỉnh nhanh vị trí, tỷ lệ %, khoảng cách và kích thước của
+ * từng khối thành phần trong giao diện Camp Overview ngay tại đây:
+ */
+export const CAMP_OVERVIEW_CONFIG = {
+  // 1. Khung tổng thể (Root Frame Viewport)
+  frame: {
+    left: '5.5%',         // Toạ độ mép trái (%)
+    top: '17.2%',         // Toạ độ mép trên (%)
+    width: '90.0%',       // Chiều rộng tổng (%)
+    height: '66%',      // Chiều cao tổng (%)
+    rowGap: 'gap-3',      // Khoảng cách giữa hàng trên (Top) và hàng dưới (Bottom)
+  },
+
+  // 2. Hàng trên (Top Row: Poster Trại + Trạng thái + Hàng đợi)
+  topRow: {
+    height: '66%',        // Chiều cao hàng trên (% so với frame)
+    gap: 'gap-3',         // Khoảng cách giữa cột Trái (Art) và Phải (Status/Queue)
+    
+    // Cột bên trái (Left: Tiêu đề Banner + Ảnh nghệ thuật Doanh trại)
+    leftColumn: {
+      gap: 'gap-2.5',     // Khoảng cách giữa Banner và Khung tranh
+    },
+
+    // Cột bên phải (Right: Trạng thái Trại + Hàng đợi chế tác/xây dựng)
+    rightColumn: {
+      width: '36%',              // Chiều rộng cột phải (%)
+      gap: 'gap-2.5',            // Khoảng cách giữa bảng Status và bảng Queue
+      statusPanelHeight: '46%',  // Chiều cao khối TRẠNG THÁI KHU TRẠI (%)
+      queuePanelHeight: '52%',   // Chiều cao khối HÀNG ĐỢI TIẾN TRÌNH (%)
+    },
+  },
+
+  // 3. Hàng dưới (Bottom Row: Vị trí Công trình + Xem trước Kho bãi)
+  bottomRow: {
+    height: '32%',        // Chiều cao hàng dưới (% so với frame)
+    gap: 'gap-3',         // Khoảng cách giữa 2 bảng dưới
+
+    // Bảng bên trái: Vị trí công trình (Building Slots)
+    buildingSlots: {
+      width: '42%',              // Chiều rộng bảng công trình (%)
+      cols: 5,                   // Số cột (5 cột)
+      rows: 2,                   // Số hàng (2 hàng)
+      totalSlots: 10,            // Tổng số ô vị trí công trình (10 ô)
+      gridGap: 'gap-1.5',        // Khoảng cách giữa các ô công trình
+
+      // Tuỳ chỉnh kích thước & quy cách chung cho TẤT CẢ các ô công trình:
+      slot: {
+        minWidth: 'auto',        // Chiều rộng tối thiểu ('auto', '40px', ...)
+        minHeight: 'auto',       // Chiều cao tối thiểu ('auto', '38px', ...)
+        padding: 'p-1',          // Padding bên trong ô ('p-1', 'p-1.5', ...)
+        iconSize: 'w-5 h-5',     // Kích thước biểu tượng công trình ('w-5 h-5', 'w-6 h-6', ...)
+        labelFontSize: 'text-[9px]', // Cỡ chữ tên công trình ('text-[8px]', 'text-[9px]', 'text-[10px]')
+        plusIconSize: 'w-4 h-4', // Kích thước icon dấu cộng (+) ô trống
+        aspectRatio: 'auto',     // Tỷ lệ khung ô ('auto', '1/1', ...)
+      },
+    },
+
+    // Bảng bên phải: Xem trước kho bãi (Camp Storage Preview)
+    storagePreview: {
+      cols: 8,                   // Số cột (8 cột)
+      rows: 2,                   // Số hàng (2 hàng)
+      totalSlots: 16,            // Tổng số ô kho bãi (16 ô)
+      gridGap: 'gap-1',        // Khoảng cách giữa các ô kho bãi
+
+      // Tuỳ chỉnh kích thước & quy cách chung cho TẤT CẢ các ô kho đồ:
+      slot: {
+        minWidth: '0',           // Cho phép ô co lại theo chiều rộng cột grid
+        minHeight: '0',          // Không để content ép ô cao hơn tỷ lệ vuông
+        padding: 'p-0.5',          // Padding bên trong ô ('p-1', 'p-1.5', ...)
+        iconSize: 'w-5 h-5',     // Kích thước hình vật phẩm ('w-5 h-5', 'w-6 h-6', 'w-7 h-7')
+        quantityFontSize: 'text-[10px]', // Cỡ chữ số lượng ('text-[9px]', 'text-[10px]', 'text-xs')
+        aspectRatio: '1 / 1',    // Luôn giữ slot vuông
+      },
+    },
+  },
+} as const;
+
 export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
   state,
   onNavigateTab,
@@ -122,7 +203,7 @@ export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
   };
 
   // 10 Building Slots
-  const buildingSlotsTotal = 10;
+  const buildingSlotsTotal = CAMP_OVERVIEW_CONFIG.bottomRow.buildingSlots.totalSlots;
   const buildingSlots = useMemo(() => {
     const slots: Array<{
       building?: ConstructedBuilding;
@@ -140,10 +221,10 @@ export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
       }
     }
     return slots;
-  }, [builtStructures]);
+  }, [builtStructures, buildingSlotsTotal]);
 
   // Camp storage preview items (16 slots = 2 rows x 8 cols)
-  const storageSlotsTotal = 16;
+  const storageSlotsTotal = CAMP_OVERVIEW_CONFIG.bottomRow.storagePreview.totalSlots;
   const storageItems = useMemo(() => {
     const items = [...inventory.items];
     const slots: Array<(typeof inventory.items)[number] | null> = [];
@@ -151,23 +232,26 @@ export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
       slots.push(items[i] || null);
     }
     return slots;
-  }, [inventory.items]);
+  }, [inventory.items, storageSlotsTotal]);
 
   return (
     <div
-      className="absolute inset-0 flex flex-col justify-between text-[#e8dfce] select-none pointer-events-auto"
+      className={`absolute inset-0 flex flex-col justify-between text-[#e8dfce] select-none pointer-events-auto ${CAMP_OVERVIEW_CONFIG.frame.rowGap}`}
       style={{
-        left: '4.5%',
-        top: '16.2%',
-        width: '91.0%',
-        height: '77.2%',
+        left: CAMP_OVERVIEW_CONFIG.frame.left,
+        top: CAMP_OVERVIEW_CONFIG.frame.top,
+        width: CAMP_OVERVIEW_CONFIG.frame.width,
+        height: CAMP_OVERVIEW_CONFIG.frame.height,
         fontFamily: UI_FONT,
       }}
     >
       {/* 1. TOP MAIN ROW (Camp Banner + Campsite Artwork on Left, Status + Queue on Right) */}
-      <div className="w-full flex gap-3 h-[66%]">
+      <div 
+        className={`w-full flex ${CAMP_OVERVIEW_CONFIG.topRow.gap}`}
+        style={{ height: CAMP_OVERVIEW_CONFIG.topRow.height }}
+      >
         {/* LEFT COLUMN: Header Banner + Atmospheric Campsite Art */}
-        <div className="flex-1 flex flex-col gap-2.5 h-full min-w-0">
+        <div className={`flex-1 flex flex-col ${CAMP_OVERVIEW_CONFIG.topRow.leftColumn.gap} h-full min-w-0`}>
           {/* Top Title Banner */}
           <div className="camp-sunken-panel-soft flex items-center justify-between px-3.5 py-2">
             <div className="flex items-center gap-2.5">
@@ -249,11 +333,14 @@ export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
         </div>
 
         {/* RIGHT COLUMN: Camp Status (Top) + Active Queue (Bottom) */}
-        <div className="w-[36%] flex flex-col gap-2.5 h-full shrink-0">
+        <div 
+          className={`flex flex-col ${CAMP_OVERVIEW_CONFIG.topRow.rightColumn.gap} h-full shrink-0`}
+          style={{ width: CAMP_OVERVIEW_CONFIG.topRow.rightColumn.width }}
+        >
           {/* 1. CAMP STATUS PANEL */}
           <div
             className="camp-sunken-panel p-3 flex flex-col justify-between"
-            style={{ height: '46%' }}
+            style={{ height: CAMP_OVERVIEW_CONFIG.topRow.rightColumn.statusPanelHeight }}
           >
             <div className="flex items-center justify-between pb-1.5 camp-groove-divider">
               <div className="flex items-center gap-2">
@@ -330,7 +417,7 @@ export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
           {/* 2. QUEUE PANEL (Active Construction & Crafting) */}
           <div
             className="camp-sunken-panel p-3 flex flex-col justify-between"
-            style={{ height: '52%' }}
+            style={{ height: CAMP_OVERVIEW_CONFIG.topRow.rightColumn.queuePanelHeight }}
           >
             <div className="flex items-center justify-between pb-1.5 camp-groove-divider">
               <div className="flex items-center gap-2">
@@ -475,9 +562,15 @@ export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
       </div>
 
       {/* 2. BOTTOM ROW (Building Slots on Left + Camp Storage on Right) */}
-      <div className="w-full flex gap-3 h-[32%]">
+      <div 
+        className={`w-full flex ${CAMP_OVERVIEW_CONFIG.bottomRow.gap}`}
+        style={{ height: CAMP_OVERVIEW_CONFIG.bottomRow.height }}
+      >
         {/* BUILDING SLOTS GRID (5 columns x 2 rows) */}
-        <div className="w-[42%] camp-sunken-panel p-2.5 flex flex-col justify-between">
+        <div 
+          className="camp-sunken-panel p-2.5 flex flex-col justify-between"
+          style={{ width: CAMP_OVERVIEW_CONFIG.bottomRow.buildingSlots.width }}
+        >
           <div className="flex items-center justify-between pb-1.5 camp-groove-divider">
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-amber-400" />
@@ -491,20 +584,28 @@ export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
           </div>
 
           {/* 10 Slots Grid: 5 cols x 2 rows */}
-          <div className="grid grid-cols-5 grid-rows-2 gap-1.5 flex-1 pt-1.5">
+          <div className={`grid grid-cols-5 grid-rows-2 ${CAMP_OVERVIEW_CONFIG.bottomRow.buildingSlots.gridGap} flex-1 pt-1.5`}>
             {buildingSlots.map(({ building, def, index }) => {
+              const bSlotCfg = CAMP_OVERVIEW_CONFIG.bottomRow.buildingSlots.slot;
+              const slotStyle: React.CSSProperties = {
+                minWidth: bSlotCfg.minWidth !== 'auto' ? bSlotCfg.minWidth : undefined,
+                minHeight: bSlotCfg.minHeight !== 'auto' ? bSlotCfg.minHeight : undefined,
+                aspectRatio: bSlotCfg.aspectRatio !== 'auto' ? bSlotCfg.aspectRatio : undefined,
+              };
+
               if (building && def) {
                 return (
                   <div
                     key={building.id}
                     onClick={() => onNavigateTab('buildings')}
-                    className="relative group camp-sunken-slot hover:border-amber-400/80 hover:bg-[#183d2e] transition-all flex flex-col items-center justify-center p-1 cursor-pointer"
+                    style={slotStyle}
+                    className={`relative group camp-sunken-slot hover:border-amber-400/80 hover:bg-[#183d2e] transition-all flex flex-col items-center justify-center ${bSlotCfg.padding} cursor-pointer`}
                     title={`${def.name}: ${def.benefitsDescription}`}
                   >
                     <div className="w-full h-full flex items-center justify-center">
-                      <ItemIcon itemId={def.cost[0]?.itemId} className="w-5 h-5 drop-shadow" />
+                      <ItemIcon itemId={def.cost[0]?.itemId} className={`${bSlotCfg.iconSize} drop-shadow`} />
                     </div>
-                    <span className="text-[9px] text-[#eddcc3] font-semibold truncate w-full text-center leading-none mt-0.5">
+                    <span className={`${bSlotCfg.labelFontSize} text-[#eddcc3] font-semibold truncate w-full text-center leading-none mt-0.5`}>
                       {def.name.split(' ')[0]}
                     </span>
                     {/* Tiny status pip */}
@@ -518,10 +619,11 @@ export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
                   key={`slot_${index}`}
                   type="button"
                   onClick={() => onNavigateTab('buildings')}
-                  className="camp-sunken-slot border border-dashed border-black/80 hover:bg-[#143226]/60 hover:border-emerald-400/40 transition-all flex items-center justify-center cursor-pointer group"
+                  style={slotStyle}
+                  className={`camp-sunken-slot border border-dashed border-black/80 hover:bg-[#143226]/60 hover:border-emerald-400/40 transition-all flex items-center justify-center cursor-pointer group ${bSlotCfg.padding}`}
                   title="Nhấn để mở bảng chọn xây dựng công trình mới"
                 >
-                  <Plus className="w-4 h-4 text-[#4f6f5b] group-hover:text-emerald-300 transition-colors" />
+                  <Plus className={`${bSlotCfg.plusIconSize} text-[#4f6f5b] group-hover:text-emerald-300 transition-colors`} />
                 </button>
               );
             })}
@@ -529,7 +631,7 @@ export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
         </div>
 
         {/* CAMP STORAGE PREVIEW (16 Slots: 8 columns x 2 rows) */}
-        <div className="flex-1 camp-sunken-panel p-2.5 flex flex-col justify-between">
+        <div className="flex-1 min-w-0 min-h-0 overflow-hidden camp-sunken-panel p-2.5 flex flex-col">
           <div className="flex items-center justify-between pb-1.5 camp-groove-divider">
             <div className="flex items-center gap-2">
               <Package className="w-4 h-4 text-emerald-400" />
@@ -554,22 +656,31 @@ export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
             </div>
           </div>
 
-          {/* 16 Item Slots: 8 cols x 2 rows */}
-          <div className="grid grid-cols-8 grid-rows-2 gap-1.5 flex-1 pt-1.5">
+          {/* 16 Item Slots: 8 cols x 2 rows. Rows keep their natural square height; viewport scrolls if needed. */}
+          <div className="flex-1 min-w-0 min-h-0 overflow-y-auto overflow-x-hidden pt-1.5 pr-1">
+            <div className={`grid grid-cols-8 auto-rows-max content-start ${CAMP_OVERVIEW_CONFIG.bottomRow.storagePreview.gridGap} w-full min-w-0`}>
             {storageItems.map((item, idx) => {
+              const sSlotCfg = CAMP_OVERVIEW_CONFIG.bottomRow.storagePreview.slot;
+              const slotStyle: React.CSSProperties = {
+                minWidth: sSlotCfg.minWidth !== 'auto' ? sSlotCfg.minWidth : undefined,
+                minHeight: sSlotCfg.minHeight !== 'auto' ? sSlotCfg.minHeight : undefined,
+                aspectRatio: sSlotCfg.aspectRatio !== 'auto' ? sSlotCfg.aspectRatio : undefined,
+              };
+
               if (item) {
                 const def = ITEMS_DATABASE[item.itemId];
                 return (
                   <div
                     key={item.instanceId || `item_${idx}`}
                     onClick={() => onNavigateTab('storage')}
-                    className="relative group camp-sunken-slot hover:border-emerald-400/80 hover:bg-[#17382b] transition-all flex items-center justify-center p-1 cursor-pointer"
+                    style={slotStyle}
+                    className={`relative group w-full min-w-0 min-h-0 camp-sunken-slot hover:border-emerald-400/80 hover:bg-[#17382b] transition-all flex items-center justify-center ${sSlotCfg.padding} cursor-pointer`}
                     title={`${def?.name || item.itemId} (x${item.quantity})`}
                   >
-                    <ItemIcon itemId={item.itemId} className="w-6 h-6 object-contain drop-shadow" />
+                    <ItemIcon itemId={item.itemId} className={`${sSlotCfg.iconSize} object-contain drop-shadow`} />
 
                     {/* Quantity Badge */}
-                    <span className="absolute bottom-0.5 right-1 text-[10px] font-mono font-bold text-[#f5ecd8] leading-none drop-shadow">
+                    <span className={`absolute bottom-0.5 right-1 ${sSlotCfg.quantityFontSize} font-mono font-bold text-[#f5ecd8] leading-none drop-shadow`}>
                       {item.quantity}
                     </span>
 
@@ -587,10 +698,12 @@ export const CampOverviewView: React.FC<CampOverviewViewProps> = ({
                 <div
                   key={`empty_slot_${idx}`}
                   onClick={() => onNavigateTab('storage')}
-                  className="camp-sunken-slot opacity-60 flex items-center justify-center cursor-pointer hover:opacity-100"
+                  style={slotStyle}
+                  className="w-full min-w-0 min-h-0 camp-sunken-slot opacity-60 flex items-center justify-center cursor-pointer hover:opacity-100"
                 />
               );
             })}
+            </div>
           </div>
         </div>
       </div>

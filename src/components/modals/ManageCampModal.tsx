@@ -12,7 +12,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Check,
-  Sparkles
 } from 'lucide-react';
 import { GameState, JobPriority, JobType } from '../../types';
 import { BuildingsView } from '../buildings/BuildingsView';
@@ -61,7 +60,7 @@ type Box = { x: number; y: number; w: number; h: number; radiusPx?: number };
 const UI_FONT = '"Roboto Condensed", "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 const CAMP_UI = {
-  reference: { width: 1448, height: 1086 },
+  reference: { width: 1472, height: 941 },
 
   background: {
     src: '/ui/buildings/camp-management-bg.png',
@@ -70,9 +69,9 @@ const CAMP_UI = {
   },
 
   panelScale: {
-    maxViewportWidthPct: 98,
-    maxViewportHeightPct: 96,
-    maxScale: 1.30,
+    maxViewportWidthPct: 100,
+    maxViewportHeightPct: 100,
+    maxScale: 1.10,
   },
 
   subtitle: {
@@ -86,23 +85,22 @@ const CAMP_UI = {
 
   // Selector bar positioned in the top header
   selectorBar: {
-    x: 580,
-    y: 101,
-    w: 700,
+    x: 655,
+    y: 91,
+    w: 600,
     h: 55,
     radiusPx: 8,
   },
 
-  // Slide-down menu positioning
+  // Compact dropdown attached directly to the center selector button.
+  // It deliberately has no absolute x/y/width so it cannot drift outside the selector.
   dropdownMenu: {
-    x: 510,
-    y: 162,
-    w: 770,
-    h: 460,
-    radiusPx: 10,
+    gapPx: 6,
+    maxHeightPx: 300,
+    radiusPx: 8,
   },
 
-  close: { x: 1320, y: 101, w: 58, h: 57, radiusPx: 8 },
+  close: { x: 1345, y: 96, w: 40, h: 40, radiusPx: 8 },
 
   tabStyle: {
     iconPx: 22,
@@ -373,7 +371,7 @@ export const ManageCampModal: React.FC<ManageCampModalProps> = ({
         {/* TOP SELECTOR BAR: replaces fixed tabs with slide-down dropdown menu */}
         <div
           ref={selectorRef}
-          className="absolute flex items-center gap-1.5"
+          className="absolute flex items-center gap-1.5 overflow-visible"
           style={{
             ...rootBoxStyle(CAMP_UI.selectorBar),
             zIndex: 40,
@@ -394,77 +392,186 @@ export const ManageCampModal: React.FC<ManageCampModalProps> = ({
             <ChevronLeft className="w-5 h-5" />
           </button>
 
-          {/* Main Dropdown Button (Plaque) */}
-          <button
-            type="button"
-            onClick={() => setIsMenuOpen((prev) => !prev)}
-            className="flex-1 h-full px-4 rounded-lg flex items-center justify-between cursor-pointer transition-all border outline-none group"
-            style={{
-              backgroundColor: isMenuOpen
-                ? CAMP_UI.tabStyle.activeBg
-                : CAMP_UI.tabStyle.inactiveBg,
-              borderColor: isMenuOpen
-                ? CAMP_UI.tabStyle.activeBorder
-                : CAMP_UI.tabStyle.inactiveBorder,
-              boxShadow: isMenuOpen
-                ? CAMP_UI.tabStyle.activeShadow
-                : CAMP_UI.tabStyle.inactiveShadow,
-              fontFamily: UI_FONT,
-            }}
-          >
-            {/* Left: Current System Icon & Label */}
-            <div className="flex items-center gap-3 min-w-0">
+          {/* Main selector + anchored dropdown */}
+          <div className="relative flex-1 h-full min-w-0">
+            <button
+              type="button"
+              onClick={() => setIsMenuOpen((prev) => !prev)}
+              aria-haspopup="listbox"
+              aria-expanded={isMenuOpen}
+              className="w-full h-full px-4 rounded-lg flex items-center justify-between cursor-pointer transition-all border outline-none group"
+              style={{
+                backgroundColor: isMenuOpen
+                  ? CAMP_UI.tabStyle.activeBg
+                  : CAMP_UI.tabStyle.inactiveBg,
+                borderColor: isMenuOpen
+                  ? CAMP_UI.tabStyle.activeBorder
+                  : CAMP_UI.tabStyle.inactiveBorder,
+                boxShadow: isMenuOpen
+                  ? CAMP_UI.tabStyle.activeShadow
+                  : CAMP_UI.tabStyle.inactiveShadow,
+                fontFamily: UI_FONT,
+              }}
+            >
+              {/* Left: Current System Icon & Label */}
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className="w-8 h-8 rounded-md flex items-center justify-center border shadow-inner shrink-0"
+                  style={{
+                    backgroundColor: 'rgba(9, 32, 25, 0.85)',
+                    borderColor: 'rgba(74, 222, 128, 0.3)',
+                  }}
+                >
+                  {currentTabConfig.icon}
+                </div>
+
+                <div className="text-left min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="text-base font-bold tracking-wider uppercase text-[#f5ebd8] truncate"
+                      style={{ textShadow: '0 1px 2px rgba(0,0,0,0.85)' }}
+                    >
+                      {currentTabConfig.label}
+                    </span>
+                    <span
+                      className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border leading-none shrink-0"
+                      style={{
+                        color: currentTabConfig.color,
+                        backgroundColor: 'rgba(7, 30, 24, 0.75)',
+                        borderColor: 'rgba(110, 160, 130, 0.25)',
+                      }}
+                    >
+                      {currentTabConfig.sublabel}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#9cb1a2] truncate max-w-[340px] leading-tight">
+                    {currentTabConfig.description}
+                  </p>
+                </div>
+              </div>
+
+              {/* Right: Status Indicator & Chevron Toggle */}
+              <div className="flex items-center gap-2.5 shrink-0 ml-2">
+                <span className="text-[11px] font-mono text-[#a1baa8] hidden sm:inline">
+                  {currentTabIndex + 1} / {TAB_ORDER.length}
+                </span>
+                <div
+                  className={`w-7 h-7 rounded-md flex items-center justify-center border transition-all duration-200 ${
+                    isMenuOpen
+                      ? 'bg-emerald-950/70 border-emerald-500/60 text-emerald-300'
+                      : 'bg-[#10291e]/60 border-[#2d4d3c]/50 text-[#b5cbbe] group-hover:text-white'
+                  }`}
+                >
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform duration-200 ${
+                      isMenuOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </div>
+              </div>
+            </button>
+
+            {/* True dropdown: anchored to the selector, not a modal/popup board */}
+            {isMenuOpen && (
               <div
-                className="w-8 h-8 rounded-md flex items-center justify-center border shadow-inner shrink-0"
+                ref={dropdownRef}
+                role="listbox"
+                className="absolute left-0 right-0 z-[70] overflow-hidden border border-[#355a47] animate-in slide-in-from-top-1 fade-in duration-150"
                 style={{
-                  backgroundColor: 'rgba(9, 32, 25, 0.85)',
-                  borderColor: 'rgba(74, 222, 128, 0.3)',
+                  top: `calc(100% + ${uiPx(CAMP_UI.dropdownMenu.gapPx)})`,
+                  maxHeight: uiPx(CAMP_UI.dropdownMenu.maxHeightPx),
+                  borderRadius: CAMP_UI.dropdownMenu.radiusPx,
+                  background:
+                    'linear-gradient(180deg, rgba(7, 29, 24, 0.985) 0%, rgba(4, 20, 17, 0.99) 100%)',
+                  boxShadow:
+                    '0 8px 18px rgba(0,0,0,0.58), inset 0 1px 0 rgba(255,255,255,0.045)',
+                  fontFamily: UI_FONT,
                 }}
               >
-                {currentTabConfig.icon}
-              </div>
+                <div
+                  className="camp-dropdown-scrollbar overflow-y-scroll overscroll-contain p-1.5 pr-2"
+                  style={{
+                    maxHeight: uiPx(CAMP_UI.dropdownMenu.maxHeightPx),
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: '#587561 rgba(5, 18, 15, 0.72)',
+                  }}
+                >
+                  {TAB_ORDER.map((tabKey) => {
+                    const cfg = TAB_CONFIGS[tabKey];
+                    const isActive = activeTab === tabKey;
 
-              <div className="text-left min-w-0">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="text-base font-bold tracking-wider uppercase text-[#f5ebd8] truncate"
-                    style={{ textShadow: '0 1px 2px rgba(0,0,0,0.85)' }}
-                  >
-                    {currentTabConfig.label}
-                  </span>
-                  <span
-                    className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border leading-none shrink-0"
-                    style={{
-                      color: currentTabConfig.color,
-                      backgroundColor: 'rgba(7, 30, 24, 0.75)',
-                      borderColor: 'rgba(110, 160, 130, 0.25)',
-                    }}
-                  >
-                    {currentTabConfig.sublabel}
-                  </span>
+                    return (
+                      <button
+                        key={tabKey}
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
+                        onClick={() => {
+                          setActiveTab(tabKey);
+                          setIsMenuOpen(false);
+                        }}
+                        className={`relative w-full min-w-0 px-2.5 py-2 text-left flex items-center gap-2.5 rounded-md transition-colors cursor-pointer ${
+                          isActive
+                            ? 'bg-[#173a2b] text-[#f7efe1]'
+                            : 'text-[#ddd5c5] hover:bg-[#123025]'
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 rounded flex items-center justify-center border shrink-0 ${
+                            isActive
+                              ? 'bg-[#1d4634] border-emerald-500/55'
+                              : 'bg-[#10271e] border-[#294637]'
+                          }`}
+                        >
+                          {cfg.icon}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-[12px] font-bold tracking-wide uppercase truncate">
+                              {cfg.label}
+                            </span>
+                            <span
+                              className="text-[9px] font-mono uppercase shrink-0 opacity-80"
+                              style={{ color: cfg.color }}
+                            >
+                              {cfg.sublabel}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-[#8fa597] truncate leading-tight mt-0.5">
+                            {cfg.description}
+                          </p>
+                        </div>
+
+                        {isActive && (
+                          <Check className="w-4 h-4 text-emerald-300 shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
-                <p className="text-[11px] text-[#9cb1a2] truncate max-w-[340px] leading-tight">
-                  {currentTabConfig.description}
-                </p>
               </div>
-            </div>
+            )}
 
-            {/* Right: Status Indicator & Chevron Toggle */}
-            <div className="flex items-center gap-2.5 shrink-0 ml-2">
-              <span className="text-[11px] font-mono text-[#a1baa8] hidden sm:inline">
-                {currentTabIndex + 1} / {TAB_ORDER.length}
-              </span>
-              <div
-                className={`w-7 h-7 rounded-md flex items-center justify-center border transition-all duration-200 ${
-                  isMenuOpen
-                    ? 'bg-emerald-950/70 border-emerald-500/60 text-emerald-300 rotate-180'
-                    : 'bg-[#10291e]/60 border-[#2d4d3c]/50 text-[#b5cbbe] group-hover:text-white'
-                }`}
-              >
-                <ChevronDown className="w-4 h-4 transition-transform duration-200" />
-              </div>
-            </div>
-          </button>
+            <style>{`
+              .camp-dropdown-scrollbar::-webkit-scrollbar {
+                width: 7px;
+              }
+              .camp-dropdown-scrollbar::-webkit-scrollbar-track {
+                background: rgba(5, 18, 15, 0.72);
+                border-radius: 999px;
+                margin: 5px 0;
+              }
+              .camp-dropdown-scrollbar::-webkit-scrollbar-thumb {
+                background: linear-gradient(180deg, #647f6b 0%, #405b4a 100%);
+                border: 1px solid rgba(147, 177, 151, 0.22);
+                border-radius: 999px;
+              }
+              .camp-dropdown-scrollbar::-webkit-scrollbar-thumb:hover {
+                background: linear-gradient(180deg, #75927c 0%, #4d6b57 100%);
+              }
+            `}</style>
+          </div>
 
           {/* Quick Cycle Right Button */}
           <button
@@ -481,106 +588,6 @@ export const ManageCampModal: React.FC<ManageCampModalProps> = ({
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
-
-        {/* SLIDE-DOWN SELECTION BOARD (BẢNG TRƯỢT XUỐNG KHI ẤN) */}
-        {isMenuOpen && (
-          <>
-            {/* Backdrop click dismisser */}
-            <div
-              className="absolute inset-0 z-50 bg-black/40 backdrop-blur-[2px] rounded-2xl"
-              onClick={() => setIsMenuOpen(false)}
-            />
-
-            {/* Dropdown Box */}
-            <div
-              ref={dropdownRef}
-              className="absolute z-60 rounded-xl border border-[#3e6851] p-3.5 flex flex-col justify-between animate-in slide-in-from-top-3 fade-in duration-200 shadow-2xl"
-              style={{
-                ...rootBoxStyle(CAMP_UI.dropdownMenu),
-                background:
-                  'linear-gradient(180deg, rgba(6, 26, 23, 0.98) 0%, rgba(3, 16, 15, 0.98) 100%)',
-                boxShadow:
-                  '0 20px 45px -10px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 0 1px rgba(50, 90, 70, 0.4)',
-                fontFamily: UI_FONT,
-              }}
-            >
-              {/* Dropdown Header */}
-              <div className="flex items-center justify-between pb-2 border-b border-[#254637]">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#ede3cf]">
-                    BẢNG CHỌN HỆ THỐNG DOANH TRẠI (CAMP SYSTEMS)
-                  </span>
-                </div>
-                <span className="text-[11px] text-[#90a897] italic">
-                  Chạm vào phân hệ để chuyển đổi màn hình
-                </span>
-              </div>
-
-              {/* 8 Systems Grid: 2 columns x 4 rows */}
-              <div className="grid grid-cols-2 gap-2 mt-2.5 flex-1">
-                {TAB_ORDER.map((tabKey) => {
-                  const cfg = TAB_CONFIGS[tabKey];
-                  const isActive = activeTab === tabKey;
-
-                  return (
-                    <button
-                      key={tabKey}
-                      type="button"
-                      onClick={() => {
-                        setActiveTab(tabKey);
-                        setIsMenuOpen(false);
-                      }}
-                      className={`relative rounded-lg p-2.5 text-left flex items-start gap-3 transition-all cursor-pointer border ${
-                        isActive
-                          ? 'bg-[#183d2d] border-emerald-400 shadow-md shadow-emerald-950/70 scale-[1.01]'
-                          : 'bg-[#0e241c]/90 border-[#264435] hover:bg-[#153427] hover:border-[#38644e]'
-                      }`}
-                    >
-                      {/* Icon Box */}
-                      <div
-                        className={`w-9 h-9 rounded-md flex items-center justify-center border shrink-0 mt-0.5 ${
-                          isActive
-                            ? 'bg-[#1e4835] border-emerald-400 shadow-inner'
-                            : 'bg-[#112a20] border-[#2c4e3b]'
-                        }`}
-                      >
-                        {cfg.icon}
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={`text-sm font-bold tracking-wide uppercase ${
-                              isActive ? 'text-[#fbf4e8]' : 'text-[#ded6c5]'
-                            }`}
-                          >
-                            {cfg.label}
-                          </span>
-                          {isActive && (
-                            <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-300 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-500/40">
-                              <Check className="w-3 h-3" />
-                              ĐANG XEM
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-[#96ac9e] leading-snug mt-0.5 line-clamp-2">
-                          {cfg.description}
-                        </p>
-                      </div>
-
-                      {/* Active indicator dot */}
-                      {isActive && (
-                        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        )}
 
         {/* Close Button at top right (X) */}
         <button
