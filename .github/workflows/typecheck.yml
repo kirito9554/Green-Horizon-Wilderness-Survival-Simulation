@@ -32,5 +32,8 @@ jobs:
       - name: Spatial building smoke test
         run: npm run test:building
 
+      - name: Structure lifecycle smoke test
+        run: npm run test:structure
+
       - name: Production build
         run: npm run build
