@@ -3,6 +3,7 @@ import type { MaintenanceMode } from '../types/maintenanceSimulation';
 import type { ComponentModification } from '../types/upgradeSimulation';
 import type { ClusterType } from '../types/buildingSimulation';
 import type { StructureMaintenanceMode } from '../types/structureMaintenanceSimulation';
+import type { StoragePriority } from '../types/storageSimulation';
 import '../types/buildingSimulation';
 import '../types/structureMaintenanceSimulation';
 import '../types/storageSimulation';
@@ -37,6 +38,17 @@ import {
   storeItemInLocation,
   takeItemFromLocation,
 } from './storageSystem';
+import {
+  cancelStorageHaul,
+  queueStorageHaul,
+  togglePauseStorageHaul,
+} from './storageHaulSystem';
+import {
+  removeStorageStockRule,
+  setStorageAutoHaul,
+  setStoragePriority,
+  setStorageStockRule,
+} from './storagePolicySystem';
 
 export function startGatheringTask(
   state: GameState,
@@ -139,6 +151,26 @@ function handleProductionCommand(state: GameState, survivorId: string, command: 
     return locationId && instanceId ? takeItemFromLocation(state, locationId, instanceId, quantity) : state;
   }
   if (opcode === '__storage_store_all__') return parts[1] ? storeAllInLocation(state, parts[1]) : state;
+
+  if (opcode === '__storage_haul__') {
+    const source = parts[1];
+    const target = parts[2];
+    const itemId = parts[3];
+    const quantity = Number(parts[4] || 1);
+    return source && target && itemId ? queueStorageHaul(state, source, target, itemId, quantity, survivorId || undefined) : state;
+  }
+  if (opcode === '__storage_haul_pause__') return parts[1] ? togglePauseStorageHaul(state, parts[1]) : state;
+  if (opcode === '__storage_haul_cancel__') return parts[1] ? cancelStorageHaul(state, parts[1]) : state;
+  if (opcode === '__storage_autohaul__') return parts[1] ? setStorageAutoHaul(state, parts[1], parts[2] === '1') : state;
+  if (opcode === '__storage_priority__') return parts[1] && parts[2] ? setStoragePriority(state, parts[1], parts[2] as StoragePriority) : state;
+  if (opcode === '__storage_stockrule__') {
+    const locationId = parts[1];
+    const itemId = parts[2];
+    const min = Number(parts[3] || 0);
+    const max = parts[4] === '' || parts[4] === undefined ? undefined : Number(parts[4]);
+    return locationId && itemId ? setStorageStockRule(state, locationId, itemId, min, max) : state;
+  }
+  if (opcode === '__storage_stockrule_remove__') return parts[1] && parts[2] ? removeStorageStockRule(state, parts[1], parts[2]) : state;
 
   return state;
 }
