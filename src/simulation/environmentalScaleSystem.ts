@@ -168,7 +168,7 @@ function restoreAquaticEcologyScale(state: GameState, snapshots: TemporaryEcolog
   }
 }
 
-function tickAquaticSubstep(state: GameState, deltaGameMinutes: number): void {
+function tickAquaticSubstep(state: GameState, deltaGameMinutes: number, allowColonization: boolean): void {
   // The physical surface-water pass may have been run at a coarser cadence than
   // aquatic ecology. Re-sampling only the reversible tidal boundary here lets
   // coastal/estuarine species see the tide at each virtual hour without routing
@@ -176,7 +176,7 @@ function tickAquaticSubstep(state: GameState, deltaGameMinutes: number): void {
   synchronizeTidalBoundaryForCurrentTime(state);
   const snapshots = prepareAquaticEcologyScale(state);
   try {
-    tickAquaticEcologyWithBootstrap(state, deltaGameMinutes);
+    tickAquaticEcologyWithBootstrap(state, deltaGameMinutes, { allowColonization });
   } finally {
     restoreAquaticEcologyScale(state, snapshots);
   }
@@ -190,16 +190,17 @@ function tickAquaticSubstep(state: GameState, deltaGameMinutes: number): void {
  *
  * Trophic interactions are integrated at a fixed hourly cadence even when the
  * outer simulation advances by several hours. Virtual time also re-samples the
- * reversible tidal boundary at that cadence. Without that second piece, a coarse
- * six-hour tick replayed six biological hours against one aliased tide snapshot,
- * which strongly changed lagoon predator survival and species composition.
+ * reversible tidal boundary at that cadence. Colonization is evaluated only on
+ * the final substep because observed hydroperiod values already represent the
+ * outer tick's final state; evaluating bootstrap in earlier virtual hours would
+ * make coarse ticks cross observation thresholds prematurely.
  */
 export function tickAquaticEcologyAtEnvironmentalScale(state: GameState, deltaGameMinutes: number): void {
   const finalDay = state.gameTime.day;
   const finalMinuteOfDay = state.gameTime.minuteOfDay;
   try {
     if (deltaGameMinutes <= AQUATIC_INTEGRATION_SUBSTEP_MINUTES) {
-      tickAquaticSubstep(state, deltaGameMinutes);
+      tickAquaticSubstep(state, deltaGameMinutes, true);
       return;
     }
 
@@ -209,7 +210,7 @@ export function tickAquaticEcologyAtEnvironmentalScale(state: GameState, deltaGa
     while (cursor + 0.0001 < finalMinute) {
       const nextMinute = Math.min(finalMinute, cursor + AQUATIC_INTEGRATION_SUBSTEP_MINUTES);
       setGameMinute(state, nextMinute);
-      tickAquaticSubstep(state, nextMinute - cursor);
+      tickAquaticSubstep(state, nextMinute - cursor, nextMinute + 0.0001 >= finalMinute);
       cursor = nextMinute;
     }
   } finally {
