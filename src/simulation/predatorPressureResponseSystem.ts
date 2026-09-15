@@ -98,15 +98,19 @@ function pressureSignals(
     accessiblePrey,
     species.idealPredatorPreyBiomassRatio,
   );
-  const hungerSeverity = clamp01((population.hungerStress - 55) / 45);
-  const competitionSeverity = clamp01((0.72 - competition) / 0.58);
-  const waterSeverity = clamp01((population.waterStress - 72) / 28);
-  const conditionSeverity = clamp01((46 - population.bodyCondition) / 26);
+  // Current resource pressure should dominate the chronic response. Body
+  // condition is deliberately a weak lagging signal so a population can recover
+  // once food/water/competition improve instead of remaining self-locked by the
+  // damage caused during an earlier shortage.
+  const hungerSeverity = clamp01((population.hungerStress - 62) / 38);
+  const competitionSeverity = clamp01((0.7 - competition) / 0.56);
+  const waterSeverity = clamp01((population.waterStress - 74) / 26);
+  const conditionSeverity = clamp01((42 - population.bodyCondition) / 30);
   const severity = Math.max(
     hungerSeverity,
-    competitionSeverity * 0.9,
-    waterSeverity * 0.65,
-    conditionSeverity * 0.7,
+    competitionSeverity * 0.85,
+    waterSeverity * 0.55,
+    conditionSeverity * 0.25,
   );
   return { accessiblePrey, competition, severity };
 }
@@ -202,10 +206,13 @@ function recomputePredatorBiomass(population: WildPredatorPopulation, species: W
 }
 
 function updateChronicStress(response: PredatorPressurePopulationState, severity: number, elapsedDays: number): void {
-  if (severity >= 0.2) {
-    response.chronicStressDays = Math.min(120, response.chronicStressDays + elapsedDays * severity);
+  if (severity >= 0.32) {
+    // Count effective pressure-days rather than treating every mildly stressed day
+    // as a full chronic day. Severe pressure still accumulates quickly.
+    const accumulationRate = 0.35 + severity * 0.45;
+    response.chronicStressDays = Math.min(120, response.chronicStressDays + elapsedDays * severity * accumulationRate);
   } else {
-    const recoveryRate = 0.85 + (0.2 - severity) * 2.5;
+    const recoveryRate = 1 + (0.32 - severity) * 2.4;
     response.chronicStressDays = Math.max(0, response.chronicStressDays - elapsedDays * recoveryRate);
   }
   response.chronicStressDays = round3(response.chronicStressDays);
@@ -220,9 +227,9 @@ function applyDispersalAndMortality(
 ): void {
   if (population.population <= 0) return;
 
-  const chronicGate = clamp01((response.chronicStressDays - 10) / 25);
-  const migrationGate = clamp01((population.migrationPressure - 60) / 35);
-  if (chronicGate > 0 && migrationGate > 0 && severity > 0.4) {
+  const chronicGate = clamp01((response.chronicStressDays - 20) / 40);
+  const migrationGate = clamp01((population.migrationPressure - 70) / 30);
+  if (chronicGate > 0 && migrationGate > 0 && severity > 0.5) {
     const roamingFactor = 0.65 + clamp01(species.roamingPerDay / 1.2) * 0.55;
     response.dispersalProgress += population.population
       * severity
@@ -230,7 +237,7 @@ function applyDispersalAndMortality(
       * migrationGate
       * roamingFactor
       * elapsedDays
-      * 0.003;
+      * 0.0015;
     const wholeDispersers = Math.floor(response.dispersalProgress);
     if (wholeDispersers > 0) {
       response.dispersalProgress -= wholeDispersers;
@@ -240,13 +247,13 @@ function applyDispersalAndMortality(
     }
   }
 
-  const chronicMortalityGate = clamp01((response.chronicStressDays - 21) / 45);
-  if (chronicMortalityGate > 0 && severity > 0.55) {
+  const chronicMortalityGate = clamp01((response.chronicStressDays - 35) / 50);
+  if (chronicMortalityGate > 0 && severity > 0.65) {
     population.mortalityProgress += population.population
       * severity
       * chronicMortalityGate
       * elapsedDays
-      * 0.0008;
+      * 0.0004;
   }
 
   recomputePredatorBiomass(population, species);
