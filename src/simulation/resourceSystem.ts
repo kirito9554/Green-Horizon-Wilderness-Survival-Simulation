@@ -2,6 +2,7 @@ import { GameState } from '../types';
 import { getDefaultResourcePools, calculateResourceRecoveryBonus } from './resourcePools';
 import { addItemToInventory } from './inventorySystem';
 import { formatTimeOfDay } from './timeSystem';
+import { isBiologicalResourceNode, reconcileBiologicalResourcePools } from './resourceEcologyBridge';
 
 // System: Resource Pools Passive Recovery and Passive Rain Collector
 export function tickResourceSystem(next: GameState, deltaGameMinutes: number): void {
@@ -21,11 +22,15 @@ export function tickResourceSystem(next: GameState, deltaGameMinutes: number): v
     }
   }
 
-  // 2. Resource Pools Passive Recovery with remaining stock bonus
+  // 2. Resource Pools. Biological nodes are ecology-backed and therefore do not
+  // receive legacy timer recovery. Their displayed stock is reconciled directly
+  // from living flora and successful gathering is withdrawn from that living stock.
   if (!next.resourcePools) {
     next.resourcePools = getDefaultResourcePools();
   }
+  reconcileBiologicalResourcePools(next);
   for (const pool of Object.values(next.resourcePools)) {
+    if (isBiologicalResourceNode(pool.nodeId)) continue;
     if (pool.currentStock < pool.maxStock) {
       const { multiplier } = calculateResourceRecoveryBonus(pool.currentStock, pool.maxStock);
       const recoveryPerMinute = (pool.baseRecoveryPerHour / 60) * multiplier;
