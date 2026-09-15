@@ -7,8 +7,14 @@ import { WILD_AQUATIC_SPECIES, type WildAquaticSpeciesDefinition } from '../data
 import { resolveMainWorldAreaId, type MainWorldAreaId } from '../data/mainWorldAreas';
 import { ensureRegionEcology, ensureWorldEcology } from './ecologySystem';
 import { getConnectedAquaticWaterBody, queryAquaticWaterBodies } from './aquaticHydrologySystem';
+import {
+  depositAquaticCarrion,
+  ensureAquaticFoodWebForNodes,
+  feedAquaticPopulation,
+  tickAquaticFoodWebResources,
+} from './aquaticFoodWebSystem';
 
-const AQUATIC_ECOLOGY_VERSION = 4;
+const AQUATIC_ECOLOGY_VERSION = 5;
 const AQUATIC_TICK_MINUTES = 60;
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
@@ -43,6 +49,8 @@ export function ensureAquaticEcology(state: GameState): WorldEcologyState {
   const system = ensureWorldEcology(state);
   system.version = Math.max(AQUATIC_ECOLOGY_VERSION, system.version || 1);
   system.aquaticPopulations ||= [];
+  system.aquaticFoodWebByNodeId ||= {};
+  system.aquaticFoodWebTickIndex ||= 0;
   for (const region of Object.values(system.regionsByPoiId)) {
     if (region && region.aquaticSeeded === undefined) region.aquaticSeeded = false;
   }
@@ -124,7 +132,7 @@ function createPopulation(
     bodyCondition: clamp100(68 + suitability * 24 + random() * 6),
     habitatStress: clamp100((1 - suitability) * 70),
     oxygenStress: 0,
-    foodStress: clamp100(Math.max(0, count / Math.max(1, k) - 0.72) * 160),
+    foodStress: 20,
     reproductionPressure: clamp100(suitability * 70),
     migrationPressure: clamp100((1 - body.biologicalConnectivity) * 28),
     geneticDiversity: clamp100(58 + random() * 34),
@@ -132,9 +140,12 @@ function createPopulation(
     maturationProgress: random() * 0.5,
     agingProgress: random() * 0.3,
     mortalityProgress: random() * 0.25,
+    lastFoodDemandKg: 0,
+    lastFoodIntakeKg: 0,
     lastUpdatedGameMinute: gameMinute(state),
   };
   population.biomassKg = biomassFor(population, species);
+  ensureAquaticFoodWebForNodes(state, sortedNodes);
   return population;
 }
 
@@ -222,6 +233,8 @@ function splitPopulationByConnectivity(state: GameState, population: WildAquatic
       maturationProgress: population.maturationProgress * ratio,
       agingProgress: population.agingProgress * ratio,
       mortalityProgress: population.mortalityProgress * ratio,
+      lastFoodDemandKg: (population.lastFoodDemandKg || 0) * ratio,
+      lastFoodIntakeKg: (population.lastFoodIntakeKg || 0) * ratio,
     };
     child.biomassKg = biomassFor(child, species);
     result.push(child);
@@ -260,6 +273,8 @@ function mergeReconnectedPopulations(populations: WildAquaticPopulation[]): Wild
     base.maturationProgress = group.reduce((sum, item) => sum + item.maturationProgress, 0);
     base.agingProgress = group.reduce((sum, item) => sum + item.agingProgress, 0);
     base.mortalityProgress = group.reduce((sum, item) => sum + item.mortalityProgress, 0);
+    base.lastFoodDemandKg = group.reduce((sum, item) => sum + (item.lastFoodDemandKg || 0), 0);
+    base.lastFoodIntakeKg = group.reduce((sum, item) => sum + (item.lastFoodIntakeKg || 0), 0);
     result.push(base);
   }
   return result;
@@ -280,9 +295,14 @@ function removeDeaths(population: WildAquaticPopulation, deaths: number): void {
   population.population = Math.max(0, population.juveniles + population.adults + population.old);
 }
 
-function tickPopulation(state: GameState, population: WildAquaticPopulation, elapsedMinutes: number): void {
+function tickPopulation(
+  state: GameState,
+  population: WildAquaticPopulation,
+  elapsedMinutes: number,
+  foodSatisfaction: number,
+): number {
   const species = WILD_AQUATIC_SPECIES[population.speciesId];
-  if (!species || population.population <= 0 || elapsedMinutes <= 0) return;
+  if (!species || population.population <= 0 || elapsedMinutes <= 0) return 0;
   const days = elapsedMinutes / 1440;
   const body = bodyForNode(state, population.anchorNodeId, species);
   if (!body) {
@@ -302,27 +322,28 @@ function tickPopulation(state: GameState, population: WildAquaticPopulation, ela
     const minOxygen = species.hydrologyCriteria.minDissolvedOxygenMgL || 2;
     population.oxygenStress = clamp100(Math.max(0, minOxygen - body.quality.dissolvedOxygenMgL) / Math.max(1, minOxygen) * 100);
     population.habitatStress = clamp100((1 - suitability) * 100);
-    const densityRatio = population.population / Math.max(1, carryingCapacity);
-    population.foodStress = clamp100(Math.max(0, densityRatio - 0.72) * 135 + Math.max(0, 0.35 - body.hydroperiod.reliability) * 55);
-    population.migrationPressure = clamp100(population.habitatStress * 0.45 + population.foodStress * 0.42 + population.oxygenStress * 0.55 + (1 - body.biologicalConnectivity) * 16);
+    population.foodStress = clamp100((1 - clamp01(foodSatisfaction)) * 100);
+    population.migrationPressure = clamp100(population.habitatStress * 0.45 + population.foodStress * 0.5 + population.oxygenStress * 0.55 + (1 - body.biologicalConnectivity) * 16);
 
-    const conditionDelta = (suitability - 0.55) * 7 - population.foodStress * 0.035 - population.oxygenStress * 0.045;
+    const conditionDelta = (suitability - 0.55) * 7 + (foodSatisfaction - 0.72) * 8 - population.foodStress * 0.035 - population.oxygenStress * 0.045;
     population.bodyCondition = clamp100(population.bodyCondition + conditionDelta * days);
-    population.averageHealth = clamp100(population.averageHealth + ((population.bodyCondition - 50) / 28 - population.habitatStress * 0.025 - population.oxygenStress * 0.035) * days);
+    population.averageHealth = clamp100(population.averageHealth + ((population.bodyCondition - 50) / 28 - population.habitatStress * 0.025 - population.oxygenStress * 0.035 - population.foodStress * 0.018) * days);
 
     const breederDensity = population.adults >= 2 ? 1 : 0;
     const capacityFactor = carryingCapacity > 0 ? clamp01(1 - population.population / Math.max(1, carryingCapacity)) : 0;
     const reliabilityFactor = body.hydroperiod.reliability >= species.minimumBreedingReliability
       ? clamp01((body.hydroperiod.reliability - species.minimumBreedingReliability) / Math.max(0.05, 1 - species.minimumBreedingReliability))
       : 0;
-    const reproductionFitness = clamp01(population.averageHealth / 100 * population.bodyCondition / 100 * (1 - population.habitatStress / 120) * (1 - population.oxygenStress / 110));
+    const foodFitness = clamp01((foodSatisfaction - 0.35) / 0.65);
+    const reproductionFitness = clamp01(population.averageHealth / 100 * population.bodyCondition / 100 * (1 - population.habitatStress / 120) * (1 - population.oxygenStress / 110) * foodFitness);
     population.reproductionPressure = clamp100(reproductionFitness * capacityFactor * reliabilityFactor * 100);
     population.reproductionProgress += population.adults * species.dailyReproductionRate * days * reproductionFitness * capacityFactor * reliabilityFactor * breederDensity;
 
-    population.maturationProgress += population.juveniles / Math.max(30, species.maturityDays) * days * clamp01(population.averageHealth / 75);
+    population.maturationProgress += population.juveniles / Math.max(30, species.maturityDays) * days * clamp01(population.averageHealth / 75) * (0.55 + foodSatisfaction * 0.45);
     population.agingProgress += population.adults / Math.max(365, species.oldAgeDays) * days;
 
-    const stressMultiplier = 1 + population.habitatStress / 45 + population.oxygenStress / 28 + population.foodStress / 55;
+    const densityRatio = population.population / Math.max(1, carryingCapacity);
+    const stressMultiplier = 1 + population.habitatStress / 45 + population.oxygenStress / 28 + population.foodStress / 40;
     const overCapacity = carryingCapacity > 0 ? Math.max(0, densityRatio - 1) : 1;
     population.mortalityProgress += population.population * species.naturalMortalityPerDay * stressMultiplier * days + population.population * overCapacity * 0.006 * days;
   }
@@ -346,13 +367,26 @@ function tickPopulation(state: GameState, population: WildAquaticPopulation, ela
     population.reproductionProgress -= births;
   }
   const deaths = Math.max(0, Math.floor(population.mortalityProgress));
+  let deathBiomassKg = 0;
   if (deaths > 0) {
+    const biomassBeforeDeaths = biomassFor(population, species);
     removeDeaths(population, deaths);
+    const biomassAfterDeaths = biomassFor(population, species);
+    deathBiomassKg = Math.max(0, biomassBeforeDeaths - biomassAfterDeaths);
     population.mortalityProgress -= deaths;
   }
   population.population = population.juveniles + population.adults + population.old;
   population.biomassKg = biomassFor(population, species);
   population.lastUpdatedGameMinute = gameMinute(state);
+  return round3(deathBiomassKg);
+}
+
+function trophicPriority(population: WildAquaticPopulation): number {
+  const guild = WILD_AQUATIC_SPECIES[population.speciesId]?.trophicGuild;
+  if (guild === 'grazer' || guild === 'detritivore') return 0;
+  if (guild === 'omnivore' || guild === 'forage_fish') return 1;
+  if (guild === 'mesopredator') return 2;
+  return 1;
 }
 
 export function tickAquaticEcology(state: GameState, _deltaGameMinutes: number): void {
@@ -371,10 +405,18 @@ export function tickAquaticEcology(state: GameState, _deltaGameMinutes: number):
   }
   populations = mergeReconnectedPopulations(populations);
 
-  for (const population of populations) {
+  const activeNodeIds = [...new Set(populations.flatMap(population => population.occupiedNodeIds))];
+  ensureAquaticFoodWebForNodes(state, activeNodeIds);
+  tickAquaticFoodWebResources(state, activeNodeIds);
+
+  const ordered = [...populations].sort((a, b) => trophicPriority(a) - trophicPriority(b) || a.id.localeCompare(b.id));
+  for (const population of ordered) {
+    if (population.population <= 0) continue;
     const elapsed = Math.max(0, now - population.lastUpdatedGameMinute);
     if (elapsed < AQUATIC_TICK_MINUTES) continue;
-    tickPopulation(state, population, elapsed);
+    const feeding = feedAquaticPopulation(state, population, elapsed, populations);
+    const mortalityBiomass = tickPopulation(state, population, elapsed, feeding.foodSatisfaction);
+    if (mortalityBiomass > 0) depositAquaticCarrion(state, population.occupiedNodeIds, mortalityBiomass * 0.72, mortalityBiomass * 0.28);
   }
   system.aquaticPopulations = populations.filter(population => population.population > 0);
 }
