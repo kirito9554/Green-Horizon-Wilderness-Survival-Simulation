@@ -1,7 +1,7 @@
 import type { GameState, ResourcePoolState } from '../types';
 import type { WildPlantPopulation, WorldEcologyState } from '../types/ecologySimulation';
-import { resolveMainWorldAreaId, type MainWorldAreaId } from '../data/mainWorldAreas';
-import { discoverEcologySubarea, ensureRegionEcology, ensureWorldEcology } from './ecologySystem';
+import { resolveMainWorldAreaId } from '../data/mainWorldAreas';
+import { ensureWorldEcology } from './ecologySystem';
 import { getTerrestrialLocalAccessFraction } from './terrestrialEcologyScaleSystem';
 
 export type BiologicalHarvestKind = 'fruit' | 'biomass' | 'medicinal_foliage';
@@ -65,19 +65,24 @@ function ensureMeta(state: GameState): ResourceEcologyBridgeMeta {
 function materializedPlantPopulations(
   state: GameState,
   binding: BiologicalResourceBinding,
-): { poiId: MainWorldAreaId; populations: WildPlantPopulation[] } | undefined {
+): WildPlantPopulation[] | undefined {
   const poiId = resolveMainWorldAreaId(binding.areaId);
   if (!poiId) return undefined;
-  const region = ensureRegionEcology(state, poiId);
-  if (!region) return undefined;
-  const system = ensureWorldEcology(state);
+  const system = state.ecologySystem;
+  const region = system?.regionsByPoiId?.[poiId];
+  if (!system || !region) return undefined;
 
-  let populations = system.plantPopulations.filter(population => population.poiId === poiId && population.speciesId === binding.speciesId);
-  if (!populations.length) {
-    for (const subareaId of region.subareaIds) discoverEcologySubarea(state, subareaId);
-    populations = system.plantPopulations.filter(population => population.poiId === poiId && population.speciesId === binding.speciesId);
-  }
-  return { poiId, populations };
+  const materializedSubareas = new Set(
+    region.subareaIds.filter(id => system.subareasById[id]?.materializationState === 'materialized'),
+  );
+  if (!materializedSubareas.size) return undefined;
+
+  const populations = system.plantPopulations.filter(population =>
+    population.poiId === poiId
+      && population.speciesId === binding.speciesId
+      && materializedSubareas.has(population.subareaId),
+  );
+  return populations.length ? populations : undefined;
 }
 
 function accessibleKg(state: GameState, population: WildPlantPopulation, binding: BiologicalResourceBinding): number {
@@ -87,20 +92,20 @@ function accessibleKg(state: GameState, population: WildPlantPopulation, binding
   return Math.max(0, sourceKg * localFraction * binding.accessibility);
 }
 
-function accessibleUnits(state: GameState, binding: BiologicalResourceBinding): number {
-  const resolved = materializedPlantPopulations(state, binding);
-  if (!resolved) return 0;
-  const kilograms = resolved.populations.reduce((sum, population) => sum + accessibleKg(state, population, binding), 0);
+function accessibleUnits(state: GameState, binding: BiologicalResourceBinding): number | undefined {
+  const populations = materializedPlantPopulations(state, binding);
+  if (!populations) return undefined;
+  const kilograms = populations.reduce((sum, population) => sum + accessibleKg(state, population, binding), 0);
   return Math.max(0, kilograms / Math.max(0.001, binding.kgPerUnit));
 }
 
 function consumeLivingStock(state: GameState, binding: BiologicalResourceBinding, units: number): number {
   const requestedKg = Math.max(0, units) * binding.kgPerUnit;
   if (requestedKg <= 0) return 0;
-  const resolved = materializedPlantPopulations(state, binding);
-  if (!resolved || !resolved.populations.length) return 0;
+  const populations = materializedPlantPopulations(state, binding);
+  if (!populations?.length) return 0;
 
-  const weighted = resolved.populations
+  const weighted = populations
     .map(population => ({ population, availableKg: accessibleKg(state, population, binding) }))
     .filter(entry => entry.availableKg > 0);
   const totalAccessibleKg = weighted.reduce((sum, entry) => sum + entry.availableKg, 0);
@@ -136,11 +141,13 @@ function consumeLivingStock(state: GameState, binding: BiologicalResourceBinding
   return consumedKg / binding.kgPerUnit;
 }
 
-function syncPoolToLivingStock(state: GameState, pool: ResourcePoolState, binding: BiologicalResourceBinding): void {
+function syncPoolToLivingStock(state: GameState, pool: ResourcePoolState, binding: BiologicalResourceBinding): boolean {
   const livingUnits = accessibleUnits(state, binding);
+  if (livingUnits === undefined) return false;
   // Preserve UI continuity: maxStock remains a node-scale display cap while
   // currentStock can never advertise more than the living local stock can supply.
   pool.currentStock = Math.max(0, Math.min(pool.maxStock, livingUnits));
+  return true;
 }
 
 export function isBiologicalResourceNode(nodeId: string): boolean {
@@ -151,6 +158,8 @@ export function isBiologicalResourceNode(nodeId: string): boolean {
  * Called before legacy passive recovery. A stock decrease since the previous
  * frame represents successful player gathering and is withdrawn from the real
  * flora stock. Afterwards the displayed node stock is derived back from ecology.
+ * Unobserved/unmaterialized regions are deliberately left on the legacy model so
+ * this bridge never causes exploration or ecosystem generation by itself.
  */
 export function reconcileBiologicalResourcePools(state: GameState): void {
   if (!state.resourcePools) return;
@@ -158,23 +167,18 @@ export function reconcileBiologicalResourcePools(state: GameState): void {
   for (const binding of Object.values(BIOLOGICAL_BINDINGS)) {
     const pool = state.resourcePools[binding.nodeId];
     if (!pool) continue;
+    const livingUnits = accessibleUnits(state, binding);
+    if (livingUnits === undefined) {
+      delete meta.lastObservedStockByNodeId[binding.nodeId];
+      continue;
+    }
+
     const previous = meta.lastObservedStockByNodeId[binding.nodeId];
     if (previous !== undefined && pool.currentStock < previous) {
       consumeLivingStock(state, binding, previous - pool.currentStock);
     }
     syncPoolToLivingStock(state, pool, binding);
     meta.lastObservedStockByNodeId[binding.nodeId] = pool.currentStock;
-  }
-}
-
-/** Refresh snapshots after all gameplay actions so the next simulation frame only
- * accounts for newly gathered units rather than re-applying the same extraction. */
-export function snapshotBiologicalResourcePools(state: GameState): void {
-  if (!state.resourcePools) return;
-  const meta = ensureMeta(state);
-  for (const nodeId of Object.keys(BIOLOGICAL_BINDINGS)) {
-    const pool = state.resourcePools[nodeId];
-    if (pool) meta.lastObservedStockByNodeId[nodeId] = pool.currentStock;
   }
 }
 
