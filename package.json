@@ -21,7 +21,8 @@
     "test:ecology": "tsx scripts/ecology-simulation-smoke.ts",
     "test:ecology-fauna": "tsx scripts/ecology-fauna-smoke.ts",
     "test:ecology-predators": "tsx scripts/ecology-predator-smoke.ts",
-    "test:hydrology": "tsx scripts/hydrology-simulation-smoke.ts"
+    "test:hydrology": "tsx scripts/hydrology-simulation-smoke.ts",
+    "test:hydrology-surface": "tsx scripts/hydrology-surface-water-smoke.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

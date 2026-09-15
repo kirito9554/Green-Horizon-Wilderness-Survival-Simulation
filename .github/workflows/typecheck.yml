@@ -44,6 +44,9 @@ jobs:
       - name: World hydrology foundation smoke test
         run: npm run test:hydrology
 
+      - name: Surface-water hydrology smoke test
+        run: npm run test:hydrology-surface
+
       - name: Spatial building smoke test
         run: npm run test:building
 
