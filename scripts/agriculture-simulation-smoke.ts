@@ -13,7 +13,7 @@ import {
 } from '../src/simulation/agricultureSystem';
 import { getAvailableInventoryStock } from '../src/simulation/inventorySystem';
 import { migrateGameState, LATEST_SAVE_VERSION } from '../src/save/migrations';
-import { PLANT_SPECIES } from '../src/data/agricultureSpecies';
+import { AQUATIC_SPECIES, PLANT_SPECIES } from '../src/data/agricultureSpecies';
 
 function freshState(): GameState {
   return JSON.parse(JSON.stringify(INITIAL_GAME_STATE)) as GameState;
@@ -105,8 +105,10 @@ function testAquacultureUsesNaturalWaterAndIndividualAnimals(): void {
   state = stockAquaticAnimal(state, habitat.id, 'AQUATIC_TILAPIA', 2);
   assert.equal(state.agricultureSystem?.aquaticAnimals.length, 2, 'stocking must create individual aquatic entities');
   const fish = state.agricultureSystem!.aquaticAnimals[0];
+  const tilapia = AQUATIC_SPECIES.AQUATIC_TILAPIA;
+  fish.ageHours = tilapia.maturityHours * 1.05;
   fish.lifeStage = 'adult';
-  fish.weightKg = 0.82;
+  fish.weightKg = tilapia.adultWeightKg * 1.02;
   const before = itemQuantityAtPoi(state, habitat.poiId, 'ITEM_FRESH_FISH');
   state = queueAgricultureCareJob(state, 'harvest_aquatic', habitat.id);
   runAgriculture(state, 120);
