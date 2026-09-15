@@ -62,11 +62,23 @@ export interface StorageAlert {
   message: string;
 }
 
+export interface StorageRouteMetrics {
+  distanceM: number;
+  pathFactor: number;
+  terrainPenalty: number;
+  sourceAccessibility: number;
+  targetAccessibility: number;
+  crossesPoi: boolean;
+}
+
 export type StorageHaulJobStatus = 'waiting_worker' | 'in_progress' | 'blocked' | 'paused' | 'completed';
 
 export interface StorageHaulJob {
   id: string;
+  /** Legacy/source POI field retained for old saves. */
   poiId: string;
+  sourcePoiId?: string;
+  targetPoiId?: string;
   sourceLocationId: string;
   targetLocationId: string;
   itemId: string;
@@ -75,6 +87,7 @@ export interface StorageHaulJob {
   assignedSurvivorId?: string;
   progressSeconds: number;
   totalSeconds: number;
+  route?: StorageRouteMetrics;
   status: StorageHaulJobStatus;
   blockedReasons: string[];
   createdAtGameMinute: number;
@@ -93,12 +106,14 @@ export interface StorageAcceptanceResult {
   reasons: string[];
   remainingWeightKg: number;
   remainingVolumeL: number;
+  remainingLiquidL?: number;
 }
 
 export interface StorageLocationSummary {
   location: StorageLocation;
   usedWeightKg: number;
   usedVolumeL: number;
+  usedLiquidL: number;
   usedPercent: number;
   itemStacks: number;
   availableUnits: number;
@@ -106,10 +121,32 @@ export interface StorageLocationSummary {
   isFull: boolean;
 }
 
+export interface StorageNetworkSummary {
+  poiId?: string;
+  locationCount: number;
+  protectedLocationCount: number;
+  totalWeightCapacityKg: number;
+  usedWeightKg: number;
+  totalVolumeCapacityL: number;
+  usedVolumeL: number;
+  totalLiquidCapacityL: number;
+  usedLiquidL: number;
+  groundCacheUnits: number;
+  protectedUnits: number;
+  reservedUnits: number;
+  activeHauls: number;
+  blockedHauls: number;
+  alertCount: number;
+  averagePreservationScore: number;
+}
+
 export interface StorageItemEnvironmentState {
   moisture: number;
   contamination: number;
   pestDamage: number;
+  mold: number;
+  corrosion: number;
+  medicinePotency: number;
   lastStorageQuality?: ItemQuality;
 }
 
@@ -119,6 +156,11 @@ declare module './index' {
     moisture?: number;
     contamination?: number;
     pestDamage?: number;
+    mold?: number;
+    corrosion?: number;
+    medicinePotency?: number;
+    /** Physical liquid carried by this stack. Defaults to quantity * item volume. */
+    liquidLiters?: number;
   }
 
   interface GameState {
