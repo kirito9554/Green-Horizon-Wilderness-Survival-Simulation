@@ -12,6 +12,10 @@ interface AquaticBootstrapMeta {
   lastColonizationAttemptByPoiId: Partial<Record<MainWorldAreaId, number>>;
 }
 
+export interface AquaticBootstrapTickOptions {
+  allowColonization?: boolean;
+}
+
 type BootstrapWorldEcologyState = WorldEcologyState & {
   aquaticBootstrap?: AquaticBootstrapMeta;
 };
@@ -50,6 +54,22 @@ export function isAquaticBootstrapReady(state: GameState, poiId: MainWorldAreaId
   return getAquaticHydrologyObservationHours(state, poiId) >= MIN_HYDROLOGY_OBSERVATION_HOURS;
 }
 
+function tickWithoutColonization(state: GameState, deltaGameMinutes: number): void {
+  const regions = Object.values(state.ecologySystem?.regionsByPoiId || {})
+    .filter((entry): entry is RegionEcology => Boolean(entry));
+  const temporarilyMasked: RegionEcology[] = [];
+  for (const region of regions) {
+    if (!state.hydrologySystem?.regionsByPoiId?.[region.poiId] || region.aquaticSeeded) continue;
+    region.aquaticSeeded = true;
+    temporarilyMasked.push(region);
+  }
+  try {
+    tickAquaticEcology(state, deltaGameMinutes);
+  } finally {
+    for (const region of temporarilyMasked) region.aquaticSeeded = false;
+  }
+}
+
 /**
  * Aquatic seeding depends on hydroperiod reliability, which is an observed-history
  * metric. Newly materialized regions used to be marked `aquaticSeeded` on their
@@ -65,11 +85,26 @@ export function isAquaticBootstrapReady(state: GameState, poiId: MainWorldAreaId
  * not duplicate established stocks; it only gives missing or locally extirpated
  * species another chance when habitat becomes suitable. That removes the old
  * one-shot dependency on the exact frame when a region first became seedable.
+ *
+ * Virtual ecological substeps may intentionally set allowColonization=false.
+ * Their hydrology snapshot already represents the outer tick's final state, so
+ * allowing bootstrap in an earlier virtual hour would let a 24-hour observation
+ * threshold become true several hours too early. Existing populations still tick;
+ * only seed/recolonization attempts are deferred to the real outer-tick boundary.
  */
-export function tickAquaticEcologyWithBootstrap(state: GameState, deltaGameMinutes: number): void {
+export function tickAquaticEcologyWithBootstrap(
+  state: GameState,
+  deltaGameMinutes: number,
+  options: AquaticBootstrapTickOptions = {},
+): void {
   const system = state.ecologySystem;
   if (!system || !state.hydrologySystem) {
     tickAquaticEcology(state, deltaGameMinutes);
+    return;
+  }
+
+  if (options.allowColonization === false) {
+    tickWithoutColonization(state, deltaGameMinutes);
     return;
   }
 
