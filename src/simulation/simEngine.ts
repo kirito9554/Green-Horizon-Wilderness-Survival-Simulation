@@ -59,11 +59,12 @@ export * from './structureLifecycleSystem';
 export * from './structureMaintenanceSystem';
 export * from './storageSystem';
 export * from './storageHaulSystem';
+export * from './storageRouteSystem';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 
 export const INITIAL_GAME_STATE: GameState = {
-  saveVersion: 9,
+  saveVersion: 10,
   campName: 'Canopy Bay Settlement',
   gameTime: { day: 1, minuteOfDay: 510, speed: 1 },
   weather: {
