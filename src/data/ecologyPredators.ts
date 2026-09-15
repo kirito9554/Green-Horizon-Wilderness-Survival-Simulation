@@ -28,6 +28,12 @@ export interface WildPredatorSpeciesDefinition {
   roamingPerDay: number;
 }
 
+/**
+ * Predator density is calibrated against the BuildGrid's effective ecological
+ * landscape, not literal island square metres. The grid is a persistent habitat
+ * sample representing a much larger macro-region, so raw real-world densities
+ * would round every predator carrying capacity to zero.
+ */
 export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition> = {
   PREDATOR_MONITOR_LIZARD: {
     id: 'PREDATOR_MONITOR_LIZARD', name: 'Monitor Lizard',
@@ -52,7 +58,7 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     maxKillsPerAdultPerDay: 0.42, halfSaturationPreyPer1000M2: 9,
     idealPredatorPreyBiomassRatio: 0.12, minimumViablePreyCount: 4,
     maxAdultPreyKg: 4.5, juvenilePreference: 0.58,
-    baseDensityPer1000M2: 0.75, maxInitialPopulation: 4, homeRangeMin: 3, homeRangeMax: 6,
+    baseDensityPer1000M2: 1.8, maxInitialPopulation: 4, homeRangeMin: 3, homeRangeMax: 6,
     maturityDays: 540, maxAgeDays: 5475, offspringPerAdultFemalePerYear: 1.8,
     disturbanceTolerance: 44, roamingPerDay: 0.52,
   },
@@ -80,7 +86,7 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     maxKillsPerAdultPerDay: 0.16, halfSaturationPreyPer1000M2: 7,
     idealPredatorPreyBiomassRatio: 0.1, minimumViablePreyCount: 4,
     maxAdultPreyKg: 16, juvenilePreference: 0.62,
-    baseDensityPer1000M2: 0.36, maxInitialPopulation: 3, homeRangeMin: 3, homeRangeMax: 6,
+    baseDensityPer1000M2: 1.25, maxInitialPopulation: 3, homeRangeMin: 3, homeRangeMax: 6,
     maturityDays: 900, maxAgeDays: 7300, offspringPerAdultFemalePerYear: 1.1,
     disturbanceTolerance: 24, roamingPerDay: 0.32,
   },
@@ -108,7 +114,7 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     maxKillsPerAdultPerDay: 0.34, halfSaturationPreyPer1000M2: 8,
     idealPredatorPreyBiomassRatio: 0.08, minimumViablePreyCount: 4,
     maxAdultPreyKg: 4.2, juvenilePreference: 0.52,
-    baseDensityPer1000M2: 0.28, maxInitialPopulation: 2, homeRangeMin: 4, homeRangeMax: 8,
+    baseDensityPer1000M2: 1.05, maxInitialPopulation: 2, homeRangeMin: 4, homeRangeMax: 8,
     maturityDays: 730, maxAgeDays: 6570, offspringPerAdultFemalePerYear: 0.85,
     disturbanceTolerance: 26, roamingPerDay: 0.7,
   },
@@ -134,7 +140,7 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     maxKillsPerAdultPerDay: 0.3, halfSaturationPreyPer1000M2: 10,
     idealPredatorPreyBiomassRatio: 0.11, minimumViablePreyCount: 4,
     maxAdultPreyKg: 3.5, juvenilePreference: 0.54,
-    baseDensityPer1000M2: 0.55, maxInitialPopulation: 4, homeRangeMin: 3, homeRangeMax: 6,
+    baseDensityPer1000M2: 1.85, maxInitialPopulation: 4, homeRangeMin: 3, homeRangeMax: 6,
     maturityDays: 420, maxAgeDays: 3650, offspringPerAdultFemalePerYear: 1.9,
     disturbanceTolerance: 58, roamingPerDay: 0.6,
   },
@@ -158,7 +164,7 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     maxKillsPerAdultPerDay: 0.08, halfSaturationPreyPer1000M2: 5,
     idealPredatorPreyBiomassRatio: 0.14, minimumViablePreyCount: 3,
     maxAdultPreyKg: 90, juvenilePreference: 0.45,
-    baseDensityPer1000M2: 0.12, maxInitialPopulation: 2, homeRangeMin: 3, homeRangeMax: 6,
+    baseDensityPer1000M2: 0.72, maxInitialPopulation: 2, homeRangeMin: 3, homeRangeMax: 6,
     maturityDays: 3650, maxAgeDays: 21900, offspringPerAdultFemalePerYear: 0.38,
     disturbanceTolerance: 20, roamingPerDay: 0.24,
   },
