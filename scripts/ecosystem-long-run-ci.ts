@@ -116,7 +116,25 @@ function main(): void {
   for (const metric of timestepMetrics) {
     const difference = relativeDifference(fine.final[metric], coarse.final[metric]);
     timestepDifference[metric] = Math.round(difference * 10000) / 10000;
-    assert.ok(difference < 0.45, `${metric} must remain reasonably timestep invariant`);
+  }
+  console.log('timestep comparison before assertions');
+  console.log(JSON.stringify({
+    difference: timestepDifference,
+    fine: {
+      aquaticPopulation: fine.final.aquaticPopulation,
+      aquaticBiomassKg: fine.final.aquaticBiomassKg,
+      averageAquaticStress: fine.final.averageAquaticStress,
+      aquaticBySpecies: fine.final.aquaticBySpecies,
+    },
+    coarse: {
+      aquaticPopulation: coarse.final.aquaticPopulation,
+      aquaticBiomassKg: coarse.final.aquaticBiomassKg,
+      averageAquaticStress: coarse.final.averageAquaticStress,
+      aquaticBySpecies: coarse.final.aquaticBySpecies,
+    },
+  }, null, 2));
+  for (const metric of timestepMetrics) {
+    assert.ok(timestepDifference[metric] < 0.45, `${metric} must remain reasonably timestep invariant`);
   }
 
   // A six-month pressure window is enough to prove gameplay extraction reaches
