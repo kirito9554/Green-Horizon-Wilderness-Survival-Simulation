@@ -18,8 +18,9 @@ import { ensureBuildingSimulation, getOrCreatePoiBuildGrid } from '../simulation
 import { ensureStorageSystem } from '../simulation/storageSystem';
 import { calculateStorageRoute } from '../simulation/storageRouteSystem';
 import { ensureAgricultureSystem, rebuildAgricultureReservations } from '../simulation/agricultureSystem';
+import { migrateLegacyMainWorldAreas } from './mainWorldAreaMigration';
 
-export const LATEST_SAVE_VERSION = 11;
+export const LATEST_SAVE_VERSION = 12;
 
 function stableStringSeed(value: string): number {
   let hash = 2166136261;
@@ -107,6 +108,10 @@ function migrateToV11(state: GameState): void {
   }
   state.saveVersion = 11;
 }
+function migrateToV12(state: GameState): void {
+  migrateLegacyMainWorldAreas(state);
+  state.saveVersion = 12;
+}
 
 export function migrateGameState(rawState: GameState): GameState {
   const state = rawState;
@@ -121,6 +126,12 @@ export function migrateGameState(rawState: GameState): GameState {
   if (fromVersion < 9) migrateToV9(state);
   if (fromVersion < 10) migrateToV10(state);
   if (fromVersion < 11) migrateToV11(state);
+  if (fromVersion < 12) migrateToV12(state);
+
+  // Idempotent repair pass: if a newer subsystem accidentally persisted a known
+  // retired main-map alias, normalize it on load without touching archived
+  // up/down/left/right sector data.
+  migrateLegacyMainWorldAreas(state);
 
   state.poiStorages ||= {};
   state.craftingQueue ||= [];
