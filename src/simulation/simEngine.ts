@@ -65,9 +65,11 @@ export * from './storageRouteSystem';
 export * from './agricultureSystem';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
+const rockyShoreGroundStorageId = 'storage_ground_AREA_FISHING_LAGOON';
+const riverGorgeGroundStorageId = 'storage_ground_AREA_WATERFALL_BASIN';
 
 export const INITIAL_GAME_STATE: GameState = {
-  saveVersion: 11,
+  saveVersion: 12,
   campName: 'Canopy Bay Settlement',
   gameTime: { day: 1, minuteOfDay: 510, speed: 1 },
   weather: {
@@ -95,8 +97,8 @@ export const INITIAL_GAME_STATE: GameState = {
   },
   areasProgress: {
     AREA_CAMP_CLEARING: { knowledgePercent: 100, lastGatheredTime: {} },
-    AREA_COASTAL_SHALLOWS: { knowledgePercent: 20, lastGatheredTime: {} },
-    AREA_RIVERBANK: { knowledgePercent: 10, lastGatheredTime: {} },
+    AREA_FISHING_LAGOON: { knowledgePercent: 20, lastGatheredTime: {} },
+    AREA_WATERFALL_BASIN: { knowledgePercent: 10, lastGatheredTime: {} },
     AREA_BAMBOO_GROVE: { knowledgePercent: 0, lastGatheredTime: {} },
   },
   buildings: [{
@@ -117,8 +119,16 @@ export const INITIAL_GAME_STATE: GameState = {
         { instanceId: 'poi_seed_chili', itemId: 'ITEM_CHILI_SEED', quantity: 10, quality: 'standard', qualityBreakdown: { standard: 10 }, storageLocationId: campGroundStorageId },
       ],
     },
-    AREA_COASTAL_SHALLOWS: { maxWeightKg: 45, maxVolumeL: 70, items: [{ instanceId: 'poi_coast_1', itemId: 'ITEM_WILD_COCONUT', quantity: 4, quality: 'standard', qualityBreakdown: { standard: 4 }, storageLocationId: 'storage_ground_AREA_COASTAL_SHALLOWS' }] },
-    AREA_RIVERBANK: { maxWeightKg: 45, maxVolumeL: 70, items: [{ instanceId: 'poi_river_1', itemId: 'ITEM_RIVER_PEBBLE', quantity: 6, quality: 'standard', qualityBreakdown: { standard: 6 }, storageLocationId: 'storage_ground_AREA_RIVERBANK' }] },
+    AREA_FISHING_LAGOON: {
+      maxWeightKg: 45,
+      maxVolumeL: 70,
+      items: [{ instanceId: 'poi_coast_1', itemId: 'ITEM_WILD_COCONUT', quantity: 4, quality: 'standard', qualityBreakdown: { standard: 4 }, storageLocationId: rockyShoreGroundStorageId }],
+    },
+    AREA_WATERFALL_BASIN: {
+      maxWeightKg: 45,
+      maxVolumeL: 70,
+      items: [{ instanceId: 'poi_river_1', itemId: 'ITEM_RIVER_PEBBLE', quantity: 6, quality: 'standard', qualityBreakdown: { standard: 6 }, storageLocationId: riverGorgeGroundStorageId }],
+    },
     AREA_BAMBOO_GROVE: { maxWeightKg: 45, maxVolumeL: 70, items: [] },
   },
   expeditions: [],
