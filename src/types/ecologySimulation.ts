@@ -176,6 +176,28 @@ export interface SignificantWildAnimal {
   lastUpdatedGameMinute: number;
 }
 
+export interface PredatorHuntPreyTelemetry {
+  encounters: number;
+  attacks: number;
+  successfulKills: number;
+}
+
+export interface PredatorHuntTelemetry {
+  attempts: number;
+  encounters: number;
+  attacks: number;
+  successfulKills: number;
+  successfulKillsByLifeStage: Partial<Record<WildAnimalLifeStage, number>>;
+  edibleConsumedKg: number;
+  carcassBiomassCreatedKg: number;
+  byPreySpecies: Record<string, PredatorHuntPreyTelemetry>;
+  lastTargetSpeciesId?: string;
+  lastTargetLifeStage?: WildAnimalLifeStage;
+  lastEncounterChance?: number;
+  lastAttackSuccessChance?: number;
+  lastOutcome?: 'no_target' | 'no_encounter' | 'no_attack' | 'failed_attack' | 'success';
+}
+
 export interface WildPredatorPopulation {
   id: string;
   speciesId: string;
@@ -201,7 +223,12 @@ export interface WildPredatorPopulation {
   agingProgress: number;
   mortalityProgress: number;
   movementProgress: number;
+  /** Legacy expected-kill accumulator retained for save compatibility. */
   predationProgressByPreySpecies: Record<string, number>;
+  /** Fractional progress toward the next discrete hunt attempt. */
+  huntAttemptProgress?: number;
+  /** Cumulative discrete hunting diagnostics for this population. */
+  huntTelemetry?: PredatorHuntTelemetry;
   /** Stored edible-energy buffer. Optional for backward-compatible save migration. */
   energyReserveKg?: number;
   /** Dynamic reserve ceiling for the current age structure. Optional on legacy saves. */
@@ -211,6 +238,27 @@ export interface WildPredatorPopulation {
   /** Diagnostic metabolic demand from the latest predator tick. */
   lastEnergyDemandKg?: number;
   lastMoveGameMinute: number;
+  lastUpdatedGameMinute: number;
+}
+
+export interface WildCarcass {
+  id: string;
+  poiId: MainWorldAreaId;
+  subareaId: string;
+  sourceSpeciesId: string;
+  sourceLifeStage: WildAnimalLifeStage;
+  cause: 'predation' | 'natural';
+  killerSpeciesId?: string;
+  killerPopulationId?: string;
+  bodyMassKg: number;
+  edibleMassKg: number;
+  scavengeableMassKg: number;
+  remainingMassKg: number;
+  remainingEdibleKg: number;
+  remainingScavengeableKg: number;
+  mirroredCarrionKg: number;
+  freshness: number;
+  createdGameMinute: number;
   lastUpdatedGameMinute: number;
 }
 
@@ -266,6 +314,7 @@ export interface WorldEcologyState {
   significantAnimals?: SignificantWildAnimal[];
   predatorPopulations?: WildPredatorPopulation[];
   significantPredators?: SignificantWildPredator[];
+  wildCarcasses?: WildCarcass[];
   ecologyTickIndex: number;
 }
 
