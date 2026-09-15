@@ -81,7 +81,13 @@ function seedRiver(state: GameState): void {
 }
 
 function totalPool(pool: ReturnType<typeof getAquaticFoodPoolForNodes>): number {
-  return Object.values(pool).reduce((sum, value) => sum + value, 0);
+  return pool.phytoplankton
+    + pool.periphyton
+    + pool.aquatic_vegetation
+    + pool.zooplankton
+    + pool.benthic_invertebrates
+    + pool.detritus
+    + pool.carrion;
 }
 
 function zeroFood(state: GameState, nodeIds: string[]): void {
