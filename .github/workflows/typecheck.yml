@@ -47,6 +47,9 @@ jobs:
       - name: Aquatic food-web smoke test
         run: npm run test:ecology-aquatic-food
 
+      - name: Terrestrial ecology scale smoke test
+        run: npm run test:ecology-terrestrial-scale
+
       - name: World hydrology foundation smoke test
         run: npm run test:hydrology
 
