@@ -390,7 +390,10 @@ function getFastGateAbortReason(baseline: PredatorCheckpoint, checkpoint: Predat
   if (checkpoint.year !== 1 || baseline.predatorPopulation <= 0) return undefined;
   const survivalShare = checkpoint.predatorPopulation / baseline.predatorPopulation;
   const speciesShare = checkpoint.species.length / Math.max(1, baseline.species.length);
-  if (survivalShare < 0.25) return `1y predator survival fell to ${round3(survivalShare * 100)}% of baseline`;
+  // P4 is explicitly allowed to shed an initially over-dense predator cohort via
+  // dispersal. Treat only a near-total numerical collapse as a fail-fast event;
+  // guild loss and critical hunger/chronic pressure remain independent hard gates.
+  if (survivalShare < 0.1) return `1y predator survival fell to ${round3(survivalShare * 100)}% of baseline`;
   if (speciesShare < 0.5) return `1y surviving predator guild fell to ${round3(speciesShare * 100)}% of baseline species`;
   if (checkpoint.populationWeightedHunger >= 90 && checkpoint.chronicStressDays >= 60) {
     return `1y predators remain critically hungry (${checkpoint.populationWeightedHunger}) under chronic stress (${checkpoint.chronicStressDays}d)`;
