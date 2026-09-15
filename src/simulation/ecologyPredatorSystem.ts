@@ -49,11 +49,90 @@ function gameMinute(state: GameState): number {
   return Math.max(0, (state.gameTime.day - 1) * 1440 + state.gameTime.minuteOfDay);
 }
 
+function equivalentPredatorCount(population: WildPredatorPopulation): number {
+  return population.adults + population.old * 0.82 + population.juveniles * 0.38;
+}
+
+/**
+ * Intermittent feeders can bank a larger fraction of a successful kill. The
+ * reserve horizon is derived from the existing kill cadence rather than adding a
+ * second per-species tuning table. Fast hunters retain only a short buffer while
+ * python/crocodile populations can bridge several kill-free days.
+ */
+export function getPredatorEnergyReserveDays(species: WildPredatorSpeciesDefinition): number {
+  const expectedKillIntervalDays = 1 / Math.max(0.03, species.maxKillsPerAdultPerDay);
+  return round3(Math.max(1.75, Math.min(14, expectedKillIntervalDays * 0.9)));
+}
+
+function predatorEnergyCapacityKg(population: WildPredatorPopulation, species: WildPredatorSpeciesDefinition): number {
+  const dailyDemandKg = species.dailyFoodKgPerAdult * equivalentPredatorCount(population);
+  return round3(Math.max(0, dailyDemandKg * getPredatorEnergyReserveDays(species)));
+}
+
+/**
+ * Backward-compatible save migration plus age-structure rescaling. Existing
+ * saves have no reserve fields; they receive a conservative reserve inferred
+ * from current hunger instead of being treated as instantly empty. If population
+ * size changes later, reserve percentage is preserved rather than creating or
+ * deleting per-capita satiation.
+ */
+export function ensurePredatorEnergyState(
+  population: WildPredatorPopulation,
+  species: WildPredatorSpeciesDefinition,
+  initialFraction?: number,
+): void {
+  const nextCapacity = predatorEnergyCapacityKg(population, species);
+  const oldCapacity = Number.isFinite(population.maxEnergyReserveKg) ? Math.max(0, population.maxEnergyReserveKg || 0) : undefined;
+  const existingReserve = Number.isFinite(population.energyReserveKg) ? Math.max(0, population.energyReserveKg || 0) : undefined;
+
+  let reserve: number;
+  if (existingReserve === undefined) {
+    const legacyFraction = initialFraction ?? Math.min(0.8, Math.max(0.15, 0.15 + (1 - clamp01(population.hungerStress / 100)) * 0.65));
+    reserve = nextCapacity * clamp01(legacyFraction);
+  } else if (oldCapacity !== undefined && oldCapacity > 0 && Math.abs(oldCapacity - nextCapacity) > 0.0005) {
+    reserve = nextCapacity * clamp01(existingReserve / oldCapacity);
+  } else {
+    reserve = existingReserve;
+  }
+
+  population.maxEnergyReserveKg = round3(nextCapacity);
+  population.energyReserveKg = round3(Math.min(nextCapacity, Math.max(0, reserve)));
+  if (!Number.isFinite(population.lastEnergyIntakeKg)) population.lastEnergyIntakeKg = 0;
+  if (!Number.isFinite(population.lastEnergyDemandKg)) population.lastEnergyDemandKg = 0;
+}
+
+/**
+ * Converts stored edible mass plus the latest kill into metabolic coverage for a
+ * time slice. Surplus from a large discrete kill is banked up to the species'
+ * reserve horizon; only uncovered demand contributes to hunger stress later.
+ */
+export function applyPredatorEnergyAccounting(
+  population: WildPredatorPopulation,
+  species: WildPredatorSpeciesDefinition,
+  elapsedDays: number,
+  huntedEdibleKg: number,
+): number {
+  ensurePredatorEnergyState(population, species);
+  const demandKg = Math.max(0, species.dailyFoodKgPerAdult * equivalentPredatorCount(population) * Math.max(0, elapsedDays));
+  const reserveBefore = Math.max(0, population.energyReserveKg || 0);
+  const availableKg = reserveBefore + Math.max(0, huntedEdibleKg);
+  const coveredKg = Math.min(demandKg, availableKg);
+  const capacityKg = Math.max(0, population.maxEnergyReserveKg || 0);
+  population.energyReserveKg = round3(Math.min(capacityKg, Math.max(0, availableKg - coveredKg)));
+  population.lastEnergyIntakeKg = round3(Math.max(0, huntedEdibleKg));
+  population.lastEnergyDemandKg = round3(demandKg);
+  return demandKg <= 0 ? 1 : clamp01(coveredKg / demandKg);
+}
+
 export function ensureWildPredators(state: GameState): WorldEcologyState {
   const system = ensureWildFauna(state);
-  system.version = Math.max(3, system.version || 1);
+  system.version = Math.max(4, system.version || 1);
   system.predatorPopulations ||= [];
   system.significantPredators ||= [];
+  for (const population of system.predatorPopulations) {
+    const species = WILD_PREDATOR_SPECIES[population.speciesId];
+    if (species) ensurePredatorEnergyState(population, species);
+  }
   for (const region of Object.values(system.regionsByPoiId)) {
     if (region && region.predatorsSeeded === undefined) region.predatorsSeeded = false;
   }
@@ -252,7 +331,7 @@ function createPredatorPopulation(
   const adults = Math.max(0, population - juveniles - old);
   const bodyCondition = clamp(68 + random() * 22);
   const now = gameMinute(state);
-  return {
+  const created: WildPredatorPopulation = {
     id: `wildpred_${hashString(`${region.generationSeed}:${species.id}`).toString(36)}`,
     speciesId: species.id,
     poiId,
@@ -281,6 +360,8 @@ function createPredatorPopulation(
     lastMoveGameMinute: now,
     lastUpdatedGameMinute: now,
   };
+  ensurePredatorEnergyState(created, species, 0.5 + random() * 0.2);
+  return created;
 }
 
 export function ensureRegionWildPredators(state: GameState, poiId: string): WildPredatorPopulation[] {
@@ -381,15 +462,14 @@ function hunt(
   species: WildPredatorSpeciesDefinition,
   subarea: EcologicalSubarea,
   elapsedDays: number,
-): { intakeRatio: number; kills: number } {
+): { edibleKg: number; kills: number } {
   const system = ensureWildPredators(state);
   const prey = preyPopulationsAt(system, subarea.id)
     .filter(entry => (species.preyWeights[entry.speciesId] || 0) > 0)
     .sort((a, b) => preyChoiceScore(b, subarea, species) - preyChoiceScore(a, subarea, species));
-  const equivalentPredators = population.adults + population.old * 0.82 + population.juveniles * 0.38;
+  const equivalentPredators = equivalentPredatorCount(population);
   const foodDemand = species.dailyFoodKgPerAdult * equivalentPredators * elapsedDays;
-  if (foodDemand <= 0) return { intakeRatio: 1, kills: 0 };
-  if (!prey.length) return { intakeRatio: 0, kills: 0 };
+  if (foodDemand <= 0 || !prey.length) return { edibleKg: 0, kills: 0 };
 
   const preferredBiomass = totalPreferredPreyBiomass(system, subarea.id, species);
   const competition = predatorCompetitionMultiplier(population.biomassKg, preferredBiomass, species.idealPredatorPreyBiomassRatio);
@@ -398,6 +478,8 @@ function hunt(
 
   // Diet switching is emergent: high-scoring prey is attempted first, but if that
   // prey is scarce/refuged, the predator rolls remaining kill capacity into the next prey.
+  // A discrete kill may exceed the current metabolic demand; P2 banks that surplus
+  // instead of discarding it through an intake-ratio clamp.
   for (const target of prey) {
     if (edibleKg >= foodDemand * 1.05) break;
     const preference = species.preyWeights[target.speciesId] || 0;
@@ -422,7 +504,7 @@ function hunt(
     if (subarea.foodWeb) subarea.foodWeb.carrionBiomassKg = round3(subarea.foodWeb.carrionBiomassKg + result.carrionKg);
   }
 
-  return { intakeRatio: clamp01(edibleKg / foodDemand), kills };
+  return { edibleKg: round3(edibleKg), kills };
 }
 
 function recomputePredatorBiomass(population: WildPredatorPopulation, species: WildPredatorSpeciesDefinition): void {
@@ -473,11 +555,12 @@ function tickPredatorPopulation(state: GameState, population: WildPredatorPopula
   if (!species || !subarea || population.population <= 0 || elapsedMinutes <= 0) return;
   const elapsedDays = elapsedMinutes / 1440;
   const huntResult = hunt(state, population, species, subarea, elapsedDays);
+  const energyCoverage = applyPredatorEnergyAccounting(population, species, elapsedDays, huntResult.edibleKg);
   const waterRatio = clamp01(subarea.environment.waterAccess / Math.max(20, species.dailyWaterNeed));
 
-  population.hungerStress = clamp(population.hungerStress + (1 - huntResult.intakeRatio) * elapsedDays * 62 - huntResult.intakeRatio * elapsedDays * 23);
+  population.hungerStress = clamp(population.hungerStress + (1 - energyCoverage) * elapsedDays * 62 - energyCoverage * elapsedDays * 23);
   population.waterStress = clamp(population.waterStress + (1 - waterRatio) * elapsedDays * 54 - waterRatio * elapsedDays * 20);
-  population.bodyCondition = clamp(population.bodyCondition + (huntResult.intakeRatio - 0.7) * elapsedDays * 10 - population.waterStress / 100 * elapsedDays * 2.5);
+  population.bodyCondition = clamp(population.bodyCondition + (energyCoverage - 0.7) * elapsedDays * 10 - population.waterStress / 100 * elapsedDays * 2.5);
   population.averageHealth = clamp(population.averageHealth + (population.bodyCondition / 100 - 0.58) * elapsedDays * 3 - (population.hungerStress + population.waterStress) / 200 * elapsedDays * 2.6);
 
   const humanExcess = Math.max(0, subarea.disturbance.humanPressure - species.disturbanceTolerance);
@@ -544,6 +627,7 @@ function tickPredatorPopulation(state: GameState, population: WildPredatorPopula
   }
 
   recomputePredatorBiomass(population, species);
+  ensurePredatorEnergyState(population, species);
   movePredator(state, population, species, elapsedDays);
   population.lastUpdatedGameMinute = gameMinute(state);
 }
@@ -601,6 +685,7 @@ export function promoteWildPredatorIndividual(
   else if (stage === 'juvenile') population.juveniles--;
   else population.old--;
   recomputePredatorBiomass(population, species);
+  ensurePredatorEnergyState(population, species);
 
   const now = gameMinute(state);
   const serial = system.significantPredators!.filter(entry => entry.sourcePopulationId === population.id).length;
