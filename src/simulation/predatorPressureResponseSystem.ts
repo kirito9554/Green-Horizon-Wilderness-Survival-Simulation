@@ -7,8 +7,8 @@ import {
   getPredatorHabitatSuitability,
   getPredatorHuntingAccessibility,
   predatorCompetitionMultiplier,
-  tickWildPredators,
 } from './ecologyPredatorSystem';
+import { tickWildPredatorsDiscrete } from './predatorDiscreteHuntingSystem';
 
 const RESPONSE_VERSION = 1;
 
@@ -300,7 +300,7 @@ export function tickPredatorPressureResponse(state: GameState, _deltaGameMinutes
 }
 
 export function tickWildPredatorsWithPressureResponse(state: GameState, deltaGameMinutes: number): void {
-  tickWildPredators(state, deltaGameMinutes);
+  tickWildPredatorsDiscrete(state, deltaGameMinutes);
   tickPredatorPressureResponse(state, deltaGameMinutes);
 }
 
