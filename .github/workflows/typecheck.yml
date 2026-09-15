@@ -53,6 +53,9 @@ jobs:
       - name: Living-system hydrology integration smoke test
         run: npm run test:hydrology-living
 
+      - name: Aquatic-ready hydrology smoke test
+        run: npm run test:hydrology-aquatic
+
       - name: Spatial building smoke test
         run: npm run test:building
 
