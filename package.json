@@ -24,6 +24,8 @@
     "test:ecology-aquatic": "tsx scripts/ecology-aquatic-smoke.ts",
     "test:ecology-aquatic-food": "tsx scripts/aquatic-food-web-smoke.ts",
     "test:ecology-terrestrial-scale": "tsx scripts/terrestrial-ecology-scale-smoke.ts",
+    "test:ecology-long-run": "tsx scripts/ecosystem-long-run.ts --ci",
+    "sim:ecology-long-run": "tsx scripts/ecosystem-long-run.ts",
     "test:hydrology": "tsx scripts/hydrology-simulation-smoke.ts",
     "test:hydrology-surface": "tsx scripts/hydrology-surface-water-smoke.ts",
     "test:hydrology-management": "tsx scripts/hydrology-water-management-smoke.ts",
