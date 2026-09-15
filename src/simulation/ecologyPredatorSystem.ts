@@ -179,6 +179,56 @@ function neighborIds(system: WorldEcologyState, subareaId: string): string[] {
   return result;
 }
 
+/**
+ * Short hunting excursions may use any connected patch inside the predator's
+ * established home range. Access falls with the actual ecology connection
+ * movementCost (distance + terrain barriers) and rises with the species' existing
+ * roaming rate. This does not teleport the population: currentSubareaId remains
+ * the resting/movement location handled by movePredator().
+ */
+export function getPredatorHuntingAccessibility(
+  system: WorldEcologyState,
+  population: WildPredatorPopulation,
+  species: WildPredatorSpeciesDefinition,
+  targetSubareaId: string,
+): number {
+  if (targetSubareaId === population.currentSubareaId) return 1;
+  const allowed = new Set(population.homeRangeSubareaIds.length ? population.homeRangeSubareaIds : [population.currentSubareaId]);
+  allowed.add(population.currentSubareaId);
+  if (!allowed.has(targetSubareaId)) return 0;
+
+  const distances = new Map<string, number>([[population.currentSubareaId, 0]]);
+  const unresolved = new Set(allowed);
+  while (unresolved.size) {
+    let currentId: string | undefined;
+    let currentCost = Number.POSITIVE_INFINITY;
+    for (const id of unresolved) {
+      const cost = distances.get(id) ?? Number.POSITIVE_INFINITY;
+      if (cost < currentCost) {
+        currentId = id;
+        currentCost = cost;
+      }
+    }
+    if (!currentId || !Number.isFinite(currentCost)) break;
+    unresolved.delete(currentId);
+    if (currentId === targetSubareaId) break;
+
+    for (const connection of system.connections) {
+      let neighborId: string | undefined;
+      if (connection.fromSubareaId === currentId) neighborId = connection.toSubareaId;
+      else if (connection.toSubareaId === currentId) neighborId = connection.fromSubareaId;
+      if (!neighborId || !allowed.has(neighborId) || !unresolved.has(neighborId)) continue;
+      const candidate = currentCost + Math.max(1, connection.movementCost);
+      if (candidate < (distances.get(neighborId) ?? Number.POSITIVE_INFINITY)) distances.set(neighborId, candidate);
+    }
+  }
+
+  const pathCost = distances.get(targetSubareaId);
+  if (!Number.isFinite(pathCost)) return 0;
+  const travelBudget = Math.max(40, 70 + species.roamingPerDay * 220);
+  return round3(clamp01(1 / (1 + (pathCost || 0) / travelBudget)));
+}
+
 function preyPopulationsAt(system: WorldEcologyState, subareaId: string): WildAnimalPopulation[] {
   return (system.animalPopulations || []).filter(population => population.currentSubareaId === subareaId && population.population > 0);
 }
@@ -449,44 +499,57 @@ function preyChoiceScore(
   return preference * functional * refugia * (0.35 + prey.bodyCondition / 150);
 }
 
-function totalPreferredPreyBiomass(system: WorldEcologyState, subareaId: string, predator: WildPredatorSpeciesDefinition): number {
-  return preyPopulationsAt(system, subareaId).reduce((sum, prey) => {
-    const weight = predator.preyWeights[prey.speciesId] || 0;
-    return sum + prey.biomassKg * weight;
-  }, 0);
-}
-
 function hunt(
   state: GameState,
   population: WildPredatorPopulation,
   species: WildPredatorSpeciesDefinition,
-  subarea: EcologicalSubarea,
+  _currentSubarea: EcologicalSubarea,
   elapsedDays: number,
 ): { edibleKg: number; kills: number } {
   const system = ensureWildPredators(state);
-  const prey = preyPopulationsAt(system, subarea.id)
-    .filter(entry => (species.preyWeights[entry.speciesId] || 0) > 0)
-    .sort((a, b) => preyChoiceScore(b, subarea, species) - preyChoiceScore(a, subarea, species));
+  const homeRange = new Set(population.homeRangeSubareaIds.length ? population.homeRangeSubareaIds : [population.currentSubareaId]);
+  homeRange.add(population.currentSubareaId);
+  const prey = (system.animalPopulations || [])
+    .filter(entry => entry.population > 0 && homeRange.has(entry.currentSubareaId) && (species.preyWeights[entry.speciesId] || 0) > 0)
+    .map(target => {
+      const targetSubarea = system.subareasById[target.currentSubareaId];
+      const accessibility = targetSubarea
+        ? getPredatorHuntingAccessibility(system, population, species, target.currentSubareaId)
+        : 0;
+      return {
+        target,
+        targetSubarea,
+        accessibility,
+        score: targetSubarea ? preyChoiceScore(target, targetSubarea, species) * accessibility : 0,
+      };
+    })
+    .filter(entry => Boolean(entry.targetSubarea) && entry.accessibility > 0)
+    .sort((a, b) => b.score - a.score);
+
   const equivalentPredators = equivalentPredatorCount(population);
   const foodDemand = species.dailyFoodKgPerAdult * equivalentPredators * elapsedDays;
   if (foodDemand <= 0 || !prey.length) return { edibleKg: 0, kills: 0 };
 
-  const preferredBiomass = totalPreferredPreyBiomass(system, subarea.id, species);
-  const competition = predatorCompetitionMultiplier(population.biomassKg, preferredBiomass, species.idealPredatorPreyBiomassRatio);
+  const accessiblePreferredBiomass = prey.reduce((sum, entry) => {
+    const preference = species.preyWeights[entry.target.speciesId] || 0;
+    return sum + entry.target.biomassKg * preference * entry.accessibility;
+  }, 0);
+  const competition = predatorCompetitionMultiplier(population.biomassKg, accessiblePreferredBiomass, species.idealPredatorPreyBiomassRatio);
   let edibleKg = 0;
   let kills = 0;
 
-  // Diet switching is emergent: high-scoring prey is attempted first, but if that
-  // prey is scarce/refuged, the predator rolls remaining kill capacity into the next prey.
-  // A discrete kill may exceed the current metabolic demand; P2 banks that surplus
-  // instead of discarding it through an intake-ratio clamp.
-  for (const target of prey) {
+  // Diet switching now spans the established home range. Remote prey is discounted
+  // by travel accessibility, so carrying-capacity prey is not magically equivalent
+  // to prey in the current patch. Predator location itself is left unchanged.
+  for (const entry of prey) {
     if (edibleKg >= foodDemand * 1.05) break;
+    const target = entry.target;
+    const targetSubarea = entry.targetSubarea!;
     const preference = species.preyWeights[target.speciesId] || 0;
-    const densityPer1000 = target.population / Math.max(0.1, subarea.areaM2 / 1000);
+    const densityPer1000 = target.population / Math.max(0.1, targetSubarea.areaM2 / 1000);
     const functional = typeIIIPredationResponse(densityPer1000, species.halfSaturationPreyPer1000M2);
-    const refugia = preyRefugiaMultiplier(target.population, species.minimumViablePreyCount, subarea.environment.canopyCover);
-    const maxKills = equivalentPredators * species.maxKillsPerAdultPerDay * elapsedDays * preference * functional * competition * refugia;
+    const refugia = preyRefugiaMultiplier(target.population, species.minimumViablePreyCount, targetSubarea.environment.canopyCover);
+    const maxKills = equivalentPredators * species.maxKillsPerAdultPerDay * elapsedDays * preference * functional * competition * refugia * entry.accessibility;
     const accumulated = (population.predationProgressByPreySpecies[target.speciesId] || 0) + maxKills;
     let wholeKills = Math.floor(accumulated);
     population.predationProgressByPreySpecies[target.speciesId] = accumulated - wholeKills;
@@ -501,7 +564,9 @@ function hunt(
     const result = removePrey(target, wholeKills, species);
     kills += result.kills;
     edibleKg += result.edibleKg;
-    if (subarea.foodWeb) subarea.foodWeb.carrionBiomassKg = round3(subarea.foodWeb.carrionBiomassKg + result.carrionKg);
+    if (targetSubarea.foodWeb) {
+      targetSubarea.foodWeb.carrionBiomassKg = round3(targetSubarea.foodWeb.carrionBiomassKg + result.carrionKg);
+    }
   }
 
   return { edibleKg: round3(edibleKg), kills };
