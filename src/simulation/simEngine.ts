@@ -32,7 +32,7 @@ import { createStorageSystemState, tickStorageSimulation } from './storageSystem
 import { tickStorageHauling } from './storageHaulSystem';
 import { createAgricultureSystemState, tickAgriculture } from './agricultureSystem';
 import { createWorldEcologyState, tickWorldEcology } from './ecologySystem';
-import { tickWildPredators } from './ecologyPredatorSystem';
+import { tickWildPredatorsWithPressureResponse } from './predatorPressureResponseSystem';
 import { createWorldHydrologyState, tickWorldHydrology } from './hydrologySystem';
 import { tickSurfaceWaterHydrology } from './hydrologySurfaceWaterSystem';
 import { tickWaterManagement } from './waterManagementSystem';
@@ -94,6 +94,7 @@ export * from './agricultureSystem';
 export * from './ecologySystem';
 export * from './ecologyFaunaSystem';
 export * from './ecologyPredatorSystem';
+export * from './predatorPressureResponseSystem';
 export * from './ecologyAquaticSystem';
 export * from './longRunEcosystemSystem';
 export * from './hydrologySystem';
@@ -250,7 +251,7 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
     tickAquaticEcologyAtEnvironmentalScale(next, deltaGameMinutes);
     tickWildFaunaWithStableFoodWebClock(next, deltaGameMinutes);
     reconcileTerrestrialEcologyScale(next); // fauna seeded during this tick
-    tickWildPredators(next, deltaGameMinutes);
+    tickWildPredatorsWithPressureResponse(next, deltaGameMinutes);
     reconcileTerrestrialEcologyScale(next); // predators seeded during this tick
     tickLongRunEcosystemBalance(next, deltaGameMinutes);
   } finally {
