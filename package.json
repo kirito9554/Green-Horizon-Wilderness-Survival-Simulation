@@ -17,7 +17,8 @@
     "test:storage-mods": "tsx scripts/storage-modification-smoke.ts",
     "test:storage-network": "tsx scripts/storage-network-smoke.ts",
     "test:agriculture": "tsx scripts/agriculture-simulation-smoke.ts",
-    "test:poi-migration": "tsx scripts/main-world-area-migration-smoke.ts"
+    "test:poi-migration": "tsx scripts/main-world-area-migration-smoke.ts",
+    "test:ecology": "tsx scripts/ecology-simulation-smoke.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -33,7 +34,7 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
+    "@types/express": "^4.21.2",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
