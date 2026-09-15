@@ -535,6 +535,15 @@ function hunt(
     return sum + entry.target.biomassKg * preference * entry.accessibility;
   }, 0);
   const competition = predatorCompetitionMultiplier(population.biomassKg, accessiblePreferredBiomass, species.idealPredatorPreyBiomassRatio);
+  const reserveCapacityKg = Math.max(0, population.maxEnergyReserveKg || 0);
+  const reserveBeforeHuntKg = Math.max(0, population.energyReserveKg || 0);
+  const reserveGapKg = Math.max(0, reserveCapacityKg - reserveBeforeHuntKg);
+  // Successful hunting should be able to replenish some of the bounded energy
+  // reserve instead of stopping as soon as the current tick is barely covered.
+  // This does not alter kill-rate constants: it only lets already-available hunt
+  // opportunities continue a little longer when the predator is running a deficit.
+  const reserveRefillAllowanceKg = Math.min(foodDemand * 0.45, reserveGapKg * 0.08);
+  const intakeTargetKg = foodDemand * 1.05 + reserveRefillAllowanceKg;
   let edibleKg = 0;
   let kills = 0;
 
@@ -542,7 +551,7 @@ function hunt(
   // by travel accessibility, so carrying-capacity prey is not magically equivalent
   // to prey in the current patch. Predator location itself is left unchanged.
   for (const entry of prey) {
-    if (edibleKg >= foodDemand * 1.05) break;
+    if (edibleKg >= intakeTargetKg) break;
     const target = entry.target;
     const targetSubarea = entry.targetSubarea!;
     const preference = species.preyWeights[target.speciesId] || 0;
