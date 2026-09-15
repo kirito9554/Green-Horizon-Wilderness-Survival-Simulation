@@ -44,5 +44,8 @@ jobs:
       - name: Storage modification smoke test
         run: npm run test:storage-mods
 
+      - name: Storage network optimizer smoke test
+        run: npm run test:storage-network
+
       - name: Production build
         run: npm run build
