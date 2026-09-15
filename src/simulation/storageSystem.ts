@@ -3,6 +3,7 @@ import type {
   StorageAcceptanceResult,
   StorageLocation,
   StorageLocationSummary,
+  StorageNetworkSummary,
   StorageSystemState,
 } from '../types/storageSimulation';
 import '../types/storageSimulation';
@@ -19,6 +20,10 @@ import { analyzeItemSpoilage } from './itemSimulation';
 import { formatTimeOfDay } from './timeSystem';
 
 const CAMP_POI_ID = 'AREA_CAMP_CLEARING';
+const MOLD_ALERT = 55;
+const CORROSION_ALERT = 55;
+const CONTAMINATION_ALERT = 55;
+const MEDICINE_POTENCY_ALERT = 45;
 
 function cloneValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -95,6 +100,9 @@ function refreshBuiltStorageProfile(
     ...type.capacity,
     maxWeightKg: Math.max(1, type.capacity.maxWeightKg * (1 + weightPct / 100)),
     maxVolumeL: Math.max(1, type.capacity.maxVolumeL * (1 + volumePct / 100)),
+    liquidCapacityL: type.capacity.liquidCapacityL === undefined
+      ? undefined
+      : Math.max(1, type.capacity.liquidCapacityL * (1 + volumePct / 100)),
   };
   location.environment = {
     ...type.environment,
@@ -108,13 +116,13 @@ function refreshBuiltStorageProfile(
 }
 
 export function createStorageSystemState(): StorageSystemState {
-  return { version: 2, locations: [createGroundLocation(CAMP_POI_ID)], alerts: [], haulJobs: [] };
+  return { version: 3, locations: [createGroundLocation(CAMP_POI_ID)], alerts: [], haulJobs: [] };
 }
 
 export function ensureStorageSystem(state: GameState): StorageSystemState {
   state.poiStorages ||= {};
   state.storageSystem ||= createStorageSystemState();
-  state.storageSystem.version = Math.max(2, state.storageSystem.version || 1);
+  state.storageSystem.version = Math.max(3, state.storageSystem.version || 1);
   state.storageSystem.locations ||= [];
   state.storageSystem.alerts ||= [];
   state.storageSystem.haulJobs ||= [];
@@ -157,8 +165,6 @@ export function ensureStorageSystem(state: GameState): StorageSystemState {
     state.storageSystem.locations.push(created);
   }
 
-  // Existing POI stock remains in the canonical inventory used by production;
-  // only its physical location metadata is migrated.
   for (const [poiId, inventory] of Object.entries(state.poiStorages)) {
     const fallbackId = groundLocationId(poiId);
     for (const item of inventory.items || []) {
@@ -193,24 +199,117 @@ export function getStorageLocationItems(state: GameState, locationId: string): I
   return (state.poiStorages?.[location.poiId]?.items || []).filter(item => item.storageLocationId === locationId);
 }
 
+function isLiquidItem(item: InventoryItem): boolean {
+  const def = ITEMS_DATABASE[item.itemId];
+  return Boolean(def && inferStorageForm(def) === 'liquid');
+}
+
+export function getItemLiquidLiters(item: InventoryItem, quantity = item.quantity): number {
+  const def = ITEMS_DATABASE[item.itemId];
+  if (!def || inferStorageForm(def) !== 'liquid' || item.quantity <= 0 || quantity <= 0) return 0;
+  const total = item.liquidLiters ?? def.volume * item.quantity;
+  return Math.max(0, total * Math.min(1, quantity / item.quantity));
+}
+
+function storageLiquidLiters(items: InventoryItem[]): number {
+  return items.reduce((sum, item) => sum + getItemLiquidLiters(item), 0);
+}
+
 export function summarizeStorageLocation(state: GameState, locationId: string): StorageLocationSummary | null {
   const location = state.storageSystem?.locations.find(candidate => candidate.id === locationId);
   if (!location) return null;
   const items = getStorageLocationItems(state, locationId);
   const occupancy = calculateInventoryOccupancy(items);
+  const usedLiquidL = storageLiquidLiters(items);
   const weightPct = location.capacity.maxWeightKg > 0 ? occupancy.weight / location.capacity.maxWeightKg : 1;
   const volumePct = location.capacity.maxVolumeL > 0 ? occupancy.volume / location.capacity.maxVolumeL : 1;
+  const liquidPct = location.capacity.liquidCapacityL !== undefined && location.capacity.liquidCapacityL > 0
+    ? usedLiquidL / location.capacity.liquidCapacityL
+    : 0;
   const reservedUnits = items.reduce((sum, item) => sum + (item.reservedQuantity || 0), 0);
   const totalUnits = items.reduce((sum, item) => sum + item.quantity, 0);
   return {
     location,
     usedWeightKg: occupancy.weight,
     usedVolumeL: occupancy.volume,
-    usedPercent: Math.round(Math.max(weightPct, volumePct) * 100),
+    usedLiquidL,
+    usedPercent: Math.round(Math.max(weightPct, volumePct, liquidPct) * 100),
     itemStacks: items.length,
     availableUnits: Math.max(0, totalUnits - reservedUnits),
     reservedUnits,
-    isFull: occupancy.weight >= location.capacity.maxWeightKg - 0.001 || occupancy.volume >= location.capacity.maxVolumeL - 0.001,
+    isFull:
+      occupancy.weight >= location.capacity.maxWeightKg - 0.001 ||
+      occupancy.volume >= location.capacity.maxVolumeL - 0.001 ||
+      (location.capacity.liquidCapacityL !== undefined && usedLiquidL >= location.capacity.liquidCapacityL - 0.001),
+  };
+}
+
+function preservationScore(location: StorageLocation): number {
+  const condition = clamp(location.condition) / 100;
+  const environment = location.environment;
+  return clamp((
+    environment.moistureProtection * 0.24 +
+    environment.rainProtection * 0.14 +
+    environment.pestProtection * 0.18 +
+    environment.contaminationProtection * 0.22 +
+    environment.temperatureBuffer * 0.14 +
+    environment.ventilation * 0.08
+  ) * Math.max(0.2, condition));
+}
+
+export function summarizeStorageNetwork(state: GameState, poiId?: string): StorageNetworkSummary {
+  const system = ensureStorageSystem(state);
+  const locations = system.locations.filter(location => !poiId || location.poiId === poiId);
+  const locationIds = new Set(locations.map(location => location.id));
+  let totalWeightCapacityKg = 0;
+  let usedWeightKg = 0;
+  let totalVolumeCapacityL = 0;
+  let usedVolumeL = 0;
+  let totalLiquidCapacityL = 0;
+  let usedLiquidL = 0;
+  let groundCacheUnits = 0;
+  let protectedUnits = 0;
+  let reservedUnits = 0;
+  let preservation = 0;
+
+  for (const location of locations) {
+    const summary = summarizeStorageLocation(state, location.id);
+    if (!summary) continue;
+    totalWeightCapacityKg += location.capacity.maxWeightKg;
+    totalVolumeCapacityL += location.capacity.maxVolumeL;
+    totalLiquidCapacityL += location.capacity.liquidCapacityL || 0;
+    usedWeightKg += summary.usedWeightKg;
+    usedVolumeL += summary.usedVolumeL;
+    usedLiquidL += summary.usedLiquidL;
+    reservedUnits += summary.reservedUnits;
+    const totalUnits = getStorageLocationItems(state, location.id).reduce((sum, item) => sum + item.quantity, 0);
+    if (location.isGroundCache) groundCacheUnits += totalUnits;
+    else protectedUnits += totalUnits;
+    preservation += preservationScore(location);
+  }
+
+  const relevantHauls = system.haulJobs.filter(job =>
+    job.status !== 'completed' && (locationIds.has(job.sourceLocationId) || locationIds.has(job.targetLocationId))
+  );
+  const alertCount = system.alerts.filter(alert => locationIds.has(alert.locationId)).length;
+
+  return {
+    poiId,
+    locationCount: locations.length,
+    protectedLocationCount: locations.filter(location => !location.isGroundCache).length,
+    totalWeightCapacityKg,
+    usedWeightKg,
+    totalVolumeCapacityL,
+    usedVolumeL,
+    totalLiquidCapacityL,
+    usedLiquidL,
+    groundCacheUnits,
+    protectedUnits,
+    reservedUnits,
+    activeHauls: relevantHauls.length,
+    blockedHauls: relevantHauls.filter(job => job.status === 'blocked').length,
+    alertCount,
+    averagePreservationScore: locations.length ? Math.round(preservation / locations.length) : 0,
   };
 }
 
@@ -245,19 +344,43 @@ export function canStoreItemInLocation(
 ): StorageAcceptanceResult {
   const location = state.storageSystem?.locations.find(candidate => candidate.id === locationId);
   const def = ITEMS_DATABASE[item.itemId];
-  if (!location || !def) return { accepted: false, maxAcceptableQuantity: 0, reasons: ['Nơi chứa hoặc vật phẩm không hợp lệ'], remainingWeightKg: 0, remainingVolumeL: 0 };
+  if (!location || !def) {
+    return {
+      accepted: false,
+      maxAcceptableQuantity: 0,
+      reasons: ['Nơi chứa hoặc vật phẩm không hợp lệ'],
+      remainingWeightKg: 0,
+      remainingVolumeL: 0,
+      remainingLiquidL: 0,
+    };
+  }
 
   const summary = summarizeStorageLocation(state, locationId);
   const remainingWeightKg = Math.max(0, location.capacity.maxWeightKg - (summary?.usedWeightKg || 0));
   const remainingVolumeL = Math.max(0, location.capacity.maxVolumeL - (summary?.usedVolumeL || 0));
+  const remainingLiquidL = location.capacity.liquidCapacityL === undefined
+    ? undefined
+    : Math.max(0, location.capacity.liquidCapacityL - (summary?.usedLiquidL || 0));
   const maxByWeight = def.weight > 0 ? Math.floor((remainingWeightKg + 1e-6) / def.weight) : requestedQuantity;
   const maxByVolume = def.volume > 0 ? Math.floor((remainingVolumeL + 1e-6) / def.volume) : requestedQuantity;
+  const liquidPerUnit = item.quantity > 0 ? getItemLiquidLiters(item, item.quantity) / item.quantity : def.volume;
+  const maxByLiquid = remainingLiquidL === undefined || !isLiquidItem(item)
+    ? requestedQuantity
+    : liquidPerUnit > 0 ? Math.floor((remainingLiquidL + 1e-6) / liquidPerUnit) : requestedQuantity;
   const rule = location.policy.stockRules.find(entry => entry.itemId === item.itemId);
   const byRule = rule?.maxQuantity === undefined ? requestedQuantity : Math.max(0, rule.maxQuantity - countItemAtLocation(state, location.id, item.itemId));
-  const maxAcceptableQuantity = Math.max(0, Math.min(requestedQuantity, maxByWeight, maxByVolume, byRule, getAvailableInventoryItemQuantity(item)));
+  const maxAcceptableQuantity = Math.max(0, Math.min(
+    requestedQuantity,
+    maxByWeight,
+    maxByVolume,
+    maxByLiquid,
+    byRule,
+    getAvailableInventoryItemQuantity(item),
+  ));
   const reasons = itemPolicyProblems(state, location, item, Math.max(1, maxAcceptableQuantity));
   if (maxByWeight <= 0) reasons.push('Không đủ tải trọng còn lại');
   if (maxByVolume <= 0) reasons.push('Không đủ dung tích còn lại');
+  if (maxByLiquid <= 0) reasons.push('Bồn không còn đủ dung tích chất lỏng');
   if (byRule <= 0) reasons.push('Đã đạt giới hạn stock policy');
   return {
     accepted: reasons.length === 0 && maxAcceptableQuantity > 0,
@@ -265,6 +388,7 @@ export function canStoreItemInLocation(
     reasons: [...new Set(reasons)],
     remainingWeightKg,
     remainingVolumeL,
+    remainingLiquidL,
   };
 }
 
@@ -363,47 +487,109 @@ export function getDynamicStorageSlotCount(itemStackCount: number, columns: numb
   return Math.max(safeColumns, (occupiedRows + 1) * safeColumns);
 }
 
+function hasAnyTag(item: InventoryItem, tags: string[]): boolean {
+  const def = ITEMS_DATABASE[item.itemId];
+  return Boolean(def?.tags.some(tag => tags.includes(tag)));
+}
+
+function isOrganicItem(item: InventoryItem): boolean {
+  const def = ITEMS_DATABASE[item.itemId];
+  if (!def) return false;
+  if (def.category === 'food' || def.category === 'medicine' || def.category === 'seed') return true;
+  return def.tags.some(tag => ['organic', 'wood', 'leaf', 'fiber', 'bark', 'bamboo', 'food', 'meat', 'plant'].includes(tag));
+}
+
+function isCorrodibleItem(item: InventoryItem): boolean {
+  return hasAnyTag(item, ['metal', 'iron', 'steel', 'copper', 'aluminum', 'aluminium']);
+}
+
+function updateStoredItemEnvironment(
+  state: GameState,
+  location: StorageLocation,
+  item: InventoryItem,
+  deltaGameMinutes: number,
+  alerts: StorageSystemState['alerts'],
+): void {
+  const def = ITEMS_DATABASE[item.itemId];
+  if (!def) return;
+  const conditionRatio = Math.max(0.15, location.condition / 100);
+  const moistureProtection = location.environment.moistureProtection * conditionRatio;
+  const pestProtection = location.environment.pestProtection * conditionRatio;
+  const contaminationProtection = location.environment.contaminationProtection * conditionRatio;
+  const temperatureBuffer = location.environment.temperatureBuffer * conditionRatio;
+  const ventilation = location.environment.ventilation * conditionRatio;
+  const preservationMultiplier = Math.max(0.34, 1.16 - moistureProtection * 0.0032 - pestProtection * 0.0014 - temperatureBuffer * 0.0022);
+
+  const targetMoisture = Math.max(4, state.weather.humidityPercent * (1 - moistureProtection / 135));
+  const currentMoisture = item.moisture ?? targetMoisture;
+  item.moisture = clamp(currentMoisture + (targetMoisture - currentMoisture) * Math.min(1, deltaGameMinutes / 180));
+
+  const pestPressure = Math.max(0, 35 - pestProtection);
+  item.pestDamage = clamp((item.pestDamage || 0) + pestPressure * deltaGameMinutes / 30000);
+
+  const contaminationPressure = Math.max(0, 42 - contaminationProtection) + (item.pestDamage || 0) * 0.08;
+  const contaminationRecovery = contaminationProtection > 70 ? (contaminationProtection - 70) * deltaGameMinutes / 90000 : 0;
+  item.contamination = clamp((item.contamination || 0) + contaminationPressure * deltaGameMinutes / 35000 - contaminationRecovery);
+
+  if (isOrganicItem(item)) {
+    const wetPressure = Math.max(0, (item.moisture || 0) - 58);
+    const stagnantPressure = Math.max(0, 42 - ventilation);
+    const moldGrowth = (wetPressure * 0.72 + stagnantPressure * 0.28 + (item.contamination || 0) * 0.12) * deltaGameMinutes / 18000;
+    const moldRecovery = item.moisture < 42 && ventilation > 60 ? (ventilation - 60) * deltaGameMinutes / 45000 : 0;
+    item.mold = clamp((item.mold || 0) + moldGrowth - moldRecovery);
+  } else {
+    item.mold = Math.max(0, (item.mold || 0) - deltaGameMinutes / 6000);
+  }
+
+  if (isCorrodibleItem(item)) {
+    const corrosionPressure = Math.max(0, (item.moisture || 0) - 48) + Math.max(0, state.weather.humidityPercent - 72) * 0.35;
+    item.corrosion = clamp((item.corrosion || 0) + corrosionPressure * deltaGameMinutes / 24000);
+    if (item.condition !== undefined && item.conditionMax && (item.corrosion || 0) > 60) {
+      item.condition = Math.max(0, item.condition - ((item.corrosion || 0) - 60) * deltaGameMinutes / 90000);
+    }
+  }
+
+  if (def.category === 'medicine') {
+    item.medicinePotency ??= 100;
+    const heatPressure = Math.max(0, state.weather.temperatureC - 24) * (1 - temperatureBuffer / 125);
+    const humidityPressure = Math.max(0, (item.moisture || 0) - 45) * 0.16;
+    const dirtyPressure = (item.contamination || 0) * 0.08;
+    const potencyLoss = (0.22 + heatPressure * 0.08 + humidityPressure + dirtyPressure) * deltaGameMinutes / 1440;
+    item.medicinePotency = clamp(item.medicinePotency - potencyLoss);
+  }
+
+  const moldSpoilage = 1 + (item.mold || 0) / 95;
+  item.spoilageMultiplier = preservationMultiplier * (1 + (item.contamination || 0) / 240) * moldSpoilage;
+
+  if (def.freshnessMaxDays && item.freshness !== undefined) {
+    const analysis = analyzeItemSpoilage(item, def, state);
+    if (analysis) item.freshness = Math.max(0, item.freshness - (analysis.effectiveDailyRate / 1440) * deltaGameMinutes);
+    if (item.freshness <= 0) {
+      item.itemId = 'ITEM_ORGANIC_ROT';
+      item.freshness = undefined;
+      item.spoilageMultiplier = undefined;
+      item.medicinePotency = undefined;
+      alerts.push({ id: `spoil_${location.id}_${item.instanceId}`, locationId: location.id, severity: 'warning', message: `${def.name} đã phân hủy trong ${location.name}.` });
+    }
+  }
+}
+
 export function tickStorageSimulation(state: GameState, deltaGameMinutes: number): void {
   const system = ensureStorageSystem(state);
   const alerts: StorageSystemState['alerts'] = [];
 
   for (const location of system.locations) {
-    const conditionRatio = Math.max(0.15, location.condition / 100);
-    const moistureProtection = location.environment.moistureProtection * conditionRatio;
-    const pestProtection = location.environment.pestProtection * conditionRatio;
-    const contaminationProtection = location.environment.contaminationProtection * conditionRatio;
-    const temperatureBuffer = location.environment.temperatureBuffer * conditionRatio;
-    const preservationMultiplier = Math.max(0.36, 1.16 - moistureProtection * 0.0032 - pestProtection * 0.0014 - temperatureBuffer * 0.0022);
-
     const items = getStorageLocationItems(state, location.id);
-    for (const item of items) {
-      const def = ITEMS_DATABASE[item.itemId];
-      if (!def) continue;
-      const targetMoisture = Math.max(4, state.weather.humidityPercent * (1 - moistureProtection / 135));
-      const currentMoisture = item.moisture ?? targetMoisture;
-      item.moisture = clamp(currentMoisture + (targetMoisture - currentMoisture) * Math.min(1, deltaGameMinutes / 180));
-      item.pestDamage = clamp((item.pestDamage || 0) + Math.max(0, 35 - pestProtection) * deltaGameMinutes / 30000);
-      const contaminationPressure = Math.max(0, 42 - contaminationProtection) + (item.pestDamage || 0) * 0.08;
-      item.contamination = clamp((item.contamination || 0) + contaminationPressure * deltaGameMinutes / 35000);
-      item.spoilageMultiplier = preservationMultiplier * (1 + (item.contamination || 0) / 240);
-
-      if (def.freshnessMaxDays && item.freshness !== undefined) {
-        const analysis = analyzeItemSpoilage(item, def, state);
-        if (analysis) item.freshness = Math.max(0, item.freshness - (analysis.effectiveDailyRate / 1440) * deltaGameMinutes);
-        if (item.freshness <= 0) {
-          item.itemId = 'ITEM_ORGANIC_ROT';
-          item.freshness = undefined;
-          item.spoilageMultiplier = undefined;
-          alerts.push({ id: `spoil_${location.id}_${item.instanceId}`, locationId: location.id, severity: 'warning', message: `${def.name} đã phân hủy trong ${location.name}.` });
-        }
-      }
-    }
+    for (const item of items) updateStoredItemEnvironment(state, location, item, deltaGameMinutes, alerts);
 
     const summary = summarizeStorageLocation(state, location.id);
-    if (summary?.isFull) alerts.push({ id: `full_${location.id}`, locationId: location.id, severity: 'warning', message: `${location.name} đã đầy dung tích hoặc tải trọng.` });
+    if (summary?.isFull) alerts.push({ id: `full_${location.id}`, locationId: location.id, severity: 'warning', message: `${location.name} đã đầy dung tích vật lý.` });
     if (items.some(item => (item.moisture || 0) > 75)) alerts.push({ id: `wet_${location.id}`, locationId: location.id, severity: 'warning', message: `${location.name} có vật phẩm đang quá ẩm.` });
-    if (items.some(item => (item.contamination || 0) > 55)) alerts.push({ id: `dirty_${location.id}`, locationId: location.id, severity: 'warning', message: `${location.name} có vật phẩm đang có nguy cơ nhiễm bẩn cao.` });
+    if (items.some(item => (item.contamination || 0) > CONTAMINATION_ALERT)) alerts.push({ id: `dirty_${location.id}`, locationId: location.id, severity: 'warning', message: `${location.name} có vật phẩm có nguy cơ nhiễm bẩn cao.` });
+    if (items.some(item => (item.mold || 0) > MOLD_ALERT)) alerts.push({ id: `mold_${location.id}`, locationId: location.id, severity: 'danger', message: `${location.name} đang xuất hiện nấm mốc đáng kể.` });
+    if (items.some(item => (item.corrosion || 0) > CORROSION_ALERT)) alerts.push({ id: `rust_${location.id}`, locationId: location.id, severity: 'warning', message: `${location.name} có vật dụng kim loại đang bị ăn mòn.` });
+    if (items.some(item => item.medicinePotency !== undefined && item.medicinePotency < MEDICINE_POTENCY_ALERT)) alerts.push({ id: `medicine_${location.id}`, locationId: location.id, severity: 'warning', message: `Dược phẩm trong ${location.name} đang suy giảm hoạt tính.` });
   }
 
-  system.alerts = alerts.slice(0, 20);
+  system.alerts = alerts.slice(0, 30);
 }
