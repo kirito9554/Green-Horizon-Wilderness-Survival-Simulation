@@ -390,13 +390,13 @@ function getFastGateAbortReason(baseline: PredatorCheckpoint, checkpoint: Predat
   if (checkpoint.year !== 1 || baseline.predatorPopulation <= 0) return undefined;
   const survivalShare = checkpoint.predatorPopulation / baseline.predatorPopulation;
   const speciesShare = checkpoint.species.length / Math.max(1, baseline.species.length);
-  // P4 is explicitly allowed to shed an initially over-dense predator cohort via
-  // dispersal. Treat only a near-total numerical collapse as a fail-fast event;
-  // guild loss and critical hunger/chronic pressure remain independent hard gates.
+  // P4 may legitimately shed an initially over-dense predator cohort via dispersal,
+  // but a one-year state dominated by chronic starvation is already sufficient to
+  // reject the tuning candidate without spending minutes on 5y/20y projections.
   if (survivalShare < 0.1) return `1y predator survival fell to ${round3(survivalShare * 100)}% of baseline`;
   if (speciesShare < 0.5) return `1y surviving predator guild fell to ${round3(speciesShare * 100)}% of baseline species`;
-  if (checkpoint.populationWeightedHunger >= 90 && checkpoint.chronicStressDays >= 60) {
-    return `1y predators remain critically hungry (${checkpoint.populationWeightedHunger}) under chronic stress (${checkpoint.chronicStressDays}d)`;
+  if (checkpoint.chronicStressDays >= 90 && (checkpoint.populationWeightedHunger >= 80 || survivalShare < 0.3)) {
+    return `1y predators remain pathologically stressed: survival=${round3(survivalShare * 100)}%, hunger=${checkpoint.populationWeightedHunger}, chronic=${checkpoint.chronicStressDays}d`;
   }
   return undefined;
 }
