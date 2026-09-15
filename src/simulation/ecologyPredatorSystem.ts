@@ -61,7 +61,7 @@ function equivalentPredatorCount(population: WildPredatorPopulation): number {
  */
 export function getPredatorEnergyReserveDays(species: WildPredatorSpeciesDefinition): number {
   const expectedKillIntervalDays = 1 / Math.max(0.03, species.maxKillsPerAdultPerDay);
-  return round3(Math.max(1.75, Math.min(14, expectedKillIntervalDays * 0.9)));
+  return round3(Math.max(2.25, Math.min(14, expectedKillIntervalDays * 1.1)));
 }
 
 function predatorEnergyCapacityKg(population: WildPredatorPopulation, species: WildPredatorSpeciesDefinition): number {
@@ -623,9 +623,9 @@ function tickPredatorPopulation(state: GameState, population: WildPredatorPopula
   const energyCoverage = applyPredatorEnergyAccounting(population, species, elapsedDays, huntResult.edibleKg);
   const waterRatio = clamp01(subarea.environment.waterAccess / Math.max(20, species.dailyWaterNeed));
 
-  population.hungerStress = clamp(population.hungerStress + (1 - energyCoverage) * elapsedDays * 62 - energyCoverage * elapsedDays * 23);
+  population.hungerStress = clamp(population.hungerStress + (1 - energyCoverage) * elapsedDays * 24 - energyCoverage * elapsedDays * 28);
   population.waterStress = clamp(population.waterStress + (1 - waterRatio) * elapsedDays * 54 - waterRatio * elapsedDays * 20);
-  population.bodyCondition = clamp(population.bodyCondition + (energyCoverage - 0.7) * elapsedDays * 10 - population.waterStress / 100 * elapsedDays * 2.5);
+  population.bodyCondition = clamp(population.bodyCondition + (energyCoverage - 0.7) * elapsedDays * 5.5 - population.waterStress / 100 * elapsedDays * 2.5);
   population.averageHealth = clamp(population.averageHealth + (population.bodyCondition / 100 - 0.58) * elapsedDays * 3 - (population.hungerStress + population.waterStress) / 200 * elapsedDays * 2.6);
 
   const humanExcess = Math.max(0, subarea.disturbance.humanPressure - species.disturbanceTolerance);
