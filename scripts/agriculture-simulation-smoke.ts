@@ -120,12 +120,14 @@ function testAgricultureMigrationSurvivesLatestSchema(): void {
   const legacy = freshState();
   legacy.saveVersion = 10;
   delete legacy.agricultureSystem;
+  delete legacy.hydrologySystem;
   const migrated = migrateGameState(legacy);
-  assert.equal(LATEST_SAVE_VERSION, 13, 'world ecology foundation must own save version 13');
-  assert.equal(migrated.saveVersion, 13, 'older saves must reach the latest schema after agriculture initialization');
+  assert.equal(LATEST_SAVE_VERSION, 14, 'world hydrology foundation must own save version 14');
+  assert.equal(migrated.saveVersion, 14, 'older saves must reach the latest schema after agriculture initialization');
   assert.ok(migrated.agricultureSystem, 'migration must initialize persistent agriculture state');
   assert.deepEqual(migrated.agricultureSystem?.plants, [], 'migration must not fabricate living entities for old saves');
   assert.ok(migrated.ecologySystem, 'latest schema must add lazy world ecology without changing agriculture entities');
+  assert.ok(migrated.hydrologySystem, 'latest schema must add lazy world hydrology without changing agriculture entities');
 }
 
 function main(): void {
