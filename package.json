@@ -23,7 +23,8 @@
     "test:ecology-predators": "tsx scripts/ecology-predator-smoke.ts",
     "test:hydrology": "tsx scripts/hydrology-simulation-smoke.ts",
     "test:hydrology-surface": "tsx scripts/hydrology-surface-water-smoke.ts",
-    "test:hydrology-management": "tsx scripts/hydrology-water-management-smoke.ts"
+    "test:hydrology-management": "tsx scripts/hydrology-water-management-smoke.ts",
+    "test:hydrology-living": "tsx scripts/hydrology-living-integration-smoke.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

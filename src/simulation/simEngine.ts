@@ -37,6 +37,11 @@ import { createWorldHydrologyState, tickWorldHydrology } from './hydrologySystem
 import { tickSurfaceWaterHydrology } from './hydrologySurfaceWaterSystem';
 import { tickWaterManagement } from './waterManagementSystem';
 import {
+  finalizeLivingHydrologyState,
+  prepareLivingHydrologyState,
+  syncLivingWaterDemands,
+} from './livingHydrologyBridge';
+import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
 } from './productionWorkstationCoordinator';
@@ -77,6 +82,7 @@ export * from './ecologyPredatorSystem';
 export * from './hydrologySystem';
 export * from './hydrologySurfaceWaterSystem';
 export * from './waterManagementSystem';
+export * from './livingHydrologyBridge';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 const rockyShoreGroundStorageId = 'storage_ground_AREA_FISHING_LAGOON';
@@ -190,12 +196,15 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickStructureLifecycle(next, deltaGameMinutes);
   tickStructureWorkRuntime(next);
 
-  // Natural hydrology resolves first. Player infrastructure then withdraws,
-  // stores, diverts, drains or irrigates that same water before any living
-  // system observes the world, so downstream flow and soil water stay shared.
+  // Natural hydrology resolves first. Living systems publish demand into the
+  // same water network before player infrastructure allocates any volume.
+  // Agriculture/Ecology then receive compatibility mirrors derived from that
+  // final physical state instead of maintaining independent rainfall worlds.
   tickWorldHydrology(next, deltaGameMinutes);
   tickSurfaceWaterHydrology(next, deltaGameMinutes);
+  syncLivingWaterDemands(next);
   tickWaterManagement(next, deltaGameMinutes);
+  prepareLivingHydrologyState(next, deltaGameMinutes);
 
   tickStorageSimulation(next, deltaGameMinutes);
   tickStorageHauling(next, deltaGameSeconds);
@@ -208,6 +217,7 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
 
   tickAgriculture(next, deltaGameMinutes, deltaGameSeconds);
   tickWorldEcology(next, deltaGameMinutes);
+  finalizeLivingHydrologyState(next);
   tickWildFauna(next, deltaGameMinutes);
   tickWildPredators(next, deltaGameMinutes);
 
