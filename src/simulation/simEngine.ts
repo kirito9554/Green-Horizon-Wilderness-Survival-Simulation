@@ -31,6 +31,7 @@ import { tickStorageHauling } from './storageHaulSystem';
 import { createAgricultureSystemState, tickAgriculture } from './agricultureSystem';
 import { createWorldEcologyState, tickWorldEcology } from './ecologySystem';
 import { tickWildFauna } from './ecologyFaunaSystem';
+import { tickWildPredators } from './ecologyPredatorSystem';
 import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
@@ -68,6 +69,7 @@ export * from './storageRouteSystem';
 export * from './agricultureSystem';
 export * from './ecologySystem';
 export * from './ecologyFaunaSystem';
+export * from './ecologyPredatorSystem';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 const rockyShoreGroundStorageId = 'storage_ground_AREA_FISHING_LAGOON';
@@ -189,11 +191,12 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickUpgradeSystem(next, deltaGameSeconds);
   tickCraftingAndResearch(next, deltaGameSeconds);
 
-  // Agriculture owns managed living entities; ecology owns the surrounding wild world.
-  // Flora/habitat advances first, then fauna consumes that same physical biological state.
+  // Managed agriculture changes the physical substrate first. Wild flora then regrows,
+  // prey consumes it, and predators resolve against the surviving real prey populations.
   tickAgriculture(next, deltaGameMinutes, deltaGameSeconds);
   tickWorldEcology(next, deltaGameMinutes);
   tickWildFauna(next, deltaGameMinutes);
+  tickWildPredators(next, deltaGameMinutes);
 
   if (next.logs.length > 35) next.logs = next.logs.slice(0, 35);
   return next;
