@@ -284,24 +284,14 @@ function biomassFor(population: WildAquaticPopulation, species: WildAquaticSpeci
 }
 
 function removePreyIndividuals(population: WildAquaticPopulation, species: WildAquaticSpeciesDefinition, count: number): number {
-  let remaining = Math.min(Math.max(0, count), population.population);
-  if (remaining <= 0) return 0;
+  const removable = Math.min(Math.max(0, count), population.population);
+  if (removable <= 0) return 0;
   const beforeBiomass = population.biomassKg;
-  const juvenileTake = Math.min(population.juveniles, Math.ceil(remaining * 0.55));
-  population.juveniles -= juvenileTake;
-  remaining -= juvenileTake;
-  const oldTake = Math.min(population.old, Math.ceil(remaining * 0.18));
-  population.old -= oldTake;
-  remaining -= oldTake;
-  const adultTake = Math.min(population.adults, remaining);
-  population.adults -= adultTake;
-  remaining -= adultTake;
-  if (remaining > 0) {
-    const extraOld = Math.min(population.old, remaining);
-    population.old -= extraOld;
-    remaining -= extraOld;
-  }
-  population.population = population.juveniles + population.adults + population.old;
+  const share = clamp01(removable / Math.max(0.001, population.population));
+  population.juveniles = round3(Math.max(0, population.juveniles * (1 - share)));
+  population.adults = round3(Math.max(0, population.adults * (1 - share)));
+  population.old = round3(Math.max(0, population.old * (1 - share)));
+  population.population = round3(population.juveniles + population.adults + population.old);
   population.biomassKg = biomassFor(population, species);
   return round3(Math.max(0, beforeBiomass - population.biomassKg));
 }
@@ -333,18 +323,23 @@ function consumePrey(
   let target = requestedKg * functionalResponse;
   let consumed = 0;
   let killed = 0;
-  const maxKillFraction = Math.min(0.6, Math.max(0.03, days * 0.07));
+  // Predation is a rate process, not a per-tick allowance. The previous 3%
+  // minimum meant a 60-minute simulation could remove up to 3% of a prey
+  // population 24 times per day while a 6-hour step only received that same
+  // allowance four times. An exponential daily hazard composes consistently
+  // across different timestep sizes.
+  const maxKillFraction = Math.min(0.6, Math.max(0, 1 - Math.exp(-0.07 * days)));
 
   for (const entry of candidates) {
     if (target <= 0.0001) break;
     const prey = entry.prey;
-    const avgWeight = prey.biomassKg / Math.max(1, prey.population);
+    const avgWeight = prey.biomassKg / Math.max(0.001, prey.population);
     const refugeCount = Math.max(2, Math.ceil(prey.population * 0.08));
-    const removable = Math.max(0, Math.min(prey.population - refugeCount, Math.floor(prey.population * maxKillFraction)));
+    const removable = Math.max(0, Math.min(prey.population - refugeCount, prey.population * maxKillFraction));
     if (removable <= 0 || avgWeight <= 0) continue;
     const preferenceShare = entry.prey.biomassKg * entry.weight / Math.max(0.001, weightedPreyBiomass);
     const desiredBiomass = Math.min(target, requestedKg * Math.max(0.12, preferenceShare));
-    const count = Math.min(removable, Math.max(0, Math.ceil(desiredBiomass / avgWeight)));
+    const count = Math.min(removable, Math.max(0, desiredBiomass / avgWeight));
     if (count <= 0) continue;
     const killedBiomass = removePreyIndividuals(prey, entry.species, count);
     const edible = killedBiomass * 0.78;
@@ -354,7 +349,7 @@ function consumePrey(
     target -= edible;
     depositAquaticCarrion(state, predator.occupiedNodeIds, waste * 0.35, waste * 0.65);
   }
-  return { consumedKg: round3(consumed), killed };
+  return { consumedKg: round3(consumed), killed: round3(killed) };
 }
 
 export function feedAquaticPopulation(
