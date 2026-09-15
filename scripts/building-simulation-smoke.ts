@@ -288,8 +288,9 @@ function testLatestMigrationCreatesSpatialAndStructureWorkState(): void {
   const legacy = JSON.parse(JSON.stringify(INITIAL_GAME_STATE)) as GameState;
   legacy.saveVersion = 5;
   delete legacy.buildingSimulation;
+  delete legacy.hydrologySystem;
   const migrated = migrateGameState(legacy);
-  assert.equal(migrated.saveVersion, 13);
+  assert.equal(migrated.saveVersion, 14);
   assert.ok(migrated.buildingSimulation?.worldSeed, 'migration must create a persistent world seed');
   assert.ok(migrated.buildingSimulation?.gridsByPoiId.AREA_CAMP_CLEARING, 'migration should materialize the camp grid');
   assert.ok(Array.isArray(migrated.buildingSimulation?.constructionJobs), 'migration must initialize persistent construction queue');
@@ -298,6 +299,8 @@ function testLatestMigrationCreatesSpatialAndStructureWorkState(): void {
   assert.ok(migrated.storageSystem?.locations.length, 'latest migration should also preserve the storage schema layered over POI stock');
   assert.ok(migrated.agricultureSystem, 'latest migration should initialize agriculture without fabricating entities');
   assert.ok(migrated.ecologySystem, 'latest migration should initialize lazy world ecology state');
+  assert.ok(migrated.hydrologySystem, 'latest migration should initialize lazy world hydrology state');
+  assert.equal(Object.keys(migrated.hydrologySystem!.regionsByPoiId).length, 0, 'migration must not fabricate hydrology regions');
 }
 
 function main(): void {
