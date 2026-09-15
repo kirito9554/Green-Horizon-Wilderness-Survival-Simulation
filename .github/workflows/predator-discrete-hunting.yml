@@ -1,0 +1,40 @@
+name: Predator Discrete Hunting
+
+on:
+  pull_request:
+    branches:
+      - feature/predator-long-run-diagnostics
+    paths:
+      - 'src/types/ecologySimulation.ts'
+      - 'src/simulation/ecologyPredatorSystem.ts'
+      - 'src/simulation/predatorDiscreteHuntingSystem.ts'
+      - 'src/simulation/predatorPressureResponseSystem.ts'
+      - 'scripts/predator-energy-throughput-probe.ts'
+      - '.github/workflows/predator-discrete-hunting.yml'
+
+concurrency:
+  group: predator-discrete-hunting-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Run deterministic 1-year predator probe
+        run: npx tsx scripts/predator-energy-throughput-probe.ts --out=artifacts/predator-discrete-hunting
+      - name: Upload predator probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predator-discrete-hunting-report
+          path: artifacts/predator-discrete-hunting/predator-energy-throughput-report.json
+          if-no-files-found: warn
