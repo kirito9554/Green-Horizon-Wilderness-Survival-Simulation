@@ -2,6 +2,7 @@ import type { GameState } from '../types';
 import type { HydrologyNode } from '../types/hydrologySimulation';
 import { REGION_HYDROLOGY_PROFILES } from '../data/hydrologyProfiles';
 import { tickAquaticEcologyWithBootstrap } from './aquaticBootstrapSystem';
+import { synchronizeTidalBoundaryForCurrentTime } from './hydrologySurfaceWaterSystem';
 
 /**
  * Hydrology uses small deterministic BuildGrid samples to represent much larger
@@ -167,6 +168,20 @@ function restoreAquaticEcologyScale(state: GameState, snapshots: TemporaryEcolog
   }
 }
 
+function tickAquaticSubstep(state: GameState, deltaGameMinutes: number): void {
+  // The physical surface-water pass may have been run at a coarser cadence than
+  // aquatic ecology. Re-sampling only the reversible tidal boundary here lets
+  // coastal/estuarine species see the tide at each virtual hour without routing
+  // rainfall, baseflow or contaminants twice.
+  synchronizeTidalBoundaryForCurrentTime(state);
+  const snapshots = prepareAquaticEcologyScale(state);
+  try {
+    tickAquaticEcologyWithBootstrap(state, deltaGameMinutes);
+  } finally {
+    restoreAquaticEcologyScale(state, snapshots);
+  }
+}
+
 /**
  * Aquatic populations and food-web resources see an ecological reach volume,
  * not the tiny representative control volume used by the local BuildGrid. The
@@ -174,21 +189,17 @@ function restoreAquaticEcologyScale(state: GameState, snapshots: TemporaryEcolog
  * ecological scale without fabricating water for irrigation or storage.
  *
  * Trophic interactions are integrated at a fixed hourly cadence even when the
- * outer simulation advances by several hours. Without this, a six-hour frame
- * asks predators to satisfy six hours of food demand against one instantaneous
- * food-web stock, while six one-hour frames allow primary production and prey
- * turnover between meals. That made predator survival and species composition
- * strongly timestep-dependent. Virtual game-time substeps keep every aquatic
- * clock (food web, populations and bootstrap/recolonization) on the same cadence
- * without advancing the already-resolved physical hydrology a second time.
+ * outer simulation advances by several hours. Virtual time also re-samples the
+ * reversible tidal boundary at that cadence. Without that second piece, a coarse
+ * six-hour tick replayed six biological hours against one aliased tide snapshot,
+ * which strongly changed lagoon predator survival and species composition.
  */
 export function tickAquaticEcologyAtEnvironmentalScale(state: GameState, deltaGameMinutes: number): void {
-  const snapshots = prepareAquaticEcologyScale(state);
   const finalDay = state.gameTime.day;
   const finalMinuteOfDay = state.gameTime.minuteOfDay;
   try {
     if (deltaGameMinutes <= AQUATIC_INTEGRATION_SUBSTEP_MINUTES) {
-      tickAquaticEcologyWithBootstrap(state, deltaGameMinutes);
+      tickAquaticSubstep(state, deltaGameMinutes);
       return;
     }
 
@@ -198,12 +209,14 @@ export function tickAquaticEcologyAtEnvironmentalScale(state: GameState, deltaGa
     while (cursor + 0.0001 < finalMinute) {
       const nextMinute = Math.min(finalMinute, cursor + AQUATIC_INTEGRATION_SUBSTEP_MINUTES);
       setGameMinute(state, nextMinute);
-      tickAquaticEcologyWithBootstrap(state, nextMinute - cursor);
+      tickAquaticSubstep(state, nextMinute - cursor);
       cursor = nextMinute;
     }
   } finally {
     state.gameTime.day = finalDay;
     state.gameTime.minuteOfDay = finalMinuteOfDay;
-    restoreAquaticEcologyScale(state, snapshots);
+    // Restore the reversible boundary to the true final clock after any virtual
+    // substeps so downstream systems/UI never observe an intermediate tide.
+    synchronizeTidalBoundaryForCurrentTime(state);
   }
 }
