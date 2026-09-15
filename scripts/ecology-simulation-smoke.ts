@@ -119,13 +119,16 @@ function testV12MigrationIsLazy(): void {
   const legacy = fresh('ecology-migration-seed');
   legacy.saveVersion = 12;
   delete legacy.ecologySystem;
+  delete legacy.hydrologySystem;
   const migrated = migrateGameState(legacy);
 
-  assert.equal(LATEST_SAVE_VERSION, 13);
-  assert.equal(migrated.saveVersion, 13);
+  assert.equal(LATEST_SAVE_VERSION, 14);
+  assert.equal(migrated.saveVersion, 14);
   assert.ok(migrated.ecologySystem, 'V13 migration must add persistent ecology state');
   assert.deepEqual(migrated.ecologySystem!.regionsByPoiId, {}, 'migration must not fabricate the whole ecosystem before it is observed');
   assert.equal(migrated.ecologySystem!.plantPopulations.length, 0);
+  assert.ok(migrated.hydrologySystem, 'V14 migration must add the lazy hydrology container');
+  assert.deepEqual(migrated.hydrologySystem!.regionsByPoiId, {}, 'ecology migration test must not accidentally materialize hydrology');
 }
 
 function testRuntimeBootstrapsOnlyStartingLandscape(): void {

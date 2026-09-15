@@ -9,6 +9,7 @@ import '../types/structureMaintenanceSimulation';
 import '../types/storageSimulation';
 import '../types/agricultureSimulation';
 import '../types/ecologySimulation';
+import '../types/hydrologySimulation';
 import { INITIAL_SURVIVORS } from '../data/survivors';
 import { getDefaultResourcePools } from './resourcePools';
 import { advanceTime } from './timeSystem';
@@ -32,6 +33,7 @@ import { createAgricultureSystemState, tickAgriculture } from './agricultureSyst
 import { createWorldEcologyState, tickWorldEcology } from './ecologySystem';
 import { tickWildFauna } from './ecologyFaunaSystem';
 import { tickWildPredators } from './ecologyPredatorSystem';
+import { createWorldHydrologyState, tickWorldHydrology } from './hydrologySystem';
 import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
@@ -70,13 +72,14 @@ export * from './agricultureSystem';
 export * from './ecologySystem';
 export * from './ecologyFaunaSystem';
 export * from './ecologyPredatorSystem';
+export * from './hydrologySystem';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 const rockyShoreGroundStorageId = 'storage_ground_AREA_FISHING_LAGOON';
 const riverGorgeGroundStorageId = 'storage_ground_AREA_WATERFALL_BASIN';
 
 export const INITIAL_GAME_STATE: GameState = {
-  saveVersion: 13,
+  saveVersion: 14,
   campName: 'Canopy Bay Settlement',
   gameTime: { day: 1, minuteOfDay: 510, speed: 1 },
   weather: {
@@ -116,6 +119,7 @@ export const INITIAL_GAME_STATE: GameState = {
   storageSystem: createStorageSystemState(),
   agricultureSystem: createAgricultureSystemState(),
   ecologySystem: createWorldEcologyState(),
+  hydrologySystem: createWorldHydrologyState(),
   poiStorages: {
     AREA_CAMP_CLEARING: {
       maxWeightKg: 120, maxVolumeL: 180,
@@ -182,6 +186,11 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickStructureLifecycle(next, deltaGameMinutes);
   tickStructureWorkRuntime(next);
 
+  // Hydrology runs after physical terrain/structure changes and before every
+  // living system. Agriculture and ecology can therefore consume one shared,
+  // current water state instead of calculating independent moisture worlds.
+  tickWorldHydrology(next, deltaGameMinutes);
+
   tickStorageSimulation(next, deltaGameMinutes);
   tickStorageHauling(next, deltaGameSeconds);
 
@@ -191,8 +200,6 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickUpgradeSystem(next, deltaGameSeconds);
   tickCraftingAndResearch(next, deltaGameSeconds);
 
-  // Managed agriculture changes the physical substrate first. Wild flora then regrows,
-  // prey consumes it, and predators resolve against the surviving real prey populations.
   tickAgriculture(next, deltaGameMinutes, deltaGameSeconds);
   tickWorldEcology(next, deltaGameMinutes);
   tickWildFauna(next, deltaGameMinutes);
