@@ -9,6 +9,7 @@ import '../types/structureMaintenanceSimulation';
 import '../types/storageSimulation';
 import '../types/agricultureSimulation';
 import '../types/ecologySimulation';
+import '../types/aquaticEcology';
 import '../types/hydrologySimulation';
 import { INITIAL_SURVIVORS } from '../data/survivors';
 import { getDefaultResourcePools } from './resourcePools';
@@ -33,6 +34,7 @@ import { createAgricultureSystemState, tickAgriculture } from './agricultureSyst
 import { createWorldEcologyState, tickWorldEcology } from './ecologySystem';
 import { tickWildFauna } from './ecologyFaunaSystem';
 import { tickWildPredators } from './ecologyPredatorSystem';
+import { tickAquaticEcology } from './ecologyAquaticSystem';
 import { createWorldHydrologyState, tickWorldHydrology } from './hydrologySystem';
 import { tickSurfaceWaterHydrology } from './hydrologySurfaceWaterSystem';
 import { tickWaterManagement } from './waterManagementSystem';
@@ -79,6 +81,7 @@ export * from './agricultureSystem';
 export * from './ecologySystem';
 export * from './ecologyFaunaSystem';
 export * from './ecologyPredatorSystem';
+export * from './ecologyAquaticSystem';
 export * from './hydrologySystem';
 export * from './hydrologySurfaceWaterSystem';
 export * from './waterManagementSystem';
@@ -218,6 +221,7 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickAgriculture(next, deltaGameMinutes, deltaGameSeconds);
   tickWorldEcology(next, deltaGameMinutes);
   finalizeLivingHydrologyState(next);
+  tickAquaticEcology(next, deltaGameMinutes);
   tickWildFauna(next, deltaGameMinutes);
   tickWildPredators(next, deltaGameMinutes);
 
