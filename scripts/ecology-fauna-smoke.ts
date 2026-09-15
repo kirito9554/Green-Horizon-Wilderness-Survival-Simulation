@@ -72,7 +72,7 @@ function testHomeRangesStayInsideMacroRegion(): GameState {
 
 function totalFood(state: GameState, subareaId: string): number {
   const pool = getSubareaWildFoodPool(state, subareaId);
-  return Object.values(pool).reduce((sum, value) => sum + value, 0);
+  return (Object.values(pool) as number[]).reduce((sum, value) => sum + value, 0);
 }
 
 function testAnimalsConsumeRealFoodBiomass(): void {
