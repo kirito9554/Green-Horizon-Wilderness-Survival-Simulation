@@ -35,6 +35,7 @@ import { tickWildFauna } from './ecologyFaunaSystem';
 import { tickWildPredators } from './ecologyPredatorSystem';
 import { createWorldHydrologyState, tickWorldHydrology } from './hydrologySystem';
 import { tickSurfaceWaterHydrology } from './hydrologySurfaceWaterSystem';
+import { tickWaterManagement } from './waterManagementSystem';
 import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
@@ -75,6 +76,7 @@ export * from './ecologyFaunaSystem';
 export * from './ecologyPredatorSystem';
 export * from './hydrologySystem';
 export * from './hydrologySurfaceWaterSystem';
+export * from './waterManagementSystem';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 const rockyShoreGroundStorageId = 'storage_ground_AREA_FISHING_LAGOON';
@@ -188,11 +190,12 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickStructureLifecycle(next, deltaGameMinutes);
   tickStructureWorkRuntime(next);
 
-  // First solve rainfall/soil/groundwater/local runoff, then materialize the
-  // connected surface network, floodplain storage and water quality. Living
-  // systems always observe the same post-hydrology state for this game tick.
+  // Natural hydrology resolves first. Player infrastructure then withdraws,
+  // stores, diverts, drains or irrigates that same water before any living
+  // system observes the world, so downstream flow and soil water stay shared.
   tickWorldHydrology(next, deltaGameMinutes);
   tickSurfaceWaterHydrology(next, deltaGameMinutes);
+  tickWaterManagement(next, deltaGameMinutes);
 
   tickStorageSimulation(next, deltaGameMinutes);
   tickStorageHauling(next, deltaGameSeconds);
