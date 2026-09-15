@@ -227,9 +227,11 @@ function applyDispersalAndMortality(
 ): void {
   if (population.population <= 0) return;
 
-  const chronicGate = clamp01((response.chronicStressDays - 20) / 40);
-  const migrationGate = clamp01((population.migrationPressure - 70) / 30);
-  if (chronicGate > 0 && migrationGate > 0 && severity > 0.5) {
+  // Keep dispersal as the primary density response, but place it between the
+  // original over-aggressive P4 rate and the under-dispersing recovery probe.
+  const chronicGate = clamp01((response.chronicStressDays - 14) / 32);
+  const migrationGate = clamp01((population.migrationPressure - 64) / 34);
+  if (chronicGate > 0 && migrationGate > 0 && severity > 0.45) {
     const roamingFactor = 0.65 + clamp01(species.roamingPerDay / 1.2) * 0.55;
     response.dispersalProgress += population.population
       * severity
@@ -237,7 +239,7 @@ function applyDispersalAndMortality(
       * migrationGate
       * roamingFactor
       * elapsedDays
-      * 0.0015;
+      * 0.0024;
     const wholeDispersers = Math.floor(response.dispersalProgress);
     if (wholeDispersers > 0) {
       response.dispersalProgress -= wholeDispersers;
@@ -247,13 +249,13 @@ function applyDispersalAndMortality(
     }
   }
 
-  const chronicMortalityGate = clamp01((response.chronicStressDays - 35) / 50);
-  if (chronicMortalityGate > 0 && severity > 0.65) {
+  const chronicMortalityGate = clamp01((response.chronicStressDays - 28) / 48);
+  if (chronicMortalityGate > 0 && severity > 0.6) {
     population.mortalityProgress += population.population
       * severity
       * chronicMortalityGate
       * elapsedDays
-      * 0.0004;
+      * 0.0005;
   }
 
   recomputePredatorBiomass(population, species);
