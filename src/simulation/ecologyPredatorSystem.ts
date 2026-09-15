@@ -623,9 +623,13 @@ function tickPredatorPopulation(state: GameState, population: WildPredatorPopula
   const energyCoverage = applyPredatorEnergyAccounting(population, species, elapsedDays, huntResult.edibleKg);
   const waterRatio = clamp01(subarea.environment.waterAccess / Math.max(20, species.dailyWaterNeed));
 
-  population.hungerStress = clamp(population.hungerStress + (1 - energyCoverage) * elapsedDays * 24 - energyCoverage * elapsedDays * 28);
+  // Hunger is an acute stress signal, not a second copy of the energy ledger.
+  // Partial coverage still raises pressure, but it does so gradually enough for
+  // intermittent feeders to use their bounded reserve instead of oscillating to
+  // critical hunger after a few imperfect hunting days.
+  population.hungerStress = clamp(population.hungerStress + (1 - energyCoverage) * elapsedDays * 16 - energyCoverage * elapsedDays * 30);
   population.waterStress = clamp(population.waterStress + (1 - waterRatio) * elapsedDays * 54 - waterRatio * elapsedDays * 20);
-  population.bodyCondition = clamp(population.bodyCondition + (energyCoverage - 0.7) * elapsedDays * 5.5 - population.waterStress / 100 * elapsedDays * 2.5);
+  population.bodyCondition = clamp(population.bodyCondition + (energyCoverage - 0.62) * elapsedDays * 4.2 - population.waterStress / 100 * elapsedDays * 2.2);
   population.averageHealth = clamp(population.averageHealth + (population.bodyCondition / 100 - 0.58) * elapsedDays * 3 - (population.hungerStress + population.waterStress) / 200 * elapsedDays * 2.6);
 
   const humanExcess = Math.max(0, subarea.disturbance.humanPressure - species.disturbanceTolerance);
