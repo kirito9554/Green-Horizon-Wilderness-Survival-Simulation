@@ -58,6 +58,7 @@ interface HuntTotals {
   activeOwnedCarcasses: number;
   remainingOwnedCarcassKg: number;
   killsByPreySpecies: Record<string, number>;
+  killsByLifeStage: Partial<Record<'juvenile' | 'adult' | 'old', number>>;
 }
 
 const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value));
@@ -209,6 +210,7 @@ function huntDeltas(state: GameState, baseline: ReturnType<typeof huntSnapshot>)
       activeOwnedCarcasses: 0,
       remainingOwnedCarcassKg: 0,
       killsByPreySpecies: {},
+      killsByLifeStage: {},
     };
     totals.attempts += Math.max(0, row.attempts - (before?.attempts || 0));
     totals.encounters += Math.max(0, row.encounters - (before?.encounters || 0));
@@ -221,6 +223,10 @@ function huntDeltas(state: GameState, baseline: ReturnType<typeof huntSnapshot>)
       const beforePrey = before?.byPreySpecies[preySpeciesId];
       const kills = Math.max(0, preyRow.successfulKills - (beforePrey?.successfulKills || 0));
       if (kills > 0) totals.killsByPreySpecies[preySpeciesId] = (totals.killsByPreySpecies[preySpeciesId] || 0) + kills;
+    }
+    for (const stage of ['juvenile', 'adult', 'old'] as const) {
+      const kills = Math.max(0, (row.successfulKillsByLifeStage[stage] || 0) - (before?.successfulKillsByLifeStage[stage] || 0));
+      if (kills > 0) totals.killsByLifeStage[stage] = (totals.killsByLifeStage[stage] || 0) + kills;
     }
     result.set(row.speciesId, totals);
   }
@@ -245,7 +251,7 @@ function main(): void {
     const energyRow = energy.get(speciesId) || { demandKg: 0, intakeKg: 0, populationTicks: 0 };
     const hunt = hunts.get(speciesId) || {
       attempts: 0, encounters: 0, attacks: 0, successfulKills: 0, carcassBiomassCreatedKg: 0,
-      activeOwnedCarcasses: 0, remainingOwnedCarcassKg: 0, killsByPreySpecies: {},
+      activeOwnedCarcasses: 0, remainingOwnedCarcassKg: 0, killsByPreySpecies: {}, killsByLifeStage: {},
     };
     const hunger = hungerRows.filter(row => row.speciesId === speciesId);
     const currentPopulation = hunger.reduce((sum, row) => sum + row.population, 0);
@@ -270,6 +276,7 @@ function main(): void {
       activeOwnedCarcasses: hunt.activeOwnedCarcasses,
       remainingOwnedCarcassKg: round3(hunt.remainingOwnedCarcassKg),
       killsByPreySpecies: hunt.killsByPreySpecies,
+      killsByLifeStage: hunt.killsByLifeStage,
     };
   });
   const carcasses = state.ecologySystem?.wildCarcasses || [];
