@@ -26,7 +26,7 @@ import {
   typeIIIPredationResponse,
 } from './ecologyPredatorSystem';
 
-const BASE_EXPECTED_ATTEMPT_SUCCESS = 0.1;
+const BASE_EXPECTED_ATTEMPT_SUCCESS = 0.22;
 const MIN_CARCASS_FRESHNESS_TO_FEED = 15;
 
 const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, Math.round(value * 1000) / 1000));
@@ -337,6 +337,9 @@ function energeticTargetValue(prey: WildAnimalPopulation, predator: WildPredator
   if (totalWeight <= 0) return 0;
   const expectedBodyMassKg = stages.reduce((sum, row) => sum + row.bodyMassKg * row.weight, 0) / totalWeight;
   const expectedEdibleDays = expectedBodyMassKg * 0.58 / Math.max(0.05, predator.dailyFoodKgPerAdult);
+  // Predators should prefer prey that pays back more feeding time, but the square
+  // root keeps abundance and species preference relevant instead of always taking
+  // the single largest killable animal.
   return Math.max(0.35, Math.sqrt(Math.max(0.05, expectedEdibleDays)));
 }
 
