@@ -70,10 +70,12 @@ function ensureHuntTelemetry(population: WildPredatorPopulation): PredatorHuntTe
     encounters: 0,
     attacks: 0,
     successfulKills: 0,
+    successfulKillsByLifeStage: {},
     edibleConsumedKg: 0,
     carcassBiomassCreatedKg: 0,
     byPreySpecies: {},
   };
+  population.huntTelemetry.successfulKillsByLifeStage ||= {};
   population.huntTelemetry.byPreySpecies ||= {};
   return population.huntTelemetry;
 }
@@ -240,6 +242,17 @@ function createCarcass(
   return carcass;
 }
 
+function reduceMirroredCarrion(system: WorldEcologyState, carcass: WildCarcass, targetMirroredKg: number): void {
+  const previousMirroredKg = Math.max(0, carcass.mirroredCarrionKg);
+  const nextMirroredKg = Math.max(0, Math.min(previousMirroredKg, targetMirroredKg));
+  const lostMirroredKg = Math.max(0, previousMirroredKg - nextMirroredKg);
+  const subarea = system.subareasById[carcass.subareaId];
+  if (lostMirroredKg > 0 && subarea?.foodWeb) {
+    subarea.foodWeb.carrionBiomassKg = round3(Math.max(0, subarea.foodWeb.carrionBiomassKg - lostMirroredKg));
+  }
+  carcass.mirroredCarrionKg = round3(nextMirroredKg);
+}
+
 function tickWildCarcasses(state: GameState): void {
   const system = ensureWildPredators(state);
   system.wildCarcasses ||= [];
@@ -255,10 +268,14 @@ function tickWildCarcasses(state: GameState): void {
     carcass.remainingMassKg = round3(carcass.remainingMassKg * retained);
     carcass.remainingEdibleKg = round3(carcass.remainingEdibleKg * retained);
     carcass.remainingScavengeableKg = round3(carcass.remainingScavengeableKg * retained);
-    carcass.mirroredCarrionKg = Math.min(carcass.mirroredCarrionKg, carcass.remainingScavengeableKg);
+    reduceMirroredCarrion(system, carcass, carcass.remainingScavengeableKg);
     carcass.freshness = clamp(carcass.freshness - elapsedDays * (5 + decomposition * 9));
   }
-  system.wildCarcasses = system.wildCarcasses.filter(carcass => carcass.remainingMassKg >= 0.05 && carcass.freshness > 0);
+  system.wildCarcasses = system.wildCarcasses.filter(carcass => {
+    const keep = carcass.remainingMassKg >= 0.05 && carcass.freshness > 0;
+    if (!keep) reduceMirroredCarrion(system, carcass, 0);
+    return keep;
+  });
 }
 
 function feedFromOwnedCarcasses(
@@ -291,6 +308,9 @@ interface HuntTarget {
   subarea: EcologicalSubarea;
   accessibility: number;
   preference: number;
+  functionalResponse: number;
+  refugia: number;
+  searchability: number;
   targetWeight: number;
 }
 
@@ -337,10 +357,27 @@ function energeticTargetValue(prey: WildAnimalPopulation, predator: WildPredator
   if (totalWeight <= 0) return 0;
   const expectedBodyMassKg = stages.reduce((sum, row) => sum + row.bodyMassKg * row.weight, 0) / totalWeight;
   const expectedEdibleDays = expectedBodyMassKg * 0.58 / Math.max(0.05, predator.dailyFoodKgPerAdult);
-  // Predators should prefer prey that pays back more feeding time, but the square
-  // root keeps abundance and species preference relevant instead of always taking
-  // the single largest killable animal.
   return Math.max(0.35, Math.sqrt(Math.max(0.05, expectedEdibleDays)));
+}
+
+function huntSearchability(
+  prey: WildAnimalPopulation,
+  subarea: EcologicalSubarea,
+  predator: WildPredatorSpeciesDefinition,
+  accessibility: number,
+): { functionalResponse: number; refugia: number; searchability: number } {
+  const densityPer1000 = prey.population / Math.max(0.1, subarea.areaM2 / 1000);
+  const functionalResponse = typeIIIPredationResponse(densityPer1000, predator.halfSaturationPreyPer1000M2);
+  const refugia = preyRefugiaMultiplier(prey.population, predator.minimumViablePreyCount, subarea.environment.canopyCover);
+  // Density determines how likely a predator is to locate prey, while refugia is
+  // deliberately softer here: cover can make search harder without making prey
+  // effectively disappear. The remaining refuge effect is paid during attack.
+  const searchability = clamp01(
+    Math.sqrt(functionalResponse)
+      * accessibility
+      * (0.72 + refugia * 0.28),
+  );
+  return { functionalResponse, refugia, searchability };
 }
 
 function collectHuntTargets(
@@ -360,10 +397,28 @@ function collectHuntTargets(
         ? getPredatorHuntingAccessibility(system, population, species, prey.currentSubareaId)
         : 0;
       const energeticValue = preference > 0 ? energeticTargetValue(prey, species) : 0;
+      const search = subarea && accessibility > 0
+        ? huntSearchability(prey, subarea, species, accessibility)
+        : { functionalResponse: 0, refugia: 0, searchability: 0 };
+      // Target choice is expected energetic return rather than preference alone.
+      // When a prey population becomes sparse or difficult to locate, predators
+      // naturally switch toward another prey instead of repeating futile hunts.
       const targetWeight = preference > 0 && energeticValue > 0
-        ? preference * Math.sqrt(Math.max(1, prey.population)) * (0.45 + accessibility * 0.55) * energeticValue
+        ? preference
+          * Math.sqrt(Math.max(1, prey.population))
+          * energeticValue
+          * (0.3 + search.searchability * 0.7)
         : 0;
-      return { prey, subarea, accessibility, preference, targetWeight };
+      return {
+        prey,
+        subarea,
+        accessibility,
+        preference,
+        functionalResponse: search.functionalResponse,
+        refugia: search.refugia,
+        searchability: search.searchability,
+        targetWeight,
+      };
     })
     .filter((entry): entry is HuntTarget => Boolean(entry.subarea && entry.preference > 0 && entry.accessibility > 0 && entry.targetWeight > 0));
 }
@@ -428,10 +483,7 @@ function runDiscreteHunt(
       continue;
     }
 
-    const densityPer1000 = target.prey.population / Math.max(0.1, target.subarea.areaM2 / 1000);
-    const functional = typeIIIPredationResponse(densityPer1000, species.halfSaturationPreyPer1000M2);
-    const refugia = preyRefugiaMultiplier(target.prey.population, species.minimumViablePreyCount, target.subarea.environment.canopyCover);
-    const encounterChance = clamp01(0.04 + functional * refugia * target.accessibility * 0.96);
+    const encounterChance = clamp01(0.06 + target.searchability * 0.88);
     telemetry.lastTargetSpeciesId = target.prey.speciesId;
     telemetry.lastEncounterChance = round3(encounterChance);
     if (random() >= encounterChance) {
@@ -459,13 +511,15 @@ function runDiscreteHunt(
     const habitatFactor = 0.72 + getPredatorHabitatSuitability(target.subarea, species) * 0.28;
     const preyVigorFactor = 0.82 + (1 - clamp01(target.prey.bodyCondition / 100)) * 0.18;
     const competitionFactor = 0.7 + competition * 0.3;
+    const refugeEscapeFactor = 0.78 + target.refugia * 0.22;
     const attackSuccessChance = clamp01(
       (0.42 + condition * 0.38)
         * sizeFactor
         * stageFactor
         * habitatFactor
         * preyVigorFactor
-        * competitionFactor,
+        * competitionFactor
+        * refugeEscapeFactor,
     );
     telemetry.lastAttackSuccessChance = round3(attackSuccessChance);
     if (random() >= attackSuccessChance) {
@@ -486,6 +540,7 @@ function runDiscreteHunt(
 
     kills += 1;
     telemetry.successfulKills += 1;
+    telemetry.successfulKillsByLifeStage[stage.stage] = (telemetry.successfulKillsByLifeStage[stage.stage] || 0) + 1;
     preyTelemetry.successfulKills += 1;
     telemetry.edibleConsumedKg = round3(telemetry.edibleConsumedKg + immediateMealKg);
     telemetry.carcassBiomassCreatedKg = round3(telemetry.carcassBiomassCreatedKg + bodyMassKg);
@@ -626,6 +681,7 @@ export interface PredatorHuntDiagnostic {
   encounters: number;
   attacks: number;
   successfulKills: number;
+  successfulKillsByLifeStage: Partial<Record<WildAnimalLifeStage, number>>;
   encounterRate: number;
   attackSuccessRate: number;
   overallSuccessRate: number;
@@ -650,6 +706,7 @@ export function getPredatorHuntDiagnostics(state: GameState): PredatorHuntDiagno
       encounters: telemetry.encounters,
       attacks: telemetry.attacks,
       successfulKills: telemetry.successfulKills,
+      successfulKillsByLifeStage: { ...telemetry.successfulKillsByLifeStage },
       encounterRate: round3(telemetry.attempts > 0 ? telemetry.encounters / telemetry.attempts : 0),
       attackSuccessRate: round3(telemetry.attacks > 0 ? telemetry.successfulKills / telemetry.attacks : 0),
       overallSuccessRate: round3(telemetry.attempts > 0 ? telemetry.successfulKills / telemetry.attempts : 0),
