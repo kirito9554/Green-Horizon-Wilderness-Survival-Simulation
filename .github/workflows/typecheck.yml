@@ -29,6 +29,9 @@ jobs:
       - name: Deep production smoke test
         run: npm run test:production
 
+      - name: Canonical main-world POI migration smoke test
+        run: npm run test:poi-migration
+
       - name: Spatial building smoke test
         run: npm run test:building
 
