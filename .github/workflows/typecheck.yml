@@ -50,8 +50,18 @@ jobs:
       - name: Terrestrial ecology scale smoke test
         run: npm run test:ecology-terrestrial-scale
 
-      - name: Long-run ecosystem balance smoke test
-        run: npm run test:ecology-long-run
+      - name: Aquatic timestep diagnostic
+        run: |
+          npm run sim:ecology-long-run -- --scenario=untouched --years=0.2465753424657534 --step-minutes=60 --seed=long-run-ci-timestep --out=/tmp/ecology-fine
+          npm run sim:ecology-long-run -- --scenario=untouched --years=0.2465753424657534 --step-minutes=360 --seed=long-run-ci-timestep --out=/tmp/ecology-coarse
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const fine = JSON.parse(fs.readFileSync('/tmp/ecology-fine/manifest.json', 'utf8'))[0];
+          const coarse = JSON.parse(fs.readFileSync('/tmp/ecology-coarse/manifest.json', 'utf8'))[0];
+          const keys = ['plantBiomassKg','fruitBiomassKg','faunaBiomassKg','predatorBiomassKg','aquaticBiomassKg','aquaticPopulation','averageAquaticStress'];
+          const diff = Object.fromEntries(keys.map(k => [k, { fine: fine.final[k], coarse: coarse.final[k], relative: Math.abs(fine.final[k]-coarse.final[k])/Math.max(1,Math.abs(fine.final[k]),Math.abs(coarse.final[k])) }]));
+          console.log(JSON.stringify({diff, fineAquatic: fine.final.aquaticBySpecies, coarseAquatic: coarse.final.aquaticBySpecies}, null, 2));
+          NODE
 
       - name: World hydrology foundation smoke test
         run: npm run test:hydrology
