@@ -1,7 +1,7 @@
 import type { GameState } from '../types';
 import type { HydrologyNode } from '../types/hydrologySimulation';
 import { REGION_HYDROLOGY_PROFILES } from '../data/hydrologyProfiles';
-import { tickAquaticEcology } from './ecologyAquaticSystem';
+import { tickAquaticEcologyWithBootstrap } from './aquaticBootstrapSystem';
 
 /**
  * Hydrology uses small deterministic BuildGrid samples to represent much larger
@@ -165,7 +165,7 @@ function restoreAquaticEcologyScale(state: GameState, snapshots: TemporaryEcolog
 export function tickAquaticEcologyAtEnvironmentalScale(state: GameState, deltaGameMinutes: number): void {
   const snapshots = prepareAquaticEcologyScale(state);
   try {
-    tickAquaticEcology(state, deltaGameMinutes);
+    tickAquaticEcologyWithBootstrap(state, deltaGameMinutes);
   } finally {
     restoreAquaticEcologyScale(state, snapshots);
   }
