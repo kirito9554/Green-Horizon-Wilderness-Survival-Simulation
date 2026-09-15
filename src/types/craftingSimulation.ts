@@ -69,7 +69,8 @@ export type MaterialReservationOwnerType =
   | 'construction'
   | 'structure_maintenance'
   | 'structure_modify'
-  | 'storage_haul';
+  | 'storage_haul'
+  | 'agriculture';
 
 /**
  * A reservation never removes an item from inventory. It marks an exact slice
