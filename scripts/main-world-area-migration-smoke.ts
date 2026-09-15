@@ -34,7 +34,7 @@ function testCanonicalRegistry(): void {
 
 function testNewGameContainsNoRetiredMainAliases(): void {
   const state = fresh();
-  assert.equal(state.saveVersion, 12);
+  assert.equal(state.saveVersion, 13);
   for (const legacyId of LEGACY_MAIN_AREA_IDS) {
     assert.equal(state.areasProgress[legacyId], undefined, `new game progress must not expose ${legacyId}`);
     assert.equal(state.poiStorages?.[legacyId], undefined, `new game storage must not expose ${legacyId}`);
@@ -129,8 +129,8 @@ function testV12CanonicalizesLegacyMainWorldReferences(): void {
   const coconutsBefore = worldQuantity(legacy, 'ITEM_WILD_COCONUT');
   const migrated = migrateGameState(legacy);
 
-  assert.equal(LATEST_SAVE_VERSION, 12);
-  assert.equal(migrated.saveVersion, 12);
+  assert.equal(LATEST_SAVE_VERSION, 13);
+  assert.equal(migrated.saveVersion, 13);
 
   assert.equal(migrated.areasProgress.AREA_RIVERBANK, undefined);
   assert.equal(migrated.areasProgress.AREA_COASTAL_SHALLOWS, undefined);
@@ -163,6 +163,7 @@ function testV12CanonicalizesLegacyMainWorldReferences(): void {
 
   assert.equal(migrated.storageSystem!.locations.some(location => location.id === 'storage_ground_AREA_RIVERBANK'), false);
   assert.ok(migrated.storageSystem!.locations.some(location => location.id === 'storage_ground_AREA_WATERFALL_BASIN'));
+  assert.ok(migrated.ecologySystem, 'latest migration must also initialize the lazy ecology container');
 }
 
 function main(): void {
