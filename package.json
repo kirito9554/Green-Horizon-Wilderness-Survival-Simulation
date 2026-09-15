@@ -18,7 +18,8 @@
     "test:storage-network": "tsx scripts/storage-network-smoke.ts",
     "test:agriculture": "tsx scripts/agriculture-simulation-smoke.ts",
     "test:poi-migration": "tsx scripts/main-world-area-migration-smoke.ts",
-    "test:ecology": "tsx scripts/ecology-simulation-smoke.ts"
+    "test:ecology": "tsx scripts/ecology-simulation-smoke.ts",
+    "test:ecology-fauna": "tsx scripts/ecology-fauna-smoke.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
