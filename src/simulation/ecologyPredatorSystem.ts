@@ -56,12 +56,12 @@ function equivalentPredatorCount(population: WildPredatorPopulation): number {
 /**
  * Intermittent feeders can bank a larger fraction of a successful kill. The
  * reserve horizon is derived from the existing kill cadence rather than adding a
- * second per-species tuning table. Fast hunters retain only a short buffer while
- * python/crocodile populations can bridge several kill-free days.
+ * second per-species tuning table. The cadence multiplier includes room for
+ * normal search/refugia gaps so a predator is not forced into daily feeding.
  */
 export function getPredatorEnergyReserveDays(species: WildPredatorSpeciesDefinition): number {
   const expectedKillIntervalDays = 1 / Math.max(0.03, species.maxKillsPerAdultPerDay);
-  return round3(Math.max(2.25, Math.min(14, expectedKillIntervalDays * 1.1)));
+  return round3(Math.max(3, Math.min(24, expectedKillIntervalDays * 1.75)));
 }
 
 function predatorEnergyCapacityKg(population: WildPredatorPopulation, species: WildPredatorSpeciesDefinition): number {
