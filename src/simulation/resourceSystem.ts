@@ -2,6 +2,7 @@ import { GameState } from '../types';
 import { getDefaultResourcePools, calculateResourceRecoveryBonus } from './resourcePools';
 import { addItemToInventory } from './inventorySystem';
 import { formatTimeOfDay } from './timeSystem';
+import { isEcologyBackedBiologicalResourceNode, reconcileBiologicalResourcePools } from './resourceEcologyBridge';
 
 // System: Resource Pools Passive Recovery and Passive Rain Collector
 export function tickResourceSystem(next: GameState, deltaGameMinutes: number): void {
@@ -21,11 +22,15 @@ export function tickResourceSystem(next: GameState, deltaGameMinutes: number): v
     }
   }
 
-  // 2. Resource Pools Passive Recovery with remaining stock bonus
+  // 2. Resource Pools. Materialized biological nodes are ecology-backed and do
+  // not receive legacy timer recovery. Unobserved regions keep the legacy pool
+  // behavior until their living ecosystem has actually been materialized.
   if (!next.resourcePools) {
     next.resourcePools = getDefaultResourcePools();
   }
+  reconcileBiologicalResourcePools(next);
   for (const pool of Object.values(next.resourcePools)) {
+    if (isEcologyBackedBiologicalResourceNode(next, pool.nodeId)) continue;
     if (pool.currentStock < pool.maxStock) {
       const { multiplier } = calculateResourceRecoveryBonus(pool.currentStock, pool.maxStock);
       const recoveryPerMinute = (pool.baseRecoveryPerHour / 60) * multiplier;

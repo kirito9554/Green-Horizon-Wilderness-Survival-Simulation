@@ -32,7 +32,6 @@ import { createStorageSystemState, tickStorageSimulation } from './storageSystem
 import { tickStorageHauling } from './storageHaulSystem';
 import { createAgricultureSystemState, tickAgriculture } from './agricultureSystem';
 import { createWorldEcologyState, tickWorldEcology } from './ecologySystem';
-import { tickWildFauna } from './ecologyFaunaSystem';
 import { tickWildPredators } from './ecologyPredatorSystem';
 import { createWorldHydrologyState, tickWorldHydrology } from './hydrologySystem';
 import { tickSurfaceWaterHydrology } from './hydrologySurfaceWaterSystem';
@@ -56,11 +55,16 @@ import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
 } from './productionWorkstationCoordinator';
+import {
+  tickLongRunEcosystemBalance,
+  tickWildFaunaWithStableFoodWebClock,
+} from './longRunEcosystemSystem';
 
 export * from './inventorySystem';
 export * from './timeSystem';
 export * from './weatherSystem';
 export * from './resourceSystem';
+export * from './resourceEcologyBridge';
 export * from './survivorSystem';
 export * from './expeditionSystem';
 export * from './taskHandlers';
@@ -91,6 +95,7 @@ export * from './ecologySystem';
 export * from './ecologyFaunaSystem';
 export * from './ecologyPredatorSystem';
 export * from './ecologyAquaticSystem';
+export * from './longRunEcosystemSystem';
 export * from './hydrologySystem';
 export * from './hydrologySurfaceWaterSystem';
 export * from './waterManagementSystem';
@@ -243,10 +248,11 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
     reconcileTerrestrialEcologyScale(next); // flora materialized during this tick
     finalizeLivingHydrologyState(next);
     tickAquaticEcologyAtEnvironmentalScale(next, deltaGameMinutes);
-    tickWildFauna(next, deltaGameMinutes);
+    tickWildFaunaWithStableFoodWebClock(next, deltaGameMinutes);
     reconcileTerrestrialEcologyScale(next); // fauna seeded during this tick
     tickWildPredators(next, deltaGameMinutes);
     reconcileTerrestrialEcologyScale(next); // predators seeded during this tick
+    tickLongRunEcosystemBalance(next, deltaGameMinutes);
   } finally {
     finalizeTerrestrialEcologyScale(next, terrestrialScaleSnapshot);
   }
