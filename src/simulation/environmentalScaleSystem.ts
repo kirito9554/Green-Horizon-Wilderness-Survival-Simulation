@@ -30,7 +30,18 @@ interface TemporaryEcologyScaleSnapshot {
   capacityM3: number;
 }
 
+const AQUATIC_INTEGRATION_SUBSTEP_MINUTES = 60;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+function gameMinute(state: GameState): number {
+  return Math.max(0, (state.gameTime.day - 1) * 1440 + state.gameTime.minuteOfDay);
+}
+
+function setGameMinute(state: GameState, totalMinute: number): void {
+  const safeMinute = Math.max(0, totalMinute);
+  state.gameTime.day = Math.floor(safeMinute / 1440) + 1;
+  state.gameTime.minuteOfDay = safeMinute % 1440;
+}
 
 export function getEnvironmentalWaterScaleClass(node: HydrologyNode): EnvironmentalWaterScaleClass {
   if (node.kind === 'managed_storage') return 'managed_storage';
@@ -161,12 +172,38 @@ function restoreAquaticEcologyScale(state: GameState, snapshots: TemporaryEcolog
  * not the tiny representative control volume used by the local BuildGrid. The
  * physical Hydrology state is restored immediately afterward, so this changes
  * ecological scale without fabricating water for irrigation or storage.
+ *
+ * Trophic interactions are integrated at a fixed hourly cadence even when the
+ * outer simulation advances by several hours. Without this, a six-hour frame
+ * asks predators to satisfy six hours of food demand against one instantaneous
+ * food-web stock, while six one-hour frames allow primary production and prey
+ * turnover between meals. That made predator survival and species composition
+ * strongly timestep-dependent. Virtual game-time substeps keep every aquatic
+ * clock (food web, populations and bootstrap/recolonization) on the same cadence
+ * without advancing the already-resolved physical hydrology a second time.
  */
 export function tickAquaticEcologyAtEnvironmentalScale(state: GameState, deltaGameMinutes: number): void {
   const snapshots = prepareAquaticEcologyScale(state);
+  const finalDay = state.gameTime.day;
+  const finalMinuteOfDay = state.gameTime.minuteOfDay;
   try {
-    tickAquaticEcologyWithBootstrap(state, deltaGameMinutes);
+    if (deltaGameMinutes <= AQUATIC_INTEGRATION_SUBSTEP_MINUTES) {
+      tickAquaticEcologyWithBootstrap(state, deltaGameMinutes);
+      return;
+    }
+
+    const finalMinute = gameMinute(state);
+    const startMinute = Math.max(0, finalMinute - Math.max(0, deltaGameMinutes));
+    let cursor = startMinute;
+    while (cursor + 0.0001 < finalMinute) {
+      const nextMinute = Math.min(finalMinute, cursor + AQUATIC_INTEGRATION_SUBSTEP_MINUTES);
+      setGameMinute(state, nextMinute);
+      tickAquaticEcologyWithBootstrap(state, nextMinute - cursor);
+      cursor = nextMinute;
+    }
   } finally {
+    state.gameTime.day = finalDay;
+    state.gameTime.minuteOfDay = finalMinuteOfDay;
     restoreAquaticEcologyScale(state, snapshots);
   }
 }
