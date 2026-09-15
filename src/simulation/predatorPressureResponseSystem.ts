@@ -227,11 +227,12 @@ function applyDispersalAndMortality(
 ): void {
   if (population.population <= 0) return;
 
-  // Keep dispersal as the primary density response, but place it between the
-  // original over-aggressive P4 rate and the under-dispersing recovery probe.
-  const chronicGate = clamp01((response.chronicStressDays - 14) / 32);
-  const migrationGate = clamp01((population.migrationPressure - 64) / 34);
-  if (chronicGate > 0 && migrationGate > 0 && severity > 0.45) {
+  // Relieve true density pressure earlier so an over-dense cohort can leave before
+  // starvation damage becomes the dominant population control. Healthy cohorts
+  // still need both migration pressure and sustained resource stress to disperse.
+  const chronicGate = clamp01((response.chronicStressDays - 10) / 28);
+  const migrationGate = clamp01((population.migrationPressure - 58) / 32);
+  if (chronicGate > 0 && migrationGate > 0 && severity > 0.4) {
     const roamingFactor = 0.65 + clamp01(species.roamingPerDay / 1.2) * 0.55;
     response.dispersalProgress += population.population
       * severity
@@ -239,7 +240,7 @@ function applyDispersalAndMortality(
       * migrationGate
       * roamingFactor
       * elapsedDays
-      * 0.0024;
+      * 0.003;
     const wholeDispersers = Math.floor(response.dispersalProgress);
     if (wholeDispersers > 0) {
       response.dispersalProgress -= wholeDispersers;
@@ -249,13 +250,15 @@ function applyDispersalAndMortality(
     }
   }
 
-  const chronicMortalityGate = clamp01((response.chronicStressDays - 28) / 48);
-  if (chronicMortalityGate > 0 && severity > 0.6) {
+  // Once dispersal is available, chronic mortality is the secondary safety valve,
+  // not the first response. Delay and soften it so density can self-correct first.
+  const chronicMortalityGate = clamp01((response.chronicStressDays - 36) / 52);
+  if (chronicMortalityGate > 0 && severity > 0.65) {
     population.mortalityProgress += population.population
       * severity
       * chronicMortalityGate
       * elapsedDays
-      * 0.0005;
+      * 0.00035;
   }
 
   recomputePredatorBiomass(population, species);
