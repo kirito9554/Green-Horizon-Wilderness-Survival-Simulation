@@ -11,43 +11,30 @@ on:
       - 'src/simulation/ecologyPredatorSystem.ts'
       - 'src/simulation/longRunEcosystemSystem.ts'
       - '.github/workflows/predator-long-run-diagnostics.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'P5 validation profile'
+        required: true
+        default: fast
+        type: choice
+        options:
+          - fast
+          - canonical
 
 permissions:
   contents: read
-  actions: write
 
 concurrency:
-  group: predator-long-run-${{ github.event.pull_request.number }}
+  group: predator-long-run-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  validate:
+  validate-fast:
+    if: github.event_name == 'pull_request' || inputs.mode == 'fast'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
-      - name: Cancel stale P5 diagnostic runs
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const currentRunId = context.runId;
-            const prNumber = context.payload.pull_request.number;
-            const { data } = await github.rest.actions.listWorkflowRuns({
-              owner,
-              repo,
-              workflow_id: 'predator-long-run-diagnostics.yml',
-              event: 'pull_request',
-              status: 'in_progress',
-              per_page: 20,
-            });
-
-            for (const run of data.workflow_runs) {
-              if (run.id === currentRunId) continue;
-              const samePr = (run.pull_requests || []).some(pr => pr.number === prNumber);
-              if (!samePr) continue;
-              core.info(`Cancelling stale P5 run ${run.id}`);
-              await github.rest.actions.cancelWorkflowRun({ owner, repo, run_id: run.id });
-            }
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -56,12 +43,35 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npm run lint
-      - name: Run 1/5/20-year predator diagnostics
-        run: npx tsx scripts/predator-long-run-diagnostics.ts --out=artifacts/predator-long-run
+      - name: Run fast multi-resolution 1/5/20-year predator diagnostics
+        run: npx tsx scripts/predator-long-run-diagnostics.ts --mode=fast --out=artifacts/predator-long-run
       - name: Upload predator diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: predator-long-run-report
+          name: predator-long-run-report-fast
+          path: artifacts/predator-long-run/predator-long-run-report.json
+          if-no-files-found: warn
+
+  validate-canonical:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'canonical'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Run canonical full-resolution 20-year predator diagnostics
+        run: npx tsx scripts/predator-long-run-diagnostics.ts --mode=canonical --out=artifacts/predator-long-run
+      - name: Upload canonical predator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predator-long-run-report-canonical
           path: artifacts/predator-long-run/predator-long-run-report.json
           if-no-files-found: warn
