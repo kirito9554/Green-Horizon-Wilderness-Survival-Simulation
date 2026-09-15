@@ -176,6 +176,58 @@ export interface SignificantWildAnimal {
   lastUpdatedGameMinute: number;
 }
 
+export interface WildPredatorPopulation {
+  id: string;
+  speciesId: string;
+  poiId: MainWorldAreaId;
+  currentSubareaId: string;
+  homeRangeSubareaIds: string[];
+  population: number;
+  juveniles: number;
+  adults: number;
+  old: number;
+  maleRatio: number;
+  biomassKg: number;
+  averageHealth: number;
+  bodyCondition: number;
+  hungerStress: number;
+  waterStress: number;
+  reproductionPressure: number;
+  migrationPressure: number;
+  humanFear: number;
+  geneticDiversity: number;
+  reproductionProgress: number;
+  maturationProgress: number;
+  agingProgress: number;
+  mortalityProgress: number;
+  movementProgress: number;
+  predationProgressByPreySpecies: Record<string, number>;
+  lastMoveGameMinute: number;
+  lastUpdatedGameMinute: number;
+}
+
+export interface SignificantWildPredator {
+  id: string;
+  speciesId: string;
+  poiId: MainWorldAreaId;
+  currentSubareaId: string;
+  homeRangeSubareaIds: string[];
+  sourcePopulationId: string;
+  lifeStage: WildAnimalLifeStage;
+  sex: 'male' | 'female';
+  ageHours: number;
+  weightKg: number;
+  health: number;
+  bodyCondition: number;
+  hunger: number;
+  thirst: number;
+  stress: number;
+  humanFear: number;
+  genetics: Record<string, number>;
+  lastMoveGameMinute: number;
+  lastUpdatedGameMinute: number;
+}
+
 export interface RegionEcology {
   poiId: MainWorldAreaId;
   generationVersion: number;
@@ -185,6 +237,7 @@ export interface RegionEcology {
   connectionIds: string[];
   discoveredSubareaIds: string[];
   faunaSeeded?: boolean;
+  predatorsSeeded?: boolean;
   humanPressure: number;
   huntingPressure: number;
   fishingPressure: number;
@@ -203,6 +256,8 @@ export interface WorldEcologyState {
   significantPlants: SignificantWildPlant[];
   animalPopulations?: WildAnimalPopulation[];
   significantAnimals?: SignificantWildAnimal[];
+  predatorPopulations?: WildPredatorPopulation[];
+  significantPredators?: SignificantWildPredator[];
   ecologyTickIndex: number;
 }
 
