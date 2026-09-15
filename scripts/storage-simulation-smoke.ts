@@ -127,7 +127,7 @@ function testV8MigrationCreatesStorageMetadataWithoutMovingItems(): void {
   }
   const before = getAvailableInventoryStock(legacy.poiStorages!.AREA_CAMP_CLEARING, 'ITEM_DRIFTWOOD_BRANCH');
   const migrated = migrateGameState(legacy);
-  assert.equal(migrated.saveVersion, 11);
+  assert.equal(migrated.saveVersion, 12);
   assert.equal(migrated.storageSystem?.version, 3);
   assert.ok(migrated.storageSystem?.locations.length);
   assert.equal(getAvailableInventoryStock(migrated.poiStorages!.AREA_CAMP_CLEARING, 'ITEM_DRIFTWOOD_BRANCH'), before, 'migration must not duplicate or consume legacy stock');
@@ -281,22 +281,22 @@ function testPersistentHaulMovesLocationWithoutChangingPhysicalQuantity(): void 
 function testCrossPoiHaulUsesRouteAndCanonicalInventories(): void {
   let state = fresh();
   const rack = addRack(state, 'rack_cross_poi_smoke');
-  const remoteGround = ensureStorageSystem(state).locations.find(location => location.id === 'storage_ground_AREA_RIVERBANK')!;
+  const remoteGround = ensureStorageSystem(state).locations.find(location => location.id === 'storage_ground_AREA_WATERFALL_BASIN')!;
   const beforeWorld = worldQuantity(state, 'ITEM_RIVER_PEBBLE');
-  const beforeRemote = poiQuantity(state, 'AREA_RIVERBANK', 'ITEM_RIVER_PEBBLE');
+  const beforeRemote = poiQuantity(state, 'AREA_WATERFALL_BASIN', 'ITEM_RIVER_PEBBLE');
   const beforeCamp = poiQuantity(state, 'AREA_CAMP_CLEARING', 'ITEM_RIVER_PEBBLE');
 
   state = queueStorageHaul(state, remoteGround.id, rack.id, 'ITEM_RIVER_PEBBLE', 2, state.survivors[0].id);
   const job = state.storageSystem!.haulJobs.find(candidate => candidate.sourceLocationId === remoteGround.id && candidate.targetLocationId === rack.id)!;
   assert.ok(job, 'cross-POI transfer should create a persistent haul job');
-  assert.equal(job.sourcePoiId, 'AREA_RIVERBANK');
+  assert.equal(job.sourcePoiId, 'AREA_WATERFALL_BASIN');
   assert.equal(job.targetPoiId, 'AREA_CAMP_CLEARING');
   assert.equal(job.route?.crossesPoi, true);
   assert.ok((job.route?.distanceM || 0) > 50, 'cross-POI haul must have a real route distance');
 
   tickStorageHauling(state, job.totalSeconds + 0.1);
   assert.equal(job.status, 'completed');
-  assert.equal(poiQuantity(state, 'AREA_RIVERBANK', 'ITEM_RIVER_PEBBLE'), beforeRemote - 2);
+  assert.equal(poiQuantity(state, 'AREA_WATERFALL_BASIN', 'ITEM_RIVER_PEBBLE'), beforeRemote - 2);
   assert.equal(poiQuantity(state, 'AREA_CAMP_CLEARING', 'ITEM_RIVER_PEBBLE'), beforeCamp + 2);
   assert.equal(worldQuantity(state, 'ITEM_RIVER_PEBBLE'), beforeWorld, 'cross-POI hauling must conserve world stock');
 }
@@ -327,7 +327,7 @@ function testSaveLoadRebuildsHaulReservationAndRoute(): void {
 
   const migrated = migrateGameState(JSON.parse(JSON.stringify(state)) as GameState);
   const restored = migrated.storageSystem!.haulJobs.find(job => job.id === queued.id)!;
-  assert.equal(migrated.saveVersion, 11);
+  assert.equal(migrated.saveVersion, 12);
   assert.equal(restored.materialReservations.reduce((sum, reservation) => sum + reservation.quantity, 0), 2, 'load must rebuild exact haul reservations');
   assert.ok(restored.route, 'V10 migration must reconstruct missing route data');
   assert.equal(restored.sourcePoiId, 'AREA_CAMP_CLEARING');
