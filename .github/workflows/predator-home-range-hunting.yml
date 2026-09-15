@@ -1,0 +1,34 @@
+name: Predator Home Range Hunting
+
+on:
+  pull_request:
+    paths:
+      - 'src/simulation/ecologyPredatorSystem.ts'
+      - 'src/simulation/predatorHungerTelemetry.ts'
+      - 'scripts/predator-home-range-hunting-smoke.ts'
+      - 'scripts/predator-energy-reserve-smoke.ts'
+      - 'scripts/ecology-predator-smoke.ts'
+      - 'scripts/predator-hunger-telemetry-smoke.ts'
+      - '.github/workflows/predator-home-range-hunting.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Predator home-range hunting smoke test
+        run: npx tsx scripts/predator-home-range-hunting-smoke.ts
+      - name: Predator energy reserve regression
+        run: npx tsx scripts/predator-energy-reserve-smoke.ts
+      - name: Existing predator balance regression
+        run: npm run test:ecology-predators
+      - name: Predator hunger telemetry regression
+        run: npx tsx scripts/predator-hunger-telemetry-smoke.ts

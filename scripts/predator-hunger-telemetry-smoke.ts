@@ -84,7 +84,7 @@ function makeFixture() {
   };
   system.predatorPopulations = [predator];
   region.predatorsSeeded = true;
-  return { state, system, predator, species: species!, currentSubareaId, neighborId };
+  return { state, system, predator, species: species!, currentSubareaId, neighborId, connection };
 }
 
 function assertFiniteRatio(value: number, label: string): void {
@@ -104,26 +104,47 @@ function testTelemetryIsReadOnlyAndDeterministic(): void {
   assert.equal(row.populationId, fixture.predator.id);
   assert.equal(row.speciesId, fixture.species.id);
   assert.ok(row.homeRangePreferredPreyBiomassKg >= row.currentPreferredPreyBiomassKg);
+  assert.ok(row.homeRangePreferredPreyBiomassKg >= row.accessibleHomeRangePreferredPreyBiomassKg);
   assertFiniteRatio(row.currentPatchPreyShare, 'currentPatchPreyShare');
   assertFiniteRatio(row.competitionMultiplier, 'competitionMultiplier');
   assertFiniteRatio(row.averageFunctionalResponse, 'averageFunctionalResponse');
   assertFiniteRatio(row.averageRefugiaMultiplier, 'averageRefugiaMultiplier');
+  assertFiniteRatio(row.averageHuntingAccessibility, 'averageHuntingAccessibility');
   assertFiniteRatio(row.waterRatio, 'waterRatio');
   assertFiniteRatio(row.habitatSuitability, 'habitatSuitability');
   assertFiniteRatio(row.huntingOpportunityRatio, 'huntingOpportunityRatio');
+  for (const prey of row.prey) assertFiniteRatio(prey.huntingAccessibility, 'prey.huntingAccessibility');
 }
 
-function testPreyLocalizationIsVisible(): void {
-  const fixture = makeFixture();
-  if (fixture.neighborId === fixture.currentSubareaId) return;
+function relocateCompatiblePreyToNeighbor(fixture: ReturnType<typeof makeFixture>): void {
   for (const prey of fixture.system.animalPopulations!.filter(entry => (fixture.species.preyWeights[entry.speciesId] || 0) > 0)) {
     if (prey.currentSubareaId !== fixture.currentSubareaId) continue;
     prey.currentSubareaId = fixture.neighborId;
   }
+}
+
+function testAccessibleHomeRangePreyIsNotFalseLocalization(): void {
+  const fixture = makeFixture();
+  if (fixture.neighborId === fixture.currentSubareaId) return;
+  relocateCompatiblePreyToNeighbor(fixture);
   const row = collectPredatorHungerTelemetry(fixture.state)[0];
   assert.equal(row.currentPreferredPreyBiomassKg, 0, 'current patch should report no compatible prey after relocation');
   assert.ok(row.homeRangePreferredPreyBiomassKg > 0, 'home range should still contain compatible prey');
-  assert.equal(row.bottleneck, 'prey_localization', 'telemetry should distinguish prey elsewhere in the home range from true prey scarcity');
+  assert.ok(row.accessibleHomeRangePreferredPreyBiomassKg > 0, 'connected home-range prey must remain hunt-accessible under P3');
+  assert.ok(row.averageHuntingAccessibility > 0, 'remote prey should expose nonzero graph accessibility');
+  assert.ok(row.huntingOpportunityRatio > 0, 'remote accessible prey should contribute to hunting opportunity');
+  assert.notEqual(row.bottleneck, 'prey_localization', 'reachable home-range prey must not be classified as inaccessible localization');
+}
+
+function testExtremeTravelBarrierStillReportsLocalization(): void {
+  const fixture = makeFixture();
+  if (fixture.neighborId === fixture.currentSubareaId || !fixture.connection) return;
+  relocateCompatiblePreyToNeighbor(fixture);
+  fixture.connection.movementCost *= 1_000_000;
+  const row = collectPredatorHungerTelemetry(fixture.state)[0];
+  assert.ok(row.homeRangePreferredPreyBiomassKg > 0);
+  assert.ok(row.averageHuntingAccessibility < 0.22, 'extreme graph cost should make nominal home-range prey practically inaccessible');
+  assert.equal(row.bottleneck, 'prey_localization', 'true travel isolation should remain distinguishable from prey scarcity');
 }
 
 function testCompetitionDensityAndRefugiaSignals(): void {
@@ -174,7 +195,8 @@ function testWeightedSummaryAvoidsTinyPopulationBias(): void {
 
 function main(): void {
   testTelemetryIsReadOnlyAndDeterministic();
-  testPreyLocalizationIsVisible();
+  testAccessibleHomeRangePreyIsNotFalseLocalization();
+  testExtremeTravelBarrierStillReportsLocalization();
   testCompetitionDensityAndRefugiaSignals();
   testWeightedSummaryAvoidsTinyPopulationBias();
 

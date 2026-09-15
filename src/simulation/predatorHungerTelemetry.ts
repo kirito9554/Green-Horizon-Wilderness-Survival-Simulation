@@ -3,6 +3,7 @@ import type { EcologicalSubarea, WildAnimalPopulation, WildPredatorPopulation } 
 import { WILD_PREDATOR_SPECIES, type WildPredatorSpeciesDefinition } from '../data/ecologyPredators';
 import {
   getPredatorHabitatSuitability,
+  getPredatorHuntingAccessibility,
   predatorCompetitionMultiplier,
   preyRefugiaMultiplier,
   typeIIIPredationResponse,
@@ -21,13 +22,16 @@ export type PredatorHungerBottleneck =
 
 export interface PredatorPreyTelemetry {
   speciesId: string;
+  subareaId: string;
   population: number;
   biomassKg: number;
   weightedBiomassKg: number;
+  accessibleWeightedBiomassKg: number;
   preference: number;
   densityPer1000M2: number;
   functionalResponse: number;
   refugiaMultiplier: number;
+  huntingAccessibility: number;
   huntingPressureScore: number;
 }
 
@@ -45,10 +49,12 @@ export interface PredatorHungerTelemetry {
   humanFear: number;
   currentPreferredPreyBiomassKg: number;
   homeRangePreferredPreyBiomassKg: number;
+  accessibleHomeRangePreferredPreyBiomassKg: number;
   currentPatchPreyShare: number;
   competitionMultiplier: number;
   averageFunctionalResponse: number;
   averageRefugiaMultiplier: number;
+  averageHuntingAccessibility: number;
   waterRatio: number;
   habitatSuitability: number;
   estimatedDailyFoodDemandKg: number;
@@ -92,52 +98,62 @@ function preyAt(state: GameState, subareaId: string, species: WildPredatorSpecie
     .filter(population => (species.preyWeights[population.speciesId] || 0) > 0);
 }
 
-function weightedPreyBiomass(prey: WildAnimalPopulation[], species: WildPredatorSpeciesDefinition): number {
-  return prey.reduce((sum, population) => sum + population.biomassKg * (species.preyWeights[population.speciesId] || 0), 0);
-}
-
-function homeRangePreyBiomass(state: GameState, population: WildPredatorPopulation, species: WildPredatorSpeciesDefinition): number {
+function preyInHomeRange(
+  state: GameState,
+  population: WildPredatorPopulation,
+  species: WildPredatorSpeciesDefinition,
+): WildAnimalPopulation[] {
   const system = state.ecologySystem;
-  if (!system) return 0;
+  if (!system) return [];
   const ids = new Set(population.homeRangeSubareaIds.length ? population.homeRangeSubareaIds : [population.currentSubareaId]);
+  ids.add(population.currentSubareaId);
   return (system.animalPopulations || [])
     .filter(prey => prey.population > 0 && ids.has(prey.currentSubareaId))
-    .reduce((sum, prey) => sum + prey.biomassKg * (species.preyWeights[prey.speciesId] || 0), 0);
+    .filter(prey => (species.preyWeights[prey.speciesId] || 0) > 0);
+}
+
+function weightedPreyBiomass(prey: WildAnimalPopulation[], species: WildPredatorSpeciesDefinition): number {
+  return prey.reduce((sum, population) => sum + population.biomassKg * (species.preyWeights[population.speciesId] || 0), 0);
 }
 
 function telemetryForPrey(
   prey: WildAnimalPopulation,
   subarea: EcologicalSubarea,
   species: WildPredatorSpeciesDefinition,
+  accessibility: number,
 ): PredatorPreyTelemetry {
   const preference = species.preyWeights[prey.speciesId] || 0;
   const densityPer1000M2 = prey.population / Math.max(0.1, subarea.areaM2 / 1000);
   const functionalResponse = typeIIIPredationResponse(densityPer1000M2, species.halfSaturationPreyPer1000M2);
   const refugiaMultiplier = preyRefugiaMultiplier(prey.population, species.minimumViablePreyCount, subarea.environment.canopyCover);
+  const weightedBiomassKg = prey.biomassKg * preference;
   return {
     speciesId: prey.speciesId,
+    subareaId: prey.currentSubareaId,
     population: prey.population,
     biomassKg: round3(prey.biomassKg),
-    weightedBiomassKg: round3(prey.biomassKg * preference),
+    weightedBiomassKg: round3(weightedBiomassKg),
+    accessibleWeightedBiomassKg: round3(weightedBiomassKg * accessibility),
     preference: round3(preference),
     densityPer1000M2: round3(densityPer1000M2),
     functionalResponse: round3(functionalResponse),
     refugiaMultiplier: round3(refugiaMultiplier),
-    huntingPressureScore: round3(preference * functionalResponse * refugiaMultiplier * (0.35 + prey.bodyCondition / 150)),
+    huntingAccessibility: round3(accessibility),
+    huntingPressureScore: round3(preference * functionalResponse * refugiaMultiplier * accessibility * (0.35 + prey.bodyCondition / 150)),
   };
 }
 
 function weightedAverage(rows: PredatorPreyTelemetry[], selector: (row: PredatorPreyTelemetry) => number): number {
-  const weight = rows.reduce((sum, row) => sum + Math.max(0.001, row.weightedBiomassKg), 0);
+  const weight = rows.reduce((sum, row) => sum + Math.max(0.001, row.accessibleWeightedBiomassKg), 0);
   if (weight <= 0) return 0;
-  return rows.reduce((sum, row) => sum + selector(row) * Math.max(0.001, row.weightedBiomassKg), 0) / weight;
+  return rows.reduce((sum, row) => sum + selector(row) * Math.max(0.001, row.accessibleWeightedBiomassKg), 0) / weight;
 }
 
 function classifyBottleneck(args: {
   hungerStress: number;
-  currentBiomass: number;
   homeRangeBiomass: number;
-  currentPatchShare: number;
+  accessibleBiomass: number;
+  averageAccessibility: number;
   competition: number;
   functional: number;
   refugia: number;
@@ -145,9 +161,8 @@ function classifyBottleneck(args: {
   habitat: number;
 }): PredatorHungerBottleneck {
   if (args.hungerStress < 45) return 'none';
-  if (args.currentBiomass <= 0.05 && args.homeRangeBiomass > 0.5) return 'prey_localization';
   if (args.homeRangeBiomass <= 0.5) return 'prey_scarcity';
-  if (args.currentPatchShare < 0.12) return 'prey_localization';
+  if (args.accessibleBiomass <= 0.5 || args.averageAccessibility < 0.22) return 'prey_localization';
   if (args.water < 0.42) return 'water';
   if (args.competition < 0.42) return 'competition';
   if (args.functional < 0.28) return 'low_prey_density';
@@ -168,31 +183,43 @@ export function collectPredatorHungerTelemetry(state: GameState): PredatorHunger
     if (!species || !subarea) continue;
 
     const localPrey = preyAt(state, population.currentSubareaId, species);
-    const prey = localPrey.map(entry => telemetryForPrey(entry, subarea, species));
+    const homeRangePrey = preyInHomeRange(state, population, species);
+    const prey = homeRangePrey
+      .map(entry => {
+        const preySubarea = system.subareasById[entry.currentSubareaId];
+        if (!preySubarea) return undefined;
+        const accessibility = getPredatorHuntingAccessibility(system, population, species, entry.currentSubareaId);
+        if (accessibility <= 0) return undefined;
+        return telemetryForPrey(entry, preySubarea, species, accessibility);
+      })
+      .filter((entry): entry is PredatorPreyTelemetry => Boolean(entry));
+
     const currentPreferredPreyBiomassKg = weightedPreyBiomass(localPrey, species);
-    const homeRangePreferredPreyBiomassKg = homeRangePreyBiomass(state, population, species);
+    const homeRangePreferredPreyBiomassKg = weightedPreyBiomass(homeRangePrey, species);
+    const accessibleHomeRangePreferredPreyBiomassKg = prey.reduce((sum, row) => sum + row.accessibleWeightedBiomassKg, 0);
     const currentPatchPreyShare = homeRangePreferredPreyBiomassKg > 0
       ? clamp01(currentPreferredPreyBiomassKg / homeRangePreferredPreyBiomassKg)
       : 0;
     const competitionMultiplier = predatorCompetitionMultiplier(
       population.biomassKg,
-      currentPreferredPreyBiomassKg,
+      accessibleHomeRangePreferredPreyBiomassKg,
       species.idealPredatorPreyBiomassRatio,
     );
     const averageFunctionalResponse = weightedAverage(prey, row => row.functionalResponse);
     const averageRefugiaMultiplier = weightedAverage(prey, row => row.refugiaMultiplier);
+    const averageHuntingAccessibility = weightedAverage(prey, row => row.huntingAccessibility);
     const waterRatio = clamp01(subarea.environment.waterAccess / Math.max(20, species.dailyWaterNeed));
     const habitatSuitability = getPredatorHabitatSuitability(subarea, species);
     const equivalentPredators = population.adults + population.old * 0.82 + population.juveniles * 0.38;
     const estimatedDailyFoodDemandKg = species.dailyFoodKgPerAdult * equivalentPredators;
 
-    // This deliberately measures continuous hunting opportunity, not actual last-tick intake.
-    // P1 must remain read-only. P2 can introduce energy accounting and true stored intake state.
+    // This remains read-only telemetry. P3 now measures the same accessible home-range
+    // prey pool used by hunting instead of assuming only the resting patch can feed it.
     const huntingOpportunityRatio = clamp01(
       averageFunctionalResponse
       * averageRefugiaMultiplier
       * competitionMultiplier
-      * clamp01(currentPreferredPreyBiomassKg / Math.max(0.25, estimatedDailyFoodDemandKg * 8)),
+      * clamp01(accessibleHomeRangePreferredPreyBiomassKg / Math.max(0.25, estimatedDailyFoodDemandKg * 8)),
     );
 
     result.push({
@@ -209,19 +236,21 @@ export function collectPredatorHungerTelemetry(state: GameState): PredatorHunger
       humanFear: round3(population.humanFear),
       currentPreferredPreyBiomassKg: round3(currentPreferredPreyBiomassKg),
       homeRangePreferredPreyBiomassKg: round3(homeRangePreferredPreyBiomassKg),
+      accessibleHomeRangePreferredPreyBiomassKg: round3(accessibleHomeRangePreferredPreyBiomassKg),
       currentPatchPreyShare: round3(currentPatchPreyShare),
       competitionMultiplier: round3(competitionMultiplier),
       averageFunctionalResponse: round3(averageFunctionalResponse),
       averageRefugiaMultiplier: round3(averageRefugiaMultiplier),
+      averageHuntingAccessibility: round3(averageHuntingAccessibility),
       waterRatio: round3(waterRatio),
       habitatSuitability: round3(habitatSuitability),
       estimatedDailyFoodDemandKg: round3(estimatedDailyFoodDemandKg),
       huntingOpportunityRatio: round3(huntingOpportunityRatio),
       bottleneck: classifyBottleneck({
         hungerStress: population.hungerStress,
-        currentBiomass: currentPreferredPreyBiomassKg,
         homeRangeBiomass: homeRangePreferredPreyBiomassKg,
-        currentPatchShare: currentPatchPreyShare,
+        accessibleBiomass: accessibleHomeRangePreferredPreyBiomassKg,
+        averageAccessibility: averageHuntingAccessibility,
         competition: competitionMultiplier,
         functional: averageFunctionalResponse,
         refugia: averageRefugiaMultiplier,
