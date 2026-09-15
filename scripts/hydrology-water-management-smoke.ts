@@ -58,6 +58,13 @@ function managedNode(state: GameState, structureId: string) {
   return state.hydrologySystem!.nodesById[`HYDRO_MANAGED_${structureId}`];
 }
 
+function terrainWaterM3(state: GameState, poiId: MainWorldAreaId, cellId: string): number {
+  const grid = getOrCreatePoiBuildGrid(state, poiId);
+  const cell = grid.cells.find(candidate => candidate.id === cellId)!;
+  const hydro = state.hydrologySystem!.cellStatesById[`${poiId}:${cellId}`];
+  return hydro.surfaceWaterDepthM * cell.areaM2 + hydro.soilWaterMm * cell.areaM2 / 1000;
+}
+
 function testBindingsUseRealStructuresAndDoNotCreateConstructionJobs(): void {
   const state = fresh('binding-seed');
   const jobsBefore = state.buildingSimulation!.constructionJobs!.length;
@@ -117,12 +124,11 @@ function testDiversionConservesWithdrawnWaterAndReducesDownstreamFlow(): void {
     desiredFlowM3H: 0.9,
   });
   const beforeDownstream = state.hydrologySystem!.edgesById.HYDRO_EDGE_GORGE_TO_ESTUARY.dischargeM3H;
-  const terrainBefore = state.hydrologySystem!.cellStatesById[`AREA_WATERFALL_BASIN:${weir.cellIds![0]}`].surfaceWaterDepthM;
+  const terrainBefore = terrainWaterM3(state, 'AREA_WATERFALL_BASIN', weir.cellIds![0]);
   tickWaterManagement(state, 60);
   const afterDownstream = state.hydrologySystem!.edgesById.HYDRO_EDGE_GORGE_TO_ESTUARY.dischargeM3H;
-  const leakedDepth = state.hydrologySystem!.cellStatesById[`AREA_WATERFALL_BASIN:${weir.cellIds![0]}`].surfaceWaterDepthM - terrainBefore;
+  const leakedM3 = terrainWaterM3(state, 'AREA_WATERFALL_BASIN', weir.cellIds![0]) - terrainBefore;
   const grossWithdrawn = beforeDownstream - afterDownstream;
-  const leakedM3 = leakedDepth * grid.cells.find(cell => cell.id === weir.cellIds![0])!.areaM2;
   assert.ok(grossWithdrawn > 0, 'weir must withdraw from real source discharge');
   assert.ok(afterDownstream < beforeDownstream, 'diversion must reduce downstream river flow');
   assert.ok(pondNode.storageM3 > 0, 'diverted water must arrive in the configured storage pond');
@@ -130,7 +136,7 @@ function testDiversionConservesWithdrawnWaterAndReducesDownstreamFlow(): void {
   assert.ok(Math.abs(grossWithdrawn - (pondNode.storageM3 + leakedM3)) < 0.03, 'withdrawn water must equal stored plus returned leakage within rounding tolerance');
 }
 
-function runChannelTransfer(condition: number): { stored: number; leakedDepth: number } {
+function runChannelTransfer(condition: number): { stored: number; leakedTerrainM3: number } {
   const state = fresh(`channel-condition-${condition}`);
   prepareGorgeSource(state);
   const grid = getOrCreatePoiBuildGrid(state, 'AREA_WATERFALL_BASIN');
@@ -143,17 +149,16 @@ function runChannelTransfer(condition: number): { stored: number; leakedDepth: n
   const source = state.hydrologySystem!.nodesById.HYDRO_GORGE_EXIT;
   source.elevationM = pond.elevationM + 4;
   configureWaterInfrastructure(state, channel.id, { inputNodeIds: [source.id], outputNodeIds: [pond.id], desiredFlowM3H: 0.5 });
-  const hydro = state.hydrologySystem!.cellStatesById[`AREA_WATERFALL_BASIN:${channel.cellIds![0]}`];
-  const before = hydro.surfaceWaterDepthM;
+  const before = terrainWaterM3(state, 'AREA_WATERFALL_BASIN', channel.cellIds![0]);
   tickWaterManagement(state, 60);
-  return { stored: pond.storageM3, leakedDepth: hydro.surfaceWaterDepthM - before };
+  return { stored: pond.storageM3, leakedTerrainM3: terrainWaterM3(state, 'AREA_WATERFALL_BASIN', channel.cellIds![0]) - before };
 }
 
 function testDamageUsesStructureConditionAndIncreasesLeakage(): void {
   const healthy = runChannelTransfer(100);
   const damaged = runChannelTransfer(30);
   assert.ok(healthy.stored > damaged.stored, 'damaged real structure condition must reduce delivered flow');
-  assert.ok(damaged.leakedDepth > healthy.leakedDepth, 'damaged channel must leak more water onto terrain');
+  assert.ok(damaged.leakedTerrainM3 > healthy.leakedTerrainM3, 'damaged channel must return more leakage into physical terrain');
 }
 
 function testGravityCannotMoveWaterUphill(): void {
