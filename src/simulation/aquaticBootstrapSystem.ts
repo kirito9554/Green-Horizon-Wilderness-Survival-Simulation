@@ -3,9 +3,9 @@ import type { MainWorldAreaId } from '../data/mainWorldAreas';
 import type { RegionEcology, WorldEcologyState } from '../types/ecologySimulation';
 import { tickAquaticEcology } from './ecologyAquaticSystem';
 
-const AQUATIC_BOOTSTRAP_VERSION = 1;
+const AQUATIC_BOOTSTRAP_VERSION = 2;
 const MIN_HYDROLOGY_OBSERVATION_HOURS = 24;
-const RECOLONIZATION_INTERVAL_MINUTES = 14 * 1440;
+const COLONIZATION_INTERVAL_MINUTES = 14 * 1440;
 
 interface AquaticBootstrapMeta {
   version: number;
@@ -50,12 +50,6 @@ export function isAquaticBootstrapReady(state: GameState, poiId: MainWorldAreaId
   return getAquaticHydrologyObservationHours(state, poiId) >= MIN_HYDROLOGY_OBSERVATION_HOURS;
 }
 
-function hasLivingAquaticPopulation(system: WorldEcologyState, poiId: MainWorldAreaId): boolean {
-  return (system.aquaticPopulations || []).some(population =>
-    population.population > 0 && population.poiIds.includes(poiId),
-  );
-}
-
 /**
  * Aquatic seeding depends on hydroperiod reliability, which is an observed-history
  * metric. Newly materialized regions used to be marked `aquaticSeeded` on their
@@ -64,11 +58,13 @@ function hasLivingAquaticPopulation(system: WorldEcologyState, poiId: MainWorldA
  * "already seeded" state.
  *
  * This compatibility wrapper keeps immature regions temporarily masked from the
- * one-shot seeder. Once their hydrology has at least one day of observations the
- * normal deterministic seeding path is allowed to run. Regions that later lose
- * every aquatic population are reopened at a low frequency, representing
- * immigration from the larger watershed/coastal landscape that the local grid
- * samples rather than fabricating animals every frame.
+ * seeder. Once their hydrology has at least one day of observations the normal
+ * deterministic habitat seeder is allowed to run. Mature regions are then
+ * reopened at a low frequency for an immigration pass. The underlying seeder
+ * skips species/body combinations that already have a population, so this does
+ * not duplicate established stocks; it only gives missing or locally extirpated
+ * species another chance when habitat becomes suitable. That removes the old
+ * one-shot dependency on the exact frame when a region first became seedable.
  */
 export function tickAquaticEcologyWithBootstrap(state: GameState, deltaGameMinutes: number): void {
   const system = state.ecologySystem;
@@ -111,10 +107,11 @@ export function tickAquaticEcologyWithBootstrap(state: GameState, deltaGameMinut
       continue;
     }
 
-    if (!hasLivingAquaticPopulation(system, region.poiId)
-      && now - previousAttempt >= RECOLONIZATION_INTERVAL_MINUTES) {
-      // Re-open the existing deterministic habitat seeder. It still requires a
-      // currently valid water body, adequate carrying capacity and presence roll.
+    if (now - previousAttempt >= COLONIZATION_INTERVAL_MINUTES) {
+      // Re-open the deterministic habitat seeder for missing species. Existing
+      // populations are protected by its overlap check; newcomers still require
+      // a valid connected water body, carrying capacity, suitability and the
+      // deterministic presence roll.
       region.aquaticSeeded = false;
       meta.lastColonizationAttemptByPoiId[region.poiId] = now;
     }
