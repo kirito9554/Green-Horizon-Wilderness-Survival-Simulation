@@ -1,5 +1,6 @@
 import { GameState, InventoryItem, ItemQuality, QualityBreakdown, StorageInventory } from '../types';
 import '../types/craftingSimulation';
+import '../types/storageSimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { BUILDINGS_DATABASE } from '../data/buildings';
 import { mergeQualityBreakdown, deductFromQualityBreakdown } from '../utils/qualityUtils';
@@ -70,7 +71,6 @@ export function getAvailableInventoryStock(
   }, 0);
 }
 
-// Helper: Calculate total current weight and volume
 export function calculateInventoryOccupancy(items: InventoryItem[]): { weight: number; volume: number } {
   let weight = 0;
   let volume = 0;
@@ -87,7 +87,32 @@ export function calculateInventoryOccupancy(items: InventoryItem[]): { weight: n
   };
 }
 
-// Helper: Add items safely to inventory considering stacks and quality
+function isLiquidDefinition(itemId: string): boolean {
+  const def = ITEMS_DATABASE[itemId];
+  return Boolean(def && (def.category === 'water' || def.tags.includes('liquid')));
+}
+
+function weightedNumber(existing: number | undefined, incoming: number | undefined, existingQty: number, incomingQty: number): number | undefined {
+  if (incoming === undefined) return existing;
+  if (existing === undefined || existingQty <= 0) return incoming;
+  const total = existingQty + incomingQty;
+  return total > 0 ? (existing * existingQty + incoming * incomingQty) / total : incoming;
+}
+
+function mergePhysicalMetadata(existing: InventoryItem, source: InventoryItem, existingQty: number, amount: number): void {
+  existing.moisture = weightedNumber(existing.moisture, source.moisture, existingQty, amount);
+  existing.contamination = weightedNumber(existing.contamination, source.contamination, existingQty, amount);
+  existing.pestDamage = weightedNumber(existing.pestDamage, source.pestDamage, existingQty, amount);
+  existing.mold = weightedNumber(existing.mold, source.mold, existingQty, amount);
+  existing.corrosion = weightedNumber(existing.corrosion, source.corrosion, existingQty, amount);
+  existing.medicinePotency = weightedNumber(existing.medicinePotency, source.medicinePotency, existingQty, amount);
+  existing.spoilageMultiplier = weightedNumber(existing.spoilageMultiplier, source.spoilageMultiplier, existingQty, amount);
+
+  if (source.liquidLiters !== undefined && source.quantity > 0) {
+    existing.liquidLiters = (existing.liquidLiters || 0) + source.liquidLiters * amount / source.quantity;
+  }
+}
+
 export function addItemToInventory(
   inventory: GameState['inventory'],
   itemId: string,
@@ -105,7 +130,6 @@ export function addItemToInventory(
     return { success: false, added: 0, remainder: quantity };
   }
 
-  // Durable tools are unique instances; provenance/condition must never be stacked.
   if (def.category === 'tool' || def.toolProperties) {
     const durMult = quality === 'prime' ? 1.5 : quality === 'masterwork' ? 2.2 : quality === 'crude' ? 0.7 : 1.0;
     const baseDur = def.toolProperties?.durabilityMax || 100;
@@ -134,6 +158,7 @@ export function addItemToInventory(
       const amountToAdd = Math.min(spaceInStack, remaining);
       invItem.quantity += amountToAdd;
       invItem.qualityBreakdown = mergeQualityBreakdown(invItem.qualityBreakdown, quality, amountToAdd);
+      if (isLiquidDefinition(itemId)) invItem.liquidLiters = (invItem.liquidLiters ?? def.volume * (invItem.quantity - amountToAdd)) + def.volume * amountToAdd;
       remaining -= amountToAdd;
       if (remaining <= 0) break;
     }
@@ -148,6 +173,8 @@ export function addItemToInventory(
       qualityBreakdown: { [quality]: amountInNewStack },
       quality,
       freshness: def.freshnessMaxDays ? 100 : undefined,
+      liquidLiters: isLiquidDefinition(itemId) ? def.volume * amountInNewStack : undefined,
+      medicinePotency: def.category === 'medicine' ? 100 : undefined,
       reservedQuantity: 0,
       reservedQualityBreakdown: emptyBreakdown(),
     });
@@ -157,8 +184,6 @@ export function addItemToInventory(
   return { success: true, added: quantity, remainder: 0 };
 }
 
-// Legacy quick repair. Deep component repair is implemented in a later milestone,
-// but this path is now reservation-safe.
 export function repairToolItem(
   inventory: GameState['inventory'],
   toolInstanceId: string
@@ -202,11 +227,6 @@ export function repairToolItem(
   };
 }
 
-/**
- * Deduct only unreserved quantities. Reserved slices are invisible to generic
- * consumers, preventing crafting queues from being invalidated by transfer,
- * discard, repair or another queue.
- */
 export function deductItemFromInventory(
   inventory: GameState['inventory'],
   itemId: string,
@@ -226,7 +246,11 @@ export function deductItemFromInventory(
     const qualitySlice = extractAvailableQualitySlice(item, take);
     if (!qualitySlice) continue;
 
+    const quantityBefore = item.quantity;
     item.quantity -= take;
+    if (item.liquidLiters !== undefined && quantityBefore > 0) {
+      item.liquidLiters = Math.max(0, item.liquidLiters * item.quantity / quantityBefore);
+    }
     if (item.qualityBreakdown) {
       item.qualityBreakdown = subtractBreakdownExact(item.qualityBreakdown, qualitySlice);
     }
@@ -238,7 +262,6 @@ export function deductItemFromInventory(
   return needed <= 0;
 }
 
-// Helper: Lấy hoặc khởi tạo kho bãi riêng cho một POI
 export function getOrCreatePoiStorage(state: GameState, areaId: string): StorageInventory {
   if (!state.poiStorages) state.poiStorages = {};
   if (!state.poiStorages[areaId]) {
@@ -302,6 +325,8 @@ function mergeQualitySliceIntoTarget(
       const existing = targetInv.items.find(item => item.itemId === sourceItem.itemId && item.quantity < defStackSize && (item.reservedQuantity || 0) === 0);
       if (existing) {
         const amount = Math.min(defStackSize - existing.quantity, remaining);
+        const existingQty = existing.quantity;
+        mergePhysicalMetadata(existing, sourceItem, existingQty, amount);
         existing.quantity += amount;
         existing.qualityBreakdown = mergeQualityBreakdown(existing.qualityBreakdown, quality, amount);
         if (sourceItem.freshness !== undefined) {
@@ -320,6 +345,16 @@ function mergeQualitySliceIntoTarget(
           condition: sourceItem.condition,
           conditionMax: sourceItem.conditionMax,
           originalConditionMax: sourceItem.originalConditionMax,
+          moisture: sourceItem.moisture,
+          contamination: sourceItem.contamination,
+          pestDamage: sourceItem.pestDamage,
+          mold: sourceItem.mold,
+          corrosion: sourceItem.corrosion,
+          medicinePotency: sourceItem.medicinePotency,
+          spoilageMultiplier: sourceItem.spoilageMultiplier,
+          liquidLiters: sourceItem.liquidLiters !== undefined && sourceItem.quantity > 0
+            ? sourceItem.liquidLiters * amount / sourceItem.quantity
+            : undefined,
           reservedQuantity: 0,
           reservedQualityBreakdown: emptyBreakdown(),
         });
@@ -329,7 +364,6 @@ function mergeQualitySliceIntoTarget(
   }
 }
 
-// Helper: Chuyển vật phẩm giữa 2 kho (Party Inventory <-> POI Storage)
 export function transferItemBetweenInventories(
   sourceInv: { maxWeightKg: number; maxVolumeL: number; items: InventoryItem[] },
   targetInv: { maxWeightKg: number; maxVolumeL: number; items: InventoryItem[] },
@@ -371,8 +405,12 @@ export function transferItemBetweenInventories(
   const qualitySlice = extractAvailableQualitySlice(sourceItem, moveQty);
   if (!qualitySlice) return { success: false, moved: 0, message: `Không thể tách phần chưa được giữ của ${def.name}` };
 
+  const quantityBefore = sourceItem.quantity;
   mergeQualitySliceIntoTarget(targetInv, sourceItem, def.stackSize, qualitySlice);
   sourceItem.quantity -= moveQty;
+  if (sourceItem.liquidLiters !== undefined && quantityBefore > 0) {
+    sourceItem.liquidLiters = Math.max(0, sourceItem.liquidLiters * sourceItem.quantity / quantityBefore);
+  }
   if (sourceItem.qualityBreakdown) {
     sourceItem.qualityBreakdown = subtractBreakdownExact(sourceItem.qualityBreakdown, qualitySlice);
   }
