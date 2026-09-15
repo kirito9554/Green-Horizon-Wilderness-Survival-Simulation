@@ -35,6 +35,9 @@ jobs:
       - name: World ecology foundation smoke test
         run: npm run test:ecology
 
+      - name: Wild herbivore and omnivore ecology smoke test
+        run: npm run test:ecology-fauna
+
       - name: Spatial building smoke test
         run: npm run test:building
 
