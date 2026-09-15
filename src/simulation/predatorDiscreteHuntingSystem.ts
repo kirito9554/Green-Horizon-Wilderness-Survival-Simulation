@@ -331,6 +331,18 @@ function eligibleStages(prey: WildAnimalPopulation, predator: WildPredatorSpecie
   return rows.filter(row => row.count > 0 && row.bodyMassKg <= predator.maxAdultPreyKg);
 }
 
+function energeticTargetValue(prey: WildAnimalPopulation, predator: WildPredatorSpeciesDefinition): number {
+  const stages = eligibleStages(prey, predator);
+  const totalWeight = stages.reduce((sum, row) => sum + row.weight, 0);
+  if (totalWeight <= 0) return 0;
+  const expectedBodyMassKg = stages.reduce((sum, row) => sum + row.bodyMassKg * row.weight, 0) / totalWeight;
+  const expectedEdibleDays = expectedBodyMassKg * 0.58 / Math.max(0.05, predator.dailyFoodKgPerAdult);
+  // Predators should prefer prey that pays back more feeding time, but the square
+  // root keeps abundance and species preference relevant instead of always taking
+  // the single largest killable animal.
+  return Math.max(0.35, Math.sqrt(Math.max(0.05, expectedEdibleDays)));
+}
+
 function collectHuntTargets(
   state: GameState,
   population: WildPredatorPopulation,
@@ -347,8 +359,9 @@ function collectHuntTargets(
       const accessibility = preference > 0 && subarea
         ? getPredatorHuntingAccessibility(system, population, species, prey.currentSubareaId)
         : 0;
-      const targetWeight = preference > 0 && eligibleStages(prey, species).length
-        ? preference * Math.sqrt(Math.max(1, prey.population)) * (0.45 + accessibility * 0.55)
+      const energeticValue = preference > 0 ? energeticTargetValue(prey, species) : 0;
+      const targetWeight = preference > 0 && energeticValue > 0
+        ? preference * Math.sqrt(Math.max(1, prey.population)) * (0.45 + accessibility * 0.55) * energeticValue
         : 0;
       return { prey, subarea, accessibility, preference, targetWeight };
     })
@@ -383,6 +396,7 @@ function runDiscreteHunt(
   const mealRateMultiplier = 1.6 + getPredatorEnergyReserveDays(species) * 0.16;
   const mealBudgetKg = Math.max(0, dailyDemandKg * elapsedDays * mealRateMultiplier);
   let edibleKg = feedFromOwnedCarcasses(state, population, mealBudgetKg);
+  const returningCarcassEdibleKg = edibleKg;
   let remainingMealBudgetKg = Math.max(0, mealBudgetKg - edibleKg);
 
   const reserveCapacity = Math.max(0.001, population.maxEnergyReserveKg || 0.001);
@@ -478,7 +492,7 @@ function runDiscreteHunt(
     telemetry.lastOutcome = 'success';
   }
 
-  telemetry.edibleConsumedKg = round3(telemetry.edibleConsumedKg + Math.max(0, edibleKg - telemetry.edibleConsumedKg + telemetry.edibleConsumedKg - telemetry.edibleConsumedKg));
+  telemetry.edibleConsumedKg = round3(telemetry.edibleConsumedKg + returningCarcassEdibleKg);
   return { edibleKg: round3(edibleKg), kills };
 }
 
