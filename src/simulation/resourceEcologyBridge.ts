@@ -154,6 +154,11 @@ export function isBiologicalResourceNode(nodeId: string): boolean {
   return Boolean(BIOLOGICAL_BINDINGS[nodeId]);
 }
 
+export function isEcologyBackedBiologicalResourceNode(state: GameState, nodeId: string): boolean {
+  const binding = BIOLOGICAL_BINDINGS[nodeId];
+  return Boolean(binding && materializedPlantPopulations(state, binding));
+}
+
 /**
  * Called before legacy passive recovery. A stock decrease since the previous
  * frame represents successful player gathering and is withdrawn from the real
