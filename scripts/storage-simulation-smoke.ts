@@ -173,20 +173,34 @@ function testSpecializedStorageProfiles(): void {
 function testLiquidCapacityUsesLiters(): void {
   let state = fresh();
   const tank = addStorageBuilding(state, 'BUILDING_BAMBOO_WATER_TANK', 'water_liters_smoke', 100);
-  tank.capacity.liquidCapacityL = 1.5;
+  const liquidCapacity = tank.capacity.liquidCapacityL!;
+  const prefilledLiters = Math.max(0, liquidCapacity - 1);
+  state.poiStorages!.AREA_CAMP_CLEARING.items.push({
+    instanceId: 'tank_prefill_smoke',
+    itemId: 'ITEM_WATER_FLASK',
+    quantity: prefilledLiters,
+    quality: 'standard',
+    qualityBreakdown: { standard: prefilledLiters },
+    liquidLiters: prefilledLiters,
+    storageLocationId: tank.id,
+    reservedQuantity: 0,
+    reservedQualityBreakdown: { crude: 0, standard: 0, prime: 0, masterwork: 0 },
+  });
+
   addItemToInventory(state.inventory, 'ITEM_WATER_FLASK', 3, 'standard');
   const water = carriedItem(state, 'ITEM_WATER_FLASK');
   assert.equal(getItemLiquidLiters(water), 3, 'water stack must track its physical liquid liters');
+  assert.equal(summarizeStorageLocation(state, tank.id)!.usedLiquidL, prefilledLiters);
 
   const acceptance = canStoreItemInLocation(state, tank.id, water, 3);
   assert.equal(acceptance.accepted, true);
-  assert.equal(acceptance.maxAcceptableQuantity, 1, 'liquid capacity should cap the accepted units by liters');
-  assert.ok((acceptance.remainingLiquidL || 0) >= 1.49);
+  assert.equal(acceptance.maxAcceptableQuantity, 1, 'remaining liquid liters should cap the accepted units');
+  assert.ok((acceptance.remainingLiquidL || 0) >= 0.99 && (acceptance.remainingLiquidL || 0) <= 1.01);
 
   state = storeItemInLocation(state, tank.id, water.instanceId, 3);
   const summary = summarizeStorageLocation(state, tank.id)!;
-  assert.equal(summary.usedLiquidL, 1);
-  assert.equal(getStorageLocationItems(state, tank.id).reduce((sum, item) => sum + getItemLiquidLiters(item), 0), 1);
+  assert.equal(summary.usedLiquidL, liquidCapacity);
+  assert.equal(summary.isFull, true, 'liquid capacity alone can make a tank physically full');
 }
 
 function testPreservationMetadataSurvivesHauling(): void {
