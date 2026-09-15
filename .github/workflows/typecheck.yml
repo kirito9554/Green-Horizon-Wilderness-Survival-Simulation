@@ -50,6 +50,9 @@ jobs:
       - name: Player water-management smoke test
         run: npm run test:hydrology-management
 
+      - name: Living-system hydrology integration smoke test
+        run: npm run test:hydrology-living
+
       - name: Spatial building smoke test
         run: npm run test:building
 
