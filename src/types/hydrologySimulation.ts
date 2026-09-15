@@ -10,7 +10,8 @@ export type HydrologyAnchorKind =
   | 'major_wetland'
   | 'spring_zone';
 
-export type HydrologyNodeKind = HydrologyAnchorKind | 'depression' | 'groundwater';
+export type HydrologyNodeKind = HydrologyAnchorKind | 'depression' | 'groundwater' | 'channel';
+export type HydrologyEdgeKind = 'stream' | 'river' | 'waterfall' | 'spillway' | 'estuary' | 'tidal';
 
 export interface SoilHydrologyProfileSnapshot {
   soilType: BuildSoilType;
@@ -41,6 +42,12 @@ export interface CellHydrologyState {
   temperatureC: number;
   turbidity: number;
   contamination: number;
+  /** Detailed M3/M4 water-quality state, added compatibly inside save schema V14. */
+  dissolvedOxygenMgL?: number;
+  sedimentKg?: number;
+  contaminantLoad?: number;
+  salinityPpt?: number;
+  tidalSurfaceWaterDepthM?: number;
   maxObservedFloodDepthM: number;
   saturatedHours: number;
   floodedHours: number;
@@ -69,6 +76,12 @@ export interface HydrologyNode {
   inflowM3H: number;
   outflowM3H: number;
   active: boolean;
+  temperatureC?: number;
+  dissolvedOxygenMgL?: number;
+  turbidity?: number;
+  contamination?: number;
+  salinityPpt?: number;
+  sedimentLoadKg?: number;
 }
 
 export interface HydrologyEdge {
@@ -83,6 +96,15 @@ export interface HydrologyEdge {
   flowVelocityMps: number;
   sedimentLoadKg: number;
   contaminationLoad: number;
+  kind?: HydrologyEdgeKind;
+  fromPoiId?: MainWorldAreaId;
+  toPoiId?: MainWorldAreaId;
+  depthM?: number;
+  bankfullDepthM?: number;
+  temperatureC?: number;
+  dissolvedOxygenMgL?: number;
+  turbidity?: number;
+  salinityPpt?: number;
 }
 
 export interface WatershedState {
@@ -116,6 +138,9 @@ export interface RegionHydrologyState {
   drainageLinks: CellDrainageLink[];
   anchorNodeIds: string[];
   downstreamPoiIds: MainWorldAreaId[];
+  channelEdgeIds?: string[];
+  spillwayEdgeIds?: string[];
+  surfaceDischargeM3H?: number;
   lastHydrologyTickGameMinute: number;
 }
 
