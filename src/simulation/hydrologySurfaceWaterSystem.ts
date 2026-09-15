@@ -155,6 +155,17 @@ function applyTidalBoundary(state: GameState, system: WorldHydrologyState): void
   }
 }
 
+/**
+ * Re-sample only the tidal boundary at the state's current virtual clock.
+ * This is intentionally narrower than tickSurfaceWaterHydrology: long-run
+ * aquatic integration may replay hourly ecological substeps inside a coarser
+ * physical hydrology tick, and it must see the correct tide without releasing
+ * groundwater or routing rain/quality a second time.
+ */
+export function synchronizeTidalBoundaryForCurrentTime(state: GameState): void {
+  applyTidalBoundary(state, ensureWorldHydrology(state));
+}
+
 function releaseGroundwaterBaseflow(state: GameState, system: WorldHydrologyState, deltaHours: number): void {
   if (deltaHours <= 0) return;
   for (const aquifer of Object.values(system.aquifersById)) {

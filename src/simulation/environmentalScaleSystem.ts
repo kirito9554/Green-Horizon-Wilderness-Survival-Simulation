@@ -1,7 +1,8 @@
 import type { GameState } from '../types';
 import type { HydrologyNode } from '../types/hydrologySimulation';
 import { REGION_HYDROLOGY_PROFILES } from '../data/hydrologyProfiles';
-import { tickAquaticEcology } from './ecologyAquaticSystem';
+import { tickAquaticEcologyWithBootstrap } from './aquaticBootstrapSystem';
+import { synchronizeTidalBoundaryForCurrentTime } from './hydrologySurfaceWaterSystem';
 
 /**
  * Hydrology uses small deterministic BuildGrid samples to represent much larger
@@ -30,7 +31,18 @@ interface TemporaryEcologyScaleSnapshot {
   capacityM3: number;
 }
 
+const AQUATIC_INTEGRATION_SUBSTEP_MINUTES = 60;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+function gameMinute(state: GameState): number {
+  return Math.max(0, (state.gameTime.day - 1) * 1440 + state.gameTime.minuteOfDay);
+}
+
+function setGameMinute(state: GameState, totalMinute: number): void {
+  const safeMinute = Math.max(0, totalMinute);
+  state.gameTime.day = Math.floor(safeMinute / 1440) + 1;
+  state.gameTime.minuteOfDay = safeMinute % 1440;
+}
 
 export function getEnvironmentalWaterScaleClass(node: HydrologyNode): EnvironmentalWaterScaleClass {
   if (node.kind === 'managed_storage') return 'managed_storage';
@@ -156,17 +168,56 @@ function restoreAquaticEcologyScale(state: GameState, snapshots: TemporaryEcolog
   }
 }
 
+function tickAquaticSubstep(state: GameState, deltaGameMinutes: number, allowColonization: boolean): void {
+  // The physical surface-water pass may have been run at a coarser cadence than
+  // aquatic ecology. Re-sampling only the reversible tidal boundary here lets
+  // coastal/estuarine species see the tide at each virtual hour without routing
+  // rainfall, baseflow or contaminants twice.
+  synchronizeTidalBoundaryForCurrentTime(state);
+  const snapshots = prepareAquaticEcologyScale(state);
+  try {
+    tickAquaticEcologyWithBootstrap(state, deltaGameMinutes, { allowColonization });
+  } finally {
+    restoreAquaticEcologyScale(state, snapshots);
+  }
+}
+
 /**
  * Aquatic populations and food-web resources see an ecological reach volume,
  * not the tiny representative control volume used by the local BuildGrid. The
  * physical Hydrology state is restored immediately afterward, so this changes
  * ecological scale without fabricating water for irrigation or storage.
+ *
+ * Trophic interactions are integrated at a fixed hourly cadence even when the
+ * outer simulation advances by several hours. Virtual time also re-samples the
+ * reversible tidal boundary at that cadence. Colonization is evaluated only on
+ * the final substep because observed hydroperiod values already represent the
+ * outer tick's final state; evaluating bootstrap in earlier virtual hours would
+ * make coarse ticks cross observation thresholds prematurely.
  */
 export function tickAquaticEcologyAtEnvironmentalScale(state: GameState, deltaGameMinutes: number): void {
-  const snapshots = prepareAquaticEcologyScale(state);
+  const finalDay = state.gameTime.day;
+  const finalMinuteOfDay = state.gameTime.minuteOfDay;
   try {
-    tickAquaticEcology(state, deltaGameMinutes);
+    if (deltaGameMinutes <= AQUATIC_INTEGRATION_SUBSTEP_MINUTES) {
+      tickAquaticSubstep(state, deltaGameMinutes, true);
+      return;
+    }
+
+    const finalMinute = gameMinute(state);
+    const startMinute = Math.max(0, finalMinute - Math.max(0, deltaGameMinutes));
+    let cursor = startMinute;
+    while (cursor + 0.0001 < finalMinute) {
+      const nextMinute = Math.min(finalMinute, cursor + AQUATIC_INTEGRATION_SUBSTEP_MINUTES);
+      setGameMinute(state, nextMinute);
+      tickAquaticSubstep(state, nextMinute - cursor, nextMinute + 0.0001 >= finalMinute);
+      cursor = nextMinute;
+    }
   } finally {
-    restoreAquaticEcologyScale(state, snapshots);
+    state.gameTime.day = finalDay;
+    state.gameTime.minuteOfDay = finalMinuteOfDay;
+    // Restore the reversible boundary to the true final clock after any virtual
+    // substeps so downstream systems/UI never observe an intermediate tide.
+    synchronizeTidalBoundaryForCurrentTime(state);
   }
 }

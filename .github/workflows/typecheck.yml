@@ -50,6 +50,9 @@ jobs:
       - name: Terrestrial ecology scale smoke test
         run: npm run test:ecology-terrestrial-scale
 
+      - name: Long-run ecosystem balance smoke test
+        run: npm run test:ecology-long-run
+
       - name: World hydrology foundation smoke test
         run: npm run test:hydrology
 
