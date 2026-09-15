@@ -84,8 +84,12 @@ function deterministicFingerprint(snapshot: Snapshot): string {
   });
 }
 
-function disturbance(snapshot: Snapshot): number {
-  return (snapshot.averageFireDamage + snapshot.averageLoggingPressure + snapshot.averageForagingPressure) / 3;
+function catastropheScar(snapshot: Snapshot): number {
+  // Fire and logging are the persistent scars introduced by the one-off
+  // catastrophe scenario. Foraging pressure is intentionally excluded here:
+  // it is a live trophic pressure that can rise as fauna recovers, so mixing it
+  // into this metric can make a healing burn scar look like failed succession.
+  return (snapshot.averageFireDamage + snapshot.averageLoggingPressure) / 2;
 }
 
 function main(): void {
@@ -155,12 +159,17 @@ function main(): void {
     'heavy harvesting must produce a measurable ecological depletion signal',
   );
 
-  // The catastrophe begins after day 120 in the main harness. 240 days leaves a
-  // second 120-day window in which recovery must become measurable.
+  // The event fires at day 120. Compare a near-immediate post-event run against
+  // the same deterministic world after another ~119 days of succession. Running
+  // separate worlds avoids conflating scar recovery with unrelated trophic
+  // pressure that continues to evolve during the recovery window.
+  const catastropheEarly = runScenario('catastrophe_recovery', 121, 720, 'long-run-ci-catastrophe');
   const catastrophe = runScenario('catastrophe_recovery', 240, 720, 'long-run-ci-catastrophe');
+  const earlyScar = catastropheScar(catastropheEarly.final);
+  const finalScar = catastropheScar(catastrophe.final);
   assert.ok(
-    catastrophe.peakDisturbance > disturbance(catastrophe.final),
-    'disturbance must decline after a one-off catastrophe instead of remaining permanently locked',
+    earlyScar > finalScar,
+    'fire/logging catastrophe scars must decline during succession recovery',
   );
 
   console.log('ecosystem long-run CI regression suite: ok');
@@ -180,8 +189,12 @@ function main(): void {
       biologicalGatherStockUnits: heavy.final.biologicalGatherStockUnits,
     },
     catastrophe: {
-      peakDisturbance: catastrophe.peakDisturbance,
-      finalDisturbance: Math.round(disturbance(catastrophe.final) * 1000) / 1000,
+      earlyScar: Math.round(earlyScar * 1000) / 1000,
+      finalScar: Math.round(finalScar * 1000) / 1000,
+      earlyFireDamage: catastropheEarly.final.averageFireDamage,
+      finalFireDamage: catastrophe.final.averageFireDamage,
+      earlyLoggingPressure: catastropheEarly.final.averageLoggingPressure,
+      finalLoggingPressure: catastrophe.final.averageLoggingPressure,
     },
   }, null, 2));
 }
