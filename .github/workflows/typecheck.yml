@@ -51,7 +51,9 @@ jobs:
         run: npm run test:ecology-terrestrial-scale
 
       - name: Long-run one-year diagnostic
-        run: npm run sim:ecology-long-run -- --scenario=untouched --years=1 --step-minutes=360 --out=/tmp/ecology-long-run-diagnostic
+        run: |
+          npm run sim:ecology-long-run -- --scenario=untouched --years=1 --step-minutes=360 --out=/tmp/ecology-long-run-diagnostic
+          node -e "const r=require('/tmp/ecology-long-run-diagnostic/untouched-1y-360m.json'); const alive=r.telemetry.filter(x=>x.aquaticPopulation>0); console.log(JSON.stringify({baselineAquatic:r.baseline.aquaticPopulation, baselineBySpecies:r.baseline.aquaticBySpecies, first:r.telemetry[0], lastAlive:alive.at(-1)||null, finalAquatic:r.final.aquaticPopulation, finalBySpecies:r.final.aquaticBySpecies, warnings:r.warnings}, null, 2));"
 
       - name: World hydrology foundation smoke test
         run: npm run test:hydrology
