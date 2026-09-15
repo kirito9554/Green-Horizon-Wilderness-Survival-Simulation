@@ -47,6 +47,9 @@ jobs:
       - name: Surface-water hydrology smoke test
         run: npm run test:hydrology-surface
 
+      - name: Player water-management smoke test
+        run: npm run test:hydrology-management
+
       - name: Spatial building smoke test
         run: npm run test:building
 
