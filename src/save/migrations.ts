@@ -15,8 +15,9 @@ import { ensureUpgradeSystem, rebuildUpgradeLocks } from '../simulation/upgradeS
 import { rebuildJobReservationCounters } from '../simulation/jobReservationSystem';
 import { ensureBuildingSimulation, getOrCreatePoiBuildGrid } from '../simulation/buildGridSystem';
 import { ensureStorageSystem } from '../simulation/storageSystem';
+import { calculateStorageRoute } from '../simulation/storageRouteSystem';
 
-export const LATEST_SAVE_VERSION = 9;
+export const LATEST_SAVE_VERSION = 10;
 
 function stableStringSeed(value: string): number {
   let hash = 2166136261;
@@ -25,6 +26,10 @@ function stableStringSeed(value: string): number {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
+}
+
+function clamp(value: number, min = 0, max = 100): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function normalizeInventoryItem(item: InventoryItem): void {
@@ -44,6 +49,16 @@ function normalizeInventoryItem(item: InventoryItem): void {
     item.originalConditionMax = item.originalConditionMax || item.conditionMax;
     ensureToolComponentInstances(item, def);
   }
+
+  if (def && (def.category === 'water' || def.tags.includes('liquid'))) {
+    item.liquidLiters = Math.max(0, item.liquidLiters ?? def.volume * item.quantity);
+  }
+  if (def?.category === 'medicine') item.medicinePotency = clamp(item.medicinePotency ?? 100);
+  if (item.moisture !== undefined) item.moisture = clamp(item.moisture);
+  if (item.contamination !== undefined) item.contamination = clamp(item.contamination);
+  if (item.pestDamage !== undefined) item.pestDamage = clamp(item.pestDamage);
+  if (item.mold !== undefined) item.mold = clamp(item.mold);
+  if (item.corrosion !== undefined) item.corrosion = clamp(item.corrosion);
 }
 
 function migrateToV2(state: GameState): void {
@@ -145,6 +160,22 @@ function migrateToV9(state: GameState): void {
   state.saveVersion = 9;
 }
 
+function migrateToV10(state: GameState): void {
+  const system = ensureStorageSystem(state);
+  system.version = Math.max(3, system.version || 1);
+  for (const job of system.haulJobs) {
+    const source = system.locations.find(location => location.id === job.sourceLocationId);
+    const target = system.locations.find(location => location.id === job.targetLocationId);
+    if (source) {
+      job.poiId = source.poiId;
+      job.sourcePoiId = source.poiId;
+    }
+    if (target) job.targetPoiId = target.poiId;
+    if (source && target && !job.route) job.route = calculateStorageRoute(state, source, target);
+  }
+  state.saveVersion = 10;
+}
+
 export function migrateGameState(rawState: GameState): GameState {
   const state = rawState;
   const fromVersion = Math.max(1, state.saveVersion || 1);
@@ -157,6 +188,7 @@ export function migrateGameState(rawState: GameState): GameState {
   if (fromVersion < 7) migrateToV7(state);
   if (fromVersion < 8) migrateToV8(state);
   if (fromVersion < 9) migrateToV9(state);
+  if (fromVersion < 10) migrateToV10(state);
 
   state.poiStorages = state.poiStorages || {};
   state.craftingQueue = state.craftingQueue || [];
@@ -189,8 +221,6 @@ export function migrateGameState(rawState: GameState): GameState {
   getOrCreatePoiBuildGrid(state, 'AREA_CAMP_CLEARING');
   const storageSystem = ensureStorageSystem(state);
 
-  // Reservation rebuild order is deterministic. Crafting owns the first pass,
-  // followed by repair/upgrade/building and finally storage hauling.
   rebuildReservationCounters(state);
 
   for (const job of maintenance.queue) {
@@ -242,6 +272,15 @@ export function migrateGameState(rawState: GameState): GameState {
   for (const job of storageSystem.haulJobs) {
     job.materialReservations ||= [];
     job.blockedReasons ||= [];
+    const source = storageSystem.locations.find(location => location.id === job.sourceLocationId);
+    const target = storageSystem.locations.find(location => location.id === job.targetLocationId);
+    if (source) {
+      job.poiId = source.poiId;
+      job.sourcePoiId = source.poiId;
+    }
+    if (target) job.targetPoiId = target.poiId;
+    if (source && target && !job.route) job.route = calculateStorageRoute(state, source, target);
+
     if (job.status === 'completed') {
       job.materialReservations = [];
       continue;
@@ -253,8 +292,6 @@ export function migrateGameState(rawState: GameState): GameState {
       job.blockedReasons = ['Vật phẩm nguồn đã thay đổi sau khi tải save'];
       job.assignedSurvivorId = undefined;
     } else if (job.status === 'in_progress') {
-      // Re-acquire a worker action on the next haul scheduler tick rather than
-      // trusting stale action ownership from a serialized frame.
       job.status = 'waiting_worker';
       job.assignedSurvivorId = undefined;
     }
