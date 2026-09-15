@@ -14,7 +14,8 @@
     "test:structure": "tsx scripts/structure-lifecycle-smoke.ts",
     "test:structure-work": "tsx scripts/structure-maintenance-smoke.ts",
     "test:storage": "tsx scripts/storage-simulation-smoke.ts",
-    "test:storage-mods": "tsx scripts/storage-modification-smoke.ts"
+    "test:storage-mods": "tsx scripts/storage-modification-smoke.ts",
+    "test:storage-network": "tsx scripts/storage-network-smoke.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
