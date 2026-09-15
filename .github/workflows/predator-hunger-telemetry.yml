@@ -1,0 +1,33 @@
+name: Predator Hunger Telemetry
+
+on:
+  push:
+    branches:
+      - feature/predator-hunger-telemetry
+  pull_request:
+    branches:
+      - feature/ecosystem-long-run-harness
+      - main
+    paths:
+      - 'src/simulation/predatorHungerTelemetry.ts'
+      - 'scripts/predator-hunger-telemetry-smoke.ts'
+      - '.github/workflows/predator-hunger-telemetry.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Predator hunger telemetry smoke test
+        run: npx tsx scripts/predator-hunger-telemetry-smoke.ts
