@@ -41,6 +41,7 @@ import {
 import {
   cancelStorageHaul,
   queueStorageHaul,
+  queueStorageOptimizationPass,
   togglePauseStorageHaul,
 } from './storageHaulSystem';
 import {
@@ -161,6 +162,7 @@ function handleProductionCommand(state: GameState, survivorId: string, command: 
   }
   if (opcode === '__storage_haul_pause__') return parts[1] ? togglePauseStorageHaul(state, parts[1]) : state;
   if (opcode === '__storage_haul_cancel__') return parts[1] ? cancelStorageHaul(state, parts[1]) : state;
+  if (opcode === '__storage_optimize__') return queueStorageOptimizationPass(state, parts[1] && parts[1] !== 'all' ? parts[1] : undefined);
   if (opcode === '__storage_autohaul__') return parts[1] ? setStorageAutoHaul(state, parts[1], parts[2] === '1') : state;
   if (opcode === '__storage_priority__') return parts[1] && parts[2] ? setStoragePriority(state, parts[1], parts[2] as StoragePriority) : state;
   if (opcode === '__storage_stockrule__') {
