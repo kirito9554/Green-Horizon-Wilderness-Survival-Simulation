@@ -1,0 +1,36 @@
+name: Predator Long-Run Diagnostics
+
+on:
+  pull_request:
+    branches:
+      - feature/predator-pressure-response
+    paths:
+      - 'scripts/predator-long-run-diagnostics.ts'
+      - 'src/simulation/predatorHungerTelemetry.ts'
+      - 'src/simulation/predatorPressureResponseSystem.ts'
+      - 'src/simulation/ecologyPredatorSystem.ts'
+      - 'src/simulation/longRunEcosystemSystem.ts'
+      - '.github/workflows/predator-long-run-diagnostics.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Run 1/5/20-year predator diagnostics
+        run: npx tsx scripts/predator-long-run-diagnostics.ts --out=artifacts/predator-long-run
+      - name: Upload predator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predator-long-run-report
+          path: artifacts/predator-long-run/predator-long-run-report.json
+          if-no-files-found: warn
