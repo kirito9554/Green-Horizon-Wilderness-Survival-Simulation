@@ -43,6 +43,11 @@ import {
   tickAquaticEcologyAtEnvironmentalScale,
 } from './environmentalScaleSystem';
 import {
+  finalizeTerrestrialEcologyScale,
+  prepareTerrestrialEcologyScale,
+  reconcileTerrestrialEcologyScale,
+} from './terrestrialEcologyScaleSystem';
+import {
   finalizeLivingHydrologyState,
   prepareLivingHydrologyState,
   syncLivingWaterDemands,
@@ -90,6 +95,7 @@ export * from './hydrologySystem';
 export * from './hydrologySurfaceWaterSystem';
 export * from './waterManagementSystem';
 export * from './environmentalScaleSystem';
+export * from './terrestrialEcologyScaleSystem';
 export * from './livingHydrologyBridge';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
@@ -226,11 +232,24 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickCraftingAndResearch(next, deltaGameSeconds);
 
   tickAgriculture(next, deltaGameMinutes, deltaGameSeconds);
-  tickWorldEcology(next, deltaGameMinutes);
-  finalizeLivingHydrologyState(next);
-  tickAquaticEcologyAtEnvironmentalScale(next, deltaGameMinutes);
-  tickWildFauna(next, deltaGameMinutes);
-  tickWildPredators(next, deltaGameMinutes);
+
+  // BuildGrid/subarea geometry is a local physical sample. Terrestrial ecology
+  // temporarily sees a bounded effective landscape area so flora, prey and
+  // predators represent regional stocks. The physical footprint is restored
+  // before the simulation state leaves this tick.
+  const terrestrialScaleSnapshot = prepareTerrestrialEcologyScale(next);
+  try {
+    tickWorldEcology(next, deltaGameMinutes);
+    reconcileTerrestrialEcologyScale(next); // flora materialized during this tick
+    finalizeLivingHydrologyState(next);
+    tickAquaticEcologyAtEnvironmentalScale(next, deltaGameMinutes);
+    tickWildFauna(next, deltaGameMinutes);
+    reconcileTerrestrialEcologyScale(next); // fauna seeded during this tick
+    tickWildPredators(next, deltaGameMinutes);
+    reconcileTerrestrialEcologyScale(next); // predators seeded during this tick
+  } finally {
+    finalizeTerrestrialEcologyScale(next, terrestrialScaleSnapshot);
+  }
 
   if (next.logs.length > 35) next.logs = next.logs.slice(0, 35);
   return next;
