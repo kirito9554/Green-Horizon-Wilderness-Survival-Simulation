@@ -51,7 +51,7 @@ jobs:
         run: npm run test:ecology-terrestrial-scale
 
       - name: Long-run one-year diagnostic
-        run: npm run sim:ecology-long-run -- --scenario=untouched --years=1 --step-minutes=720 --out=/tmp/ecology-long-run-diagnostic
+        run: npm run sim:ecology-long-run -- --scenario=untouched --years=1 --step-minutes=360 --out=/tmp/ecology-long-run-diagnostic
 
       - name: World hydrology foundation smoke test
         run: npm run test:hydrology
