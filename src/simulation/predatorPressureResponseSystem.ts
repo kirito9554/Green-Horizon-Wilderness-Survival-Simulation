@@ -220,9 +220,9 @@ function applyDispersalAndMortality(
 ): void {
   if (population.population <= 0) return;
 
-  const chronicGate = clamp01((response.chronicStressDays - 3) / 12);
-  const migrationGate = clamp01((population.migrationPressure - 48) / 42);
-  if (chronicGate > 0 && migrationGate > 0 && severity > 0.35) {
+  const chronicGate = clamp01((response.chronicStressDays - 10) / 25);
+  const migrationGate = clamp01((population.migrationPressure - 60) / 35);
+  if (chronicGate > 0 && migrationGate > 0 && severity > 0.4) {
     const roamingFactor = 0.65 + clamp01(species.roamingPerDay / 1.2) * 0.55;
     response.dispersalProgress += population.population
       * severity
@@ -230,7 +230,7 @@ function applyDispersalAndMortality(
       * migrationGate
       * roamingFactor
       * elapsedDays
-      * 0.006;
+      * 0.003;
     const wholeDispersers = Math.floor(response.dispersalProgress);
     if (wholeDispersers > 0) {
       response.dispersalProgress -= wholeDispersers;
@@ -240,13 +240,13 @@ function applyDispersalAndMortality(
     }
   }
 
-  const chronicMortalityGate = clamp01((response.chronicStressDays - 7) / 21);
-  if (chronicMortalityGate > 0 && severity > 0.45) {
+  const chronicMortalityGate = clamp01((response.chronicStressDays - 21) / 45);
+  if (chronicMortalityGate > 0 && severity > 0.55) {
     population.mortalityProgress += population.population
       * severity
       * chronicMortalityGate
       * elapsedDays
-      * 0.0025;
+      * 0.0008;
   }
 
   recomputePredatorBiomass(population, species);
