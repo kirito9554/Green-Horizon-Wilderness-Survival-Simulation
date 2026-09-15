@@ -38,6 +38,7 @@ const MINUTES_PER_DAY = 1440;
 const SAMPLE_INTERVAL_DAYS = 30;
 const DEFAULT_STEP_MINUTES = 720;
 const DEFAULT_SEED = 'ecosystem-long-run-v1';
+const ENVIRONMENTAL_FORCING_SUBSTEP_MINUTES = 360;
 
 const SCENARIOS = ['untouched', 'sustainable_harvest', 'heavy_harvest', 'catastrophe_recovery'] as const;
 type ScenarioId = (typeof SCENARIOS)[number];
@@ -303,20 +304,23 @@ function applyScenarioInterventions(
   runtime.peakDisturbance = Math.max(runtime.peakDisturbance, averageDisturbance(state));
 }
 
-function stepEcosystem(
+function stepEcosystemSlice(
   state: GameState,
   minutes: number,
   scenario: ScenarioId,
-  elapsedMinutesAfterStep: number,
+  elapsedMinutesAfterSlice: number,
   runtime: ScenarioRuntime,
 ): void {
-  advanceTime(state, minutes);
+  // Weather is a forcing over the interval that is about to be integrated. Use
+  // the interval-start state so a six-hour coarse step sees the same forcing as
+  // six one-hour fine steps inside the same deterministic weather slot.
   deterministicWeather(state);
+  advanceTime(state, minutes);
   tickWorldHydrology(state, minutes);
   tickSurfaceWaterHydrology(state, minutes);
   prepareLivingHydrologyState(state, minutes);
 
-  applyScenarioInterventions(state, scenario, elapsedMinutesAfterStep / MINUTES_PER_DAY, minutes / MINUTES_PER_DAY, runtime);
+  applyScenarioInterventions(state, scenario, elapsedMinutesAfterSlice / MINUTES_PER_DAY, minutes / MINUTES_PER_DAY, runtime);
 
   const scaleSnapshot = prepareTerrestrialEcologyScale(state);
   try {
@@ -332,6 +336,26 @@ function stepEcosystem(
   } finally {
     finalizeTerrestrialEcologyScale(state, scaleSnapshot);
   }
+}
+
+function stepEcosystem(
+  state: GameState,
+  minutes: number,
+  scenario: ScenarioId,
+  elapsedMinutesAfterStep: number,
+  runtime: ScenarioRuntime,
+): void {
+  let remaining = Math.max(0, minutes);
+  let elapsedCursor = Math.max(0, elapsedMinutesAfterStep - minutes);
+  while (remaining > 0.0001) {
+    const slice = Math.min(remaining, ENVIRONMENTAL_FORCING_SUBSTEP_MINUTES);
+    elapsedCursor += slice;
+    stepEcosystemSlice(state, slice, scenario, elapsedCursor, runtime);
+    remaining -= slice;
+  }
+  // Expose the weather corresponding to the final clock for telemetry/UI while
+  // keeping all physical integration above driven by interval-start forcing.
+  deterministicWeather(state);
 }
 
 function captureSnapshot(state: GameState, elapsedDays: number): EcosystemSnapshot {
@@ -424,7 +448,7 @@ function runScenario(options: RunOptions): LongRunResult {
   const state = freshState(options.seed);
   const runtime: ScenarioRuntime = { lastMonthlyHarvestPeriod: 0, catastropheApplied: false, peakDisturbance: 0 };
 
-  // One neutral hour seeds fauna/predators/aquatic populations before baseline capture.
+  // One neutral hour seeds terrestrial fauna and starts hydrological observation.
   stepEcosystem(state, 60, 'untouched', 0, runtime);
   const baseline = captureSnapshot(state, 0);
   const telemetry: EcosystemSnapshot[] = [baseline];
