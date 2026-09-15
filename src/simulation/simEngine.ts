@@ -34,10 +34,14 @@ import { createAgricultureSystemState, tickAgriculture } from './agricultureSyst
 import { createWorldEcologyState, tickWorldEcology } from './ecologySystem';
 import { tickWildFauna } from './ecologyFaunaSystem';
 import { tickWildPredators } from './ecologyPredatorSystem';
-import { tickAquaticEcology } from './ecologyAquaticSystem';
 import { createWorldHydrologyState, tickWorldHydrology } from './hydrologySystem';
 import { tickSurfaceWaterHydrology } from './hydrologySurfaceWaterSystem';
 import { tickWaterManagement } from './waterManagementSystem';
+import {
+  finalizeEnvironmentalWaterManagementScale,
+  prepareEnvironmentalWaterManagementScale,
+  tickAquaticEcologyAtEnvironmentalScale,
+} from './environmentalScaleSystem';
 import {
   finalizeLivingHydrologyState,
   prepareLivingHydrologyState,
@@ -85,6 +89,7 @@ export * from './ecologyAquaticSystem';
 export * from './hydrologySystem';
 export * from './hydrologySurfaceWaterSystem';
 export * from './waterManagementSystem';
+export * from './environmentalScaleSystem';
 export * from './livingHydrologyBridge';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
@@ -201,12 +206,14 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
 
   // Natural hydrology resolves first. Living systems publish demand into the
   // same water network before player infrastructure allocates any volume.
-  // Agriculture/Ecology then receive compatibility mirrors derived from that
-  // final physical state instead of maintaining independent rainfall worlds.
+  // Macro natural storage is temporarily expanded to its environmental scale;
+  // local pools and player-built storage remain literal 1:1 physical volumes.
   tickWorldHydrology(next, deltaGameMinutes);
   tickSurfaceWaterHydrology(next, deltaGameMinutes);
   syncLivingWaterDemands(next);
+  const environmentalWaterSnapshot = prepareEnvironmentalWaterManagementScale(next);
   tickWaterManagement(next, deltaGameMinutes);
+  finalizeEnvironmentalWaterManagementScale(next, environmentalWaterSnapshot);
   prepareLivingHydrologyState(next, deltaGameMinutes);
 
   tickStorageSimulation(next, deltaGameMinutes);
@@ -221,7 +228,7 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickAgriculture(next, deltaGameMinutes, deltaGameSeconds);
   tickWorldEcology(next, deltaGameMinutes);
   finalizeLivingHydrologyState(next);
-  tickAquaticEcology(next, deltaGameMinutes);
+  tickAquaticEcologyAtEnvironmentalScale(next, deltaGameMinutes);
   tickWildFauna(next, deltaGameMinutes);
   tickWildPredators(next, deltaGameMinutes);
 
