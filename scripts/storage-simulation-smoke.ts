@@ -127,11 +127,12 @@ function testV8MigrationCreatesStorageMetadataWithoutMovingItems(): void {
   }
   const before = getAvailableInventoryStock(legacy.poiStorages!.AREA_CAMP_CLEARING, 'ITEM_DRIFTWOOD_BRANCH');
   const migrated = migrateGameState(legacy);
-  assert.equal(migrated.saveVersion, 12);
+  assert.equal(migrated.saveVersion, 13);
   assert.equal(migrated.storageSystem?.version, 3);
   assert.ok(migrated.storageSystem?.locations.length);
   assert.equal(getAvailableInventoryStock(migrated.poiStorages!.AREA_CAMP_CLEARING, 'ITEM_DRIFTWOOD_BRANCH'), before, 'migration must not duplicate or consume legacy stock');
   assert.ok(migrated.poiStorages!.AREA_CAMP_CLEARING.items.every(item => Boolean(item.storageLocationId)), 'legacy POI stacks must receive a physical storage location');
+  assert.ok(migrated.ecologySystem, 'latest migration should add lazy ecology without moving storage stock');
 }
 
 function testStoreAllRespectsCompatibility(): void {
@@ -327,7 +328,7 @@ function testSaveLoadRebuildsHaulReservationAndRoute(): void {
 
   const migrated = migrateGameState(JSON.parse(JSON.stringify(state)) as GameState);
   const restored = migrated.storageSystem!.haulJobs.find(job => job.id === queued.id)!;
-  assert.equal(migrated.saveVersion, 12);
+  assert.equal(migrated.saveVersion, 13);
   assert.equal(restored.materialReservations.reduce((sum, reservation) => sum + reservation.quantity, 0), 2, 'load must rebuild exact haul reservations');
   assert.ok(restored.route, 'V10 migration must reconstruct missing route data');
   assert.equal(restored.sourcePoiId, 'AREA_CAMP_CLEARING');
