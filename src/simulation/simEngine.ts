@@ -34,6 +34,7 @@ import { createWorldEcologyState, tickWorldEcology } from './ecologySystem';
 import { tickWildFauna } from './ecologyFaunaSystem';
 import { tickWildPredators } from './ecologyPredatorSystem';
 import { createWorldHydrologyState, tickWorldHydrology } from './hydrologySystem';
+import { tickSurfaceWaterHydrology } from './hydrologySurfaceWaterSystem';
 import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
@@ -73,6 +74,7 @@ export * from './ecologySystem';
 export * from './ecologyFaunaSystem';
 export * from './ecologyPredatorSystem';
 export * from './hydrologySystem';
+export * from './hydrologySurfaceWaterSystem';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 const rockyShoreGroundStorageId = 'storage_ground_AREA_FISHING_LAGOON';
@@ -186,10 +188,11 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickStructureLifecycle(next, deltaGameMinutes);
   tickStructureWorkRuntime(next);
 
-  // Hydrology runs after physical terrain/structure changes and before every
-  // living system. Agriculture and ecology can therefore consume one shared,
-  // current water state instead of calculating independent moisture worlds.
+  // First solve rainfall/soil/groundwater/local runoff, then materialize the
+  // connected surface network, floodplain storage and water quality. Living
+  // systems always observe the same post-hydrology state for this game tick.
   tickWorldHydrology(next, deltaGameMinutes);
+  tickSurfaceWaterHydrology(next, deltaGameMinutes);
 
   tickStorageSimulation(next, deltaGameMinutes);
   tickStorageHauling(next, deltaGameSeconds);
