@@ -206,13 +206,18 @@ function recomputePredatorBiomass(population: WildPredatorPopulation, species: W
 }
 
 function updateChronicStress(response: PredatorPressurePopulationState, severity: number, elapsedDays: number): void {
-  if (severity >= 0.32) {
-    // Count effective pressure-days rather than treating every mildly stressed day
-    // as a full chronic day. Severe pressure still accumulates quickly.
+  const recoveryThreshold = 0.36;
+  if (severity >= recoveryThreshold) {
+    // Severe resource pressure still accumulates quickly, while moderate residual
+    // condition damage no longer keeps an otherwise recovering population stuck
+    // in chronic stress indefinitely.
     const accumulationRate = 0.35 + severity * 0.45;
     response.chronicStressDays = Math.min(120, response.chronicStressDays + elapsedDays * severity * accumulationRate);
   } else {
-    const recoveryRate = 1 + (0.32 - severity) * 2.4;
+    // Healthy days should erase pressure memory faster than it accumulated once
+    // food, water and competition recover. This preserves hysteresis without
+    // leaving a population chronically stressed for most of a year after relief.
+    const recoveryRate = 1.6 + (recoveryThreshold - severity) * 3.4;
     response.chronicStressDays = Math.max(0, response.chronicStressDays - elapsedDays * recoveryRate);
   }
   response.chronicStressDays = round3(response.chronicStressDays);
