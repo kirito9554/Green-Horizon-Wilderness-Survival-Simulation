@@ -95,11 +95,12 @@ function testV12CanonicalizesLegacyMainWorldReferences(): void {
     id: 'legacy_farm_cluster',
     poiId: 'AREA_FORAGING_GROUNDS',
     type: 'farming',
+    name: 'Legacy Farming Patch',
     cellIds: [preservedCellId],
     usableAreaM2: 20,
     occupiedAreaM2: 0,
-    structureIds: [],
     state: 'active',
+    siteScore: 70,
     maintenancePolicy: 'normal',
     createdAtGameMinute: 0,
   });
