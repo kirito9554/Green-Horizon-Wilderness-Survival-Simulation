@@ -1,6 +1,7 @@
 name: Predator Long-Run Diagnostics
 
 # PR runs use the fast multi-resolution gate; canonical validation remains manual.
+# During P5b tuning, the 1-year energy probe runs in parallel with the fast gate.
 on:
   pull_request:
     branches:
