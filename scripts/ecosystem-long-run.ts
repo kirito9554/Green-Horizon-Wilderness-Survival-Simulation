@@ -39,6 +39,7 @@ const SAMPLE_INTERVAL_DAYS = 30;
 const DEFAULT_STEP_MINUTES = 720;
 const DEFAULT_SEED = 'ecosystem-long-run-v1';
 const ENVIRONMENTAL_FORCING_SUBSTEP_MINUTES = 360;
+const AQUATIC_HYDROLOGY_SUBSTEP_MINUTES = 60;
 
 const SCENARIOS = ['untouched', 'sustainable_harvest', 'heavy_harvest', 'catastrophe_recovery'] as const;
 type ScenarioId = (typeof SCENARIOS)[number];
@@ -304,6 +305,24 @@ function applyScenarioInterventions(
   runtime.peakDisturbance = Math.max(runtime.peakDisturbance, averageDisturbance(state));
 }
 
+function advanceHydrologyAndAquatic(state: GameState, minutes: number): void {
+  let remaining = Math.max(0, minutes);
+  while (remaining > 0.0001) {
+    const substep = Math.min(remaining, AQUATIC_HYDROLOGY_SUBSTEP_MINUTES);
+    // Hydrology and aquatic ecology are a tightly coupled subsystem. Advancing
+    // water for six hours and then replaying six biological hours against the
+    // final water snapshot creates a false carrying-capacity history. Keep this
+    // pair on a canonical hourly cadence while terrestrial ecology may remain on
+    // the cheaper outer cadence used by long-run sweeps.
+    deterministicWeather(state);
+    advanceTime(state, substep);
+    tickWorldHydrology(state, substep);
+    tickSurfaceWaterHydrology(state, substep);
+    tickAquaticEcologyAtEnvironmentalScale(state, substep);
+    remaining -= substep;
+  }
+}
+
 function stepEcosystemSlice(
   state: GameState,
   minutes: number,
@@ -311,13 +330,7 @@ function stepEcosystemSlice(
   elapsedMinutesAfterSlice: number,
   runtime: ScenarioRuntime,
 ): void {
-  // Weather is a forcing over the interval that is about to be integrated. Use
-  // the interval-start state so a six-hour coarse step sees the same forcing as
-  // six one-hour fine steps inside the same deterministic weather slot.
-  deterministicWeather(state);
-  advanceTime(state, minutes);
-  tickWorldHydrology(state, minutes);
-  tickSurfaceWaterHydrology(state, minutes);
+  advanceHydrologyAndAquatic(state, minutes);
   prepareLivingHydrologyState(state, minutes);
 
   applyScenarioInterventions(state, scenario, elapsedMinutesAfterSlice / MINUTES_PER_DAY, minutes / MINUTES_PER_DAY, runtime);
@@ -327,7 +340,6 @@ function stepEcosystemSlice(
     tickWorldEcology(state, minutes);
     reconcileTerrestrialEcologyScale(state);
     finalizeLivingHydrologyState(state);
-    tickAquaticEcologyAtEnvironmentalScale(state, minutes);
     tickWildFaunaWithStableFoodWebClock(state, minutes);
     reconcileTerrestrialEcologyScale(state);
     tickWildPredators(state, minutes);
@@ -353,8 +365,6 @@ function stepEcosystem(
     stepEcosystemSlice(state, slice, scenario, elapsedCursor, runtime);
     remaining -= slice;
   }
-  // Expose the weather corresponding to the final clock for telemetry/UI while
-  // keeping all physical integration above driven by interval-start forcing.
   deterministicWeather(state);
 }
 
@@ -448,7 +458,6 @@ function runScenario(options: RunOptions): LongRunResult {
   const state = freshState(options.seed);
   const runtime: ScenarioRuntime = { lastMonthlyHarvestPeriod: 0, catastropheApplied: false, peakDisturbance: 0 };
 
-  // One neutral hour seeds terrestrial fauna and starts hydrological observation.
   stepEcosystem(state, 60, 'untouched', 0, runtime);
   const baseline = captureSnapshot(state, 0);
   const telemetry: EcosystemSnapshot[] = [baseline];
