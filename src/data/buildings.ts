@@ -217,6 +217,96 @@ export const BUILDINGS_DATABASE: Record<string, BuildingRecipeDefinition> = {
     },
   },
 
+  BUILDING_IRRIGATION_DITCH: {
+    id: 'BUILDING_IRRIGATION_DITCH',
+    name: 'Mương tưới thô sơ',
+    description: 'Mương nông đào theo độ dốc tự nhiên, dùng cọc và đá đánh dấu bờ để dẫn nước từ nguồn thấp áp tới khu canh tác.',
+    category: 'water',
+    cost: [
+      { itemId: 'ITEM_DRIFTWOOD_BRANCH', quantity: 3 },
+      { itemId: 'ITEM_RIVER_PEBBLE', quantity: 4 },
+      { itemId: 'ITEM_CORD_ROPE', quantity: 1 },
+    ],
+    buildTimeSeconds: 38,
+    benefitsDescription: 'Dẫn nước bằng trọng lực đến các ô đất canh tác. Dễ làm nhưng thất thoát và dễ bồi lấp.',
+    ui: { sortOrder: 41, tags: ['irrigation', 'ditch', 'water', 'mương tưới', 'thủy lợi', 'farming'] },
+  },
+
+  BUILDING_DRAINAGE_DITCH: {
+    id: 'BUILDING_DRAINAGE_DITCH',
+    name: 'Mương thoát nước',
+    description: 'Rãnh thoát thấp kéo nước thừa khỏi đất bão hòa và dẫn xuống điểm thấp hoặc nguồn nhận nước thích hợp.',
+    category: 'water',
+    cost: [
+      { itemId: 'ITEM_DRIFTWOOD_BRANCH', quantity: 2 },
+      { itemId: 'ITEM_RIVER_PEBBLE', quantity: 5 },
+      { itemId: 'ITEM_CORD_ROPE', quantity: 1 },
+    ],
+    buildTimeSeconds: 36,
+    benefitsDescription: 'Giảm úng cục bộ bằng cách chuyển nước thật khỏi khu đất sang điểm xả thấp hơn.',
+    ui: { sortOrder: 42, tags: ['drainage', 'ditch', 'waterlogging', 'mương thoát', 'thoát nước', 'farming'] },
+  },
+
+  BUILDING_BAMBOO_WATER_CHANNEL: {
+    id: 'BUILDING_BAMBOO_WATER_CHANNEL',
+    name: 'Máng dẫn nước bằng tre',
+    description: 'Các thân tre bổ và ghép nối thành máng dẫn hẹp, giảm thất thoát so với mương đất nhưng vẫn phụ thuộc hoàn toàn vào chênh cao.',
+    category: 'water',
+    cost: [
+      { itemId: 'ITEM_BAMBOO_STALK', quantity: 6 },
+      { itemId: 'ITEM_BAMBOO_SPLIT', quantity: 4 },
+      { itemId: 'ITEM_CORD_ROPE', quantity: 3 },
+    ],
+    buildTimeSeconds: 44,
+    benefitsDescription: 'Chuyển nước bằng trọng lực với thất thoát thấp hơn mương đất; hư hỏng làm tăng rò rỉ.',
+    ui: { sortOrder: 43, tags: ['bamboo', 'channel', 'aqueduct', 'water', 'máng tre', 'dẫn nước'] },
+  },
+
+  BUILDING_SMALL_DIVERSION_WEIR: {
+    id: 'BUILDING_SMALL_DIVERSION_WEIR',
+    name: 'Đập dâng chuyển dòng nhỏ',
+    description: 'Hàng cọc tre và đá ghép ngang dòng nước nhỏ để nâng mực nước và lấy một phần lưu lượng sang mạng dẫn nước.',
+    category: 'water',
+    cost: [
+      { itemId: 'ITEM_BAMBOO_STALK', quantity: 5 },
+      { itemId: 'ITEM_RIVER_PEBBLE', quantity: 10 },
+      { itemId: 'ITEM_CORD_ROPE', quantity: 4 },
+    ],
+    buildTimeSeconds: 55,
+    benefitsDescription: 'Cho phép chuyển một phần lưu lượng thực của suối; phần lấy đi sẽ không còn ở hạ lưu.',
+    ui: { sortOrder: 44, tags: ['weir', 'diversion', 'stream', 'water', 'đập dâng', 'chuyển dòng'] },
+  },
+
+  BUILDING_EARTHEN_POND: {
+    id: 'BUILDING_EARTHEN_POND',
+    name: 'Ao đất chứa nước',
+    description: 'Hố trữ nước nông được đào ở địa hình thấp, gia cố mép bằng đá và cọc đánh dấu. Ao mới hoàn thành hoàn toàn có thể khô.',
+    category: 'water',
+    cost: [
+      { itemId: 'ITEM_RIVER_PEBBLE', quantity: 6 },
+      { itemId: 'ITEM_DRIFTWOOD_BRANCH', quantity: 4 },
+      { itemId: 'ITEM_CORD_ROPE', quantity: 2 },
+    ],
+    buildTimeSeconds: 70,
+    benefitsDescription: 'Tạo thể tích trữ nước vật lý; phải được mưa, runoff hoặc mạng dẫn nước nạp vào trước khi sử dụng.',
+    ui: { sortOrder: 45, tags: ['pond', 'reservoir', 'storage', 'water', 'ao đất', 'hồ chứa'] },
+  },
+
+  BUILDING_SIMPLE_SLUICE: {
+    id: 'BUILDING_SIMPLE_SLUICE',
+    name: 'Cửa điều tiết tre',
+    description: 'Khung tre có tấm chắn đơn giản đặt trên mương hoặc nhánh dẫn, dùng để giới hạn và phân phối lưu lượng qua mạng thủy lợi.',
+    category: 'water',
+    cost: [
+      { itemId: 'ITEM_BAMBOO_STALK', quantity: 4 },
+      { itemId: 'ITEM_BAMBOO_SPLIT', quantity: 6 },
+      { itemId: 'ITEM_CORD_ROPE', quantity: 3 },
+    ],
+    buildTimeSeconds: 46,
+    benefitsDescription: 'Điều tiết lưu lượng thực trong mạng nước; không tạo thêm nước và mất tác dụng khi không còn chênh cao.',
+    ui: { sortOrder: 46, tags: ['sluice', 'gate', 'water', 'flow control', 'cửa nước', 'điều tiết'] },
+  },
+
   BUILDING_CARPENTER_BENCH: {
     id: 'BUILDING_CARPENTER_BENCH',
     name: 'Bàn chế tác bằng gỗ',

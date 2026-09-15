@@ -10,8 +10,12 @@ export type HydrologyAnchorKind =
   | 'major_wetland'
   | 'spring_zone';
 
-export type HydrologyNodeKind = HydrologyAnchorKind | 'depression' | 'groundwater' | 'channel';
+export type HydrologyNodeKind = HydrologyAnchorKind | 'depression' | 'groundwater' | 'channel' | 'managed_storage';
 export type HydrologyEdgeKind = 'stream' | 'river' | 'waterfall' | 'spillway' | 'estuary' | 'tidal';
+export type WaterInfrastructureKind = 'ditch' | 'channel' | 'weir' | 'pond' | 'cistern' | 'sluice' | 'pump' | 'pipe' | 'rain_collector';
+export type WaterInfrastructurePurpose = 'irrigation' | 'drainage' | 'diversion' | 'storage' | 'rain_collection' | 'transfer';
+export type WaterUseClass = 'drinking' | 'critical_crops' | 'normal_crops' | 'livestock' | 'aquaculture' | 'reserve';
+export type WaterAllocationPolicy = 'drinking_first' | 'balanced' | 'agriculture_first' | 'reserve_first';
 
 export interface SoilHydrologyProfileSnapshot {
   soilType: BuildSoilType;
@@ -42,7 +46,6 @@ export interface CellHydrologyState {
   temperatureC: number;
   turbidity: number;
   contamination: number;
-  /** Detailed M3/M4 water-quality state, added compatibly inside save schema V14. */
   dissolvedOxygenMgL?: number;
   sedimentKg?: number;
   contaminantLoad?: number;
@@ -148,19 +151,58 @@ export interface WaterInfrastructureInstance {
   id: string;
   structureId: string;
   poiId: MainWorldAreaId;
-  kind: 'ditch' | 'channel' | 'weir' | 'pond' | 'cistern' | 'sluice' | 'pump' | 'pipe';
+  kind: WaterInfrastructureKind;
+  purpose?: WaterInfrastructurePurpose;
+  cellIds?: string[];
   inputNodeIds: string[];
   outputNodeIds: string[];
+  targetCellIds?: string[];
   capacityM3H: number;
+  desiredFlowM3H?: number;
+  currentFlowM3H?: number;
   leakage: number;
   blockage: number;
+  storageCapacityM3?: number;
+  storedWaterM3?: number;
+  rainCollectionAreaM2?: number;
+  gravityRequired?: boolean;
+  minimumHeadM?: number;
+  active?: boolean;
+  waterUseClass?: WaterUseClass;
+  lastUpdatedGameMinute?: number;
+}
+
+export interface WaterDemand {
+  id: string;
+  poiId: MainWorldAreaId;
+  targetType: 'cells' | 'structure' | 'habitat';
+  targetId?: string;
+  targetCellIds: string[];
+  useClass: WaterUseClass;
+  demandM3H: number;
+  minimumM3H: number;
+  deliveredM3H: number;
+  networkId?: string;
+  active: boolean;
+}
+
+export interface WaterAllocationRecord {
+  id: string;
+  gameMinute: number;
+  networkId: string;
+  demandId: string;
+  requestedM3: number;
+  deliveredM3: number;
+  lostM3: number;
+  sourceInfrastructureIds: string[];
 }
 
 export interface WaterManagementNetwork {
   id: string;
   poiId: MainWorldAreaId;
   infrastructureIds: string[];
-  allocationPolicy: 'drinking_first' | 'balanced' | 'agriculture_first' | 'reserve_first';
+  allocationPolicy: WaterAllocationPolicy;
+  reserveFraction?: number;
 }
 
 export interface WorldHydrologyState {
@@ -173,6 +215,8 @@ export interface WorldHydrologyState {
   aquifersById: Record<string, AquiferState>;
   infrastructure: WaterInfrastructureInstance[];
   networks: WaterManagementNetwork[];
+  demands?: WaterDemand[];
+  allocationHistory?: WaterAllocationRecord[];
   hydrologyTickIndex: number;
 }
 
