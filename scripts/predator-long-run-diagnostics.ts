@@ -114,6 +114,8 @@ interface PredatorLongRunReport {
   baseline: PredatorCheckpoint;
   checkpoints: PredatorCheckpoint[];
   warnings: string[];
+  abortedAfterYear?: number;
+  abortReason?: string;
 }
 
 interface WeatherSample {
@@ -384,6 +386,18 @@ function compareExtinctions(baseline: PredatorCheckpoint, checkpoint: PredatorCh
   return warnings;
 }
 
+function getFastGateAbortReason(baseline: PredatorCheckpoint, checkpoint: PredatorCheckpoint): string | undefined {
+  if (checkpoint.year !== 1 || baseline.predatorPopulation <= 0) return undefined;
+  const survivalShare = checkpoint.predatorPopulation / baseline.predatorPopulation;
+  const speciesShare = checkpoint.species.length / Math.max(1, baseline.species.length);
+  if (survivalShare < 0.25) return `1y predator survival fell to ${round3(survivalShare * 100)}% of baseline`;
+  if (speciesShare < 0.5) return `1y surviving predator guild fell to ${round3(speciesShare * 100)}% of baseline species`;
+  if (checkpoint.populationWeightedHunger >= 90 && checkpoint.chronicStressDays >= 60) {
+    return `1y predators remain critically hungry (${checkpoint.populationWeightedHunger}) under chronic stress (${checkpoint.chronicStressDays}d)`;
+  }
+  return undefined;
+}
+
 function parseStringArg(name: string, fallback: string): string {
   const prefix = `--${name}=`;
   return process.argv.find(value => value.startsWith(prefix))?.slice(prefix.length) || fallback;
@@ -412,11 +426,21 @@ function main(): void {
   const checkpoints: PredatorCheckpoint[] = [];
   const phases: PhaseExecution[] = [];
   let elapsedYears = 0;
+  let abortedAfterYear: number | undefined;
+  let abortReason: string | undefined;
   for (const targetYear of TARGET_YEARS) {
     const phase = simulatePhase(state, mode, elapsedYears, targetYear);
     phases.push(phase);
     const checkpoint = captureCheckpoint(state, targetYear);
     checkpoint.warnings.push(...compareExtinctions(baseline, checkpoint));
+    if (mode === 'fast') {
+      const reason = getFastGateAbortReason(baseline, checkpoint);
+      if (reason) {
+        abortedAfterYear = targetYear;
+        abortReason = reason;
+        checkpoint.warnings.push(`fast validation aborted: ${reason}`);
+      }
+    }
     checkpoints.push(checkpoint);
     elapsedYears = targetYear;
     console.log(
@@ -425,6 +449,10 @@ function main(): void {
       `reserve=${checkpoint.reserveRatio} chronic=${checkpoint.chronicStressDays} ` +
       `emigrants=${checkpoint.totalEmigrants} warnings=${checkpoint.warnings.length}`,
     );
+    if (abortReason) {
+      console.log(`P5 fast gate abort after ${targetYear}y: ${abortReason}`);
+      break;
+    }
   }
 
   const executedTicks = warmupTicks + phases.reduce((sum, phase) => sum + phase.ticks, 0);
@@ -444,6 +472,8 @@ function main(): void {
     baseline,
     checkpoints,
     warnings: checkpoints.flatMap(checkpoint => checkpoint.warnings.map(warning => `${checkpoint.year}y: ${warning}`)),
+    abortedAfterYear,
+    abortReason,
   };
 
   const path = join(outputDir, 'predator-long-run-report.json');
