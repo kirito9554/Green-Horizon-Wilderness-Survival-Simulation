@@ -62,6 +62,9 @@ jobs:
       - name: Aquatic-ready hydrology smoke test
         run: npm run test:hydrology-aquatic
 
+      - name: Environmental scale and human-impact smoke test
+        run: npm run test:environment-scale
+
       - name: Spatial building smoke test
         run: npm run test:building
 

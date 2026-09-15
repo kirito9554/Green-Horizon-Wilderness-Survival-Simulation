@@ -27,7 +27,8 @@
     "test:hydrology-surface": "tsx scripts/hydrology-surface-water-smoke.ts",
     "test:hydrology-management": "tsx scripts/hydrology-water-management-smoke.ts",
     "test:hydrology-living": "tsx scripts/hydrology-living-integration-smoke.ts",
-    "test:hydrology-aquatic": "tsx scripts/hydrology-aquatic-ready-smoke.ts"
+    "test:hydrology-aquatic": "tsx scripts/hydrology-aquatic-ready-smoke.ts",
+    "test:environment-scale": "tsx scripts/environmental-scale-smoke.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
