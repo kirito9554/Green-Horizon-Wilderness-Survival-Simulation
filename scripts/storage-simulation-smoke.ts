@@ -6,10 +6,13 @@ import {
   canStoreItemInLocation,
   ensureStorageSystem,
   getDynamicStorageSlotCount,
+  getItemLiquidLiters,
   getStorageLocationItems,
   storeItemInLocation,
   summarizeStorageLocation,
+  summarizeStorageNetwork,
   takeItemFromLocation,
+  tickStorageSimulation,
 } from '../src/simulation/storageSystem';
 import { queueStorageHaul, tickStorageHauling } from '../src/simulation/storageHaulSystem';
 import { addItemToInventory, getAvailableInventoryStock } from '../src/simulation/inventorySystem';
@@ -21,7 +24,13 @@ function fresh(): GameState {
   return state;
 }
 
-function addStorageBuilding(state: GameState, buildingId: string, id: string, condition = 88) {
+function addStorageBuilding(
+  state: GameState,
+  buildingId: string,
+  id: string,
+  condition = 88,
+  areaId = 'AREA_CAMP_CLEARING',
+) {
   state.buildings.push({
     id,
     buildingId,
@@ -29,21 +38,26 @@ function addStorageBuilding(state: GameState, buildingId: string, id: string, co
     isBuilt: true,
     buildProgressSeconds: 30,
     totalBuildSeconds: 30,
-    areaId: 'AREA_CAMP_CLEARING',
+    areaId,
   });
   const location = ensureStorageSystem(state).locations.find(candidate => candidate.buildingInstanceId === id)!;
   location.policy.autoHaul = false;
   return location;
 }
 
-function addRack(state: GameState, id = 'storage_rack_smoke') {
-  return addStorageBuilding(state, 'BUILDING_WOVEN_BASKET_RACK', id);
+function addRack(state: GameState, id = 'storage_rack_smoke', areaId = 'AREA_CAMP_CLEARING') {
+  return addStorageBuilding(state, 'BUILDING_WOVEN_BASKET_RACK', id, 88, areaId);
 }
 
-function physicalPoiQuantity(state: GameState, itemId: string): number {
-  return state.poiStorages!.AREA_CAMP_CLEARING.items
+function poiQuantity(state: GameState, poiId: string, itemId: string): number {
+  return (state.poiStorages?.[poiId]?.items || [])
     .filter(item => item.itemId === itemId)
     .reduce((sum, item) => sum + item.quantity, 0);
+}
+
+function worldQuantity(state: GameState, itemId: string): number {
+  return Object.values(state.poiStorages || {}).reduce((sum, storage) =>
+    sum + storage.items.filter(item => item.itemId === itemId).reduce((nested, item) => nested + item.quantity, 0), 0);
 }
 
 function carriedItem(state: GameState, itemId: string) {
@@ -113,7 +127,8 @@ function testV8MigrationCreatesStorageMetadataWithoutMovingItems(): void {
   }
   const before = getAvailableInventoryStock(legacy.poiStorages!.AREA_CAMP_CLEARING, 'ITEM_DRIFTWOOD_BRANCH');
   const migrated = migrateGameState(legacy);
-  assert.equal(migrated.saveVersion, 9);
+  assert.equal(migrated.saveVersion, 10);
+  assert.equal(migrated.storageSystem?.version, 3);
   assert.ok(migrated.storageSystem?.locations.length);
   assert.equal(getAvailableInventoryStock(migrated.poiStorages!.AREA_CAMP_CLEARING, 'ITEM_DRIFTWOOD_BRANCH'), before, 'migration must not duplicate or consume legacy stock');
   assert.ok(migrated.poiStorages!.AREA_CAMP_CLEARING.items.every(item => Boolean(item.storageLocationId)), 'legacy POI stacks must receive a physical storage location');
@@ -155,17 +170,83 @@ function testSpecializedStorageProfiles(): void {
   assert.equal(canStoreItemInLocation(state, crate.id, water, 1).accepted, false, 'general supply crate must reject liquid stock');
 }
 
+function testLiquidCapacityUsesLiters(): void {
+  let state = fresh();
+  const tank = addStorageBuilding(state, 'BUILDING_BAMBOO_WATER_TANK', 'water_liters_smoke', 100);
+  tank.capacity.liquidCapacityL = 1.5;
+  addItemToInventory(state.inventory, 'ITEM_WATER_FLASK', 3, 'standard');
+  const water = carriedItem(state, 'ITEM_WATER_FLASK');
+  assert.equal(getItemLiquidLiters(water), 3, 'water stack must track its physical liquid liters');
+
+  const acceptance = canStoreItemInLocation(state, tank.id, water, 3);
+  assert.equal(acceptance.accepted, true);
+  assert.equal(acceptance.maxAcceptableQuantity, 1, 'liquid capacity should cap the accepted units by liters');
+  assert.ok((acceptance.remainingLiquidL || 0) >= 1.49);
+
+  state = storeItemInLocation(state, tank.id, water.instanceId, 3);
+  const summary = summarizeStorageLocation(state, tank.id)!;
+  assert.equal(summary.usedLiquidL, 1);
+  assert.equal(getStorageLocationItems(state, tank.id).reduce((sum, item) => sum + getItemLiquidLiters(item), 0), 1);
+}
+
+function testPreservationMetadataSurvivesHauling(): void {
+  let state = fresh();
+  const medicine = addStorageBuilding(state, 'BUILDING_MEDICINE_STORAGE_CHEST', 'medicine_transfer_smoke', 100);
+  const crate = addStorageBuilding(state, 'BUILDING_BAMBOO_SUPPLY_CRATE', 'crate_transfer_smoke', 100);
+  addItemToInventory(state.inventory, 'ITEM_BANDAGE', 2, 'standard');
+  const bandage = carriedItem(state, 'ITEM_BANDAGE');
+  bandage.moisture = 38;
+  bandage.contamination = 27;
+  bandage.mold = 19;
+  bandage.medicinePotency = 81;
+
+  state = storeItemInLocation(state, medicine.id, bandage.instanceId, 1);
+  const stored = getStorageLocationItems(state, medicine.id).find(item => item.itemId === 'ITEM_BANDAGE')!;
+  assert.equal(Math.round(stored.contamination || 0), 27);
+  assert.equal(Math.round(stored.mold || 0), 19);
+  assert.equal(Math.round(stored.medicinePotency || 0), 81);
+
+  state = queueStorageHaul(state, medicine.id, crate.id, 'ITEM_BANDAGE', 1, state.survivors[0].id);
+  const job = state.storageSystem!.haulJobs.find(candidate => candidate.targetLocationId === crate.id)!;
+  tickStorageHauling(state, job.totalSeconds + 0.1);
+  const moved = getStorageLocationItems(state, crate.id).find(item => item.itemId === 'ITEM_BANDAGE')!;
+  assert.ok(moved, 'haul should deposit the medical stack in the target');
+  assert.equal(Math.round(moved.contamination || 0), 27, 'contamination must survive a physical transfer');
+  assert.equal(Math.round(moved.mold || 0), 19, 'mold state must survive a physical transfer');
+  assert.equal(Math.round(moved.medicinePotency || 0), 81, 'medicine potency must survive a physical transfer');
+}
+
+function testEnvironmentalDecayTracksMoldAndPotency(): void {
+  let state = fresh();
+  const ground = state.storageSystem!.locations.find(location => location.id === 'storage_ground_AREA_CAMP_CLEARING')!;
+  addItemToInventory(state.inventory, 'ITEM_BANDAGE', 1, 'standard');
+  const bandage = carriedItem(state, 'ITEM_BANDAGE');
+  state = storeItemInLocation(state, ground.id, bandage.instanceId, 1);
+  const stored = getStorageLocationItems(state, ground.id).find(item => item.itemId === 'ITEM_BANDAGE')!;
+  stored.moisture = 90;
+  stored.contamination = 20;
+  stored.mold = 0;
+  stored.medicinePotency = 100;
+  state.weather.humidityPercent = 96;
+  state.weather.temperatureC = 37;
+
+  tickStorageSimulation(state, 1440);
+  assert.ok((stored.mold || 0) > 0, 'hot humid unprotected storage must create mold pressure');
+  assert.ok((stored.medicinePotency || 100) < 100, 'medicine potency must decay under poor storage conditions');
+  assert.ok((stored.contamination || 0) >= 20, 'poor ground storage should not magically clean contamination');
+}
+
 function testPersistentHaulMovesLocationWithoutChangingPhysicalQuantity(): void {
   let state = fresh();
   const rack = addRack(state, 'rack_haul_smoke');
   const ground = state.storageSystem!.locations.find(location => location.id === 'storage_ground_AREA_CAMP_CLEARING')!;
-  const beforePhysical = physicalPoiQuantity(state, 'ITEM_DRIFTWOOD_BRANCH');
+  const beforePhysical = poiQuantity(state, 'AREA_CAMP_CLEARING', 'ITEM_DRIFTWOOD_BRANCH');
 
   state = queueStorageHaul(state, ground.id, rack.id, 'ITEM_DRIFTWOOD_BRANCH', 2, state.survivors[0].id);
   const job = state.storageSystem!.haulJobs[0];
   assert.ok(job, 'haul request must become a persistent job');
   assert.equal(job.materialReservations.reduce((sum, reservation) => sum + reservation.quantity, 0), 2, 'haul job must reserve exact source quantity');
-  assert.equal(physicalPoiQuantity(state, 'ITEM_DRIFTWOOD_BRANCH'), beforePhysical, 'planning a haul must not move or consume stock');
+  assert.equal(poiQuantity(state, 'AREA_CAMP_CLEARING', 'ITEM_DRIFTWOOD_BRANCH'), beforePhysical, 'planning a haul must not move or consume stock');
 
   tickStorageHauling(state, 0.1);
   assert.equal(job.status, 'in_progress');
@@ -174,7 +255,7 @@ function testPersistentHaulMovesLocationWithoutChangingPhysicalQuantity(): void 
 
   tickStorageHauling(state, job.totalSeconds + 0.1);
   assert.equal(job.status, 'completed');
-  assert.equal(physicalPoiQuantity(state, 'ITEM_DRIFTWOOD_BRANCH'), beforePhysical, 'hauling changes physical location, never total stock');
+  assert.equal(poiQuantity(state, 'AREA_CAMP_CLEARING', 'ITEM_DRIFTWOOD_BRANCH'), beforePhysical, 'hauling changes physical location, never total stock');
   assert.equal(
     getStorageLocationItems(state, rack.id).filter(item => item.itemId === 'ITEM_DRIFTWOOD_BRANCH').reduce((sum, item) => sum + item.quantity, 0),
     2,
@@ -183,17 +264,60 @@ function testPersistentHaulMovesLocationWithoutChangingPhysicalQuantity(): void 
   assert.equal(worker.currentAction.type, 'idle', 'completed haul must release its worker');
 }
 
-function testSaveLoadRebuildsHaulReservation(): void {
+function testCrossPoiHaulUsesRouteAndCanonicalInventories(): void {
+  let state = fresh();
+  const rack = addRack(state, 'rack_cross_poi_smoke');
+  const remoteGround = ensureStorageSystem(state).locations.find(location => location.id === 'storage_ground_AREA_RIVERBANK')!;
+  const beforeWorld = worldQuantity(state, 'ITEM_RIVER_PEBBLE');
+  const beforeRemote = poiQuantity(state, 'AREA_RIVERBANK', 'ITEM_RIVER_PEBBLE');
+  const beforeCamp = poiQuantity(state, 'AREA_CAMP_CLEARING', 'ITEM_RIVER_PEBBLE');
+
+  state = queueStorageHaul(state, remoteGround.id, rack.id, 'ITEM_RIVER_PEBBLE', 2, state.survivors[0].id);
+  const job = state.storageSystem!.haulJobs.find(candidate => candidate.sourceLocationId === remoteGround.id && candidate.targetLocationId === rack.id)!;
+  assert.ok(job, 'cross-POI transfer should create a persistent haul job');
+  assert.equal(job.sourcePoiId, 'AREA_RIVERBANK');
+  assert.equal(job.targetPoiId, 'AREA_CAMP_CLEARING');
+  assert.equal(job.route?.crossesPoi, true);
+  assert.ok((job.route?.distanceM || 0) > 50, 'cross-POI haul must have a real route distance');
+
+  tickStorageHauling(state, job.totalSeconds + 0.1);
+  assert.equal(job.status, 'completed');
+  assert.equal(poiQuantity(state, 'AREA_RIVERBANK', 'ITEM_RIVER_PEBBLE'), beforeRemote - 2);
+  assert.equal(poiQuantity(state, 'AREA_CAMP_CLEARING', 'ITEM_RIVER_PEBBLE'), beforeCamp + 2);
+  assert.equal(worldQuantity(state, 'ITEM_RIVER_PEBBLE'), beforeWorld, 'cross-POI hauling must conserve world stock');
+}
+
+function testStorageNetworkSummary(): void {
+  const state = fresh();
+  addRack(state, 'rack_network_smoke');
+  const campSummary = summarizeStorageNetwork(state, 'AREA_CAMP_CLEARING');
+  const worldSummary = summarizeStorageNetwork(state);
+  assert.ok(campSummary.locationCount >= 2);
+  assert.ok(campSummary.protectedLocationCount >= 1);
+  assert.ok(campSummary.groundCacheUnits > 0);
+  assert.ok(worldSummary.locationCount >= campSummary.locationCount);
+  assert.ok(worldSummary.totalVolumeCapacityL >= campSummary.totalVolumeCapacityL);
+}
+
+function testSaveLoadRebuildsHaulReservationAndRoute(): void {
   let state = fresh();
   const rack = addRack(state, 'rack_save_smoke');
   const ground = state.storageSystem!.locations.find(location => location.id === 'storage_ground_AREA_CAMP_CLEARING')!;
   state = queueStorageHaul(state, ground.id, rack.id, 'ITEM_PALM_LEAF', 2);
   const queued = state.storageSystem!.haulJobs[0];
   assert.ok(queued?.materialReservations.length);
+  queued.route = undefined;
+  queued.sourcePoiId = undefined;
+  queued.targetPoiId = undefined;
+  state.saveVersion = 9;
 
   const migrated = migrateGameState(JSON.parse(JSON.stringify(state)) as GameState);
   const restored = migrated.storageSystem!.haulJobs.find(job => job.id === queued.id)!;
+  assert.equal(migrated.saveVersion, 10);
   assert.equal(restored.materialReservations.reduce((sum, reservation) => sum + reservation.quantity, 0), 2, 'load must rebuild exact haul reservations');
+  assert.ok(restored.route, 'V10 migration must reconstruct missing route data');
+  assert.equal(restored.sourcePoiId, 'AREA_CAMP_CLEARING');
+  assert.equal(restored.targetPoiId, 'AREA_CAMP_CLEARING');
   const sourceLeaf = getStorageLocationItems(migrated, ground.id).find(item => item.itemId === 'ITEM_PALM_LEAF')!;
   assert.ok((sourceLeaf.reservedQuantity || 0) >= 2, 'source stack must remain locked after load');
 }
@@ -207,8 +331,13 @@ function main(): void {
   testV8MigrationCreatesStorageMetadataWithoutMovingItems();
   testStoreAllRespectsCompatibility();
   testSpecializedStorageProfiles();
+  testLiquidCapacityUsesLiters();
+  testPreservationMetadataSurvivesHauling();
+  testEnvironmentalDecayTracksMoldAndPotency();
   testPersistentHaulMovesLocationWithoutChangingPhysicalQuantity();
-  testSaveLoadRebuildsHaulReservation();
+  testCrossPoiHaulUsesRouteAndCanonicalInventories();
+  testStorageNetworkSummary();
+  testSaveLoadRebuildsHaulReservationAndRoute();
   console.log('Storage simulation smoke tests passed.');
 }
 
