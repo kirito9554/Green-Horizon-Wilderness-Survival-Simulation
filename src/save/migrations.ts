@@ -7,6 +7,7 @@ import '../types/buildingSimulation';
 import '../types/structureMaintenanceSimulation';
 import '../types/storageSimulation';
 import '../types/agricultureSimulation';
+import '../types/ecologySimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { ensureToolComponentInstances } from '../simulation/componentSystem';
 import { rebuildReservationCounters } from '../simulation/materialReservationSystem';
@@ -18,9 +19,10 @@ import { ensureBuildingSimulation, getOrCreatePoiBuildGrid } from '../simulation
 import { ensureStorageSystem } from '../simulation/storageSystem';
 import { calculateStorageRoute } from '../simulation/storageRouteSystem';
 import { ensureAgricultureSystem, rebuildAgricultureReservations } from '../simulation/agricultureSystem';
+import { ensureWorldEcology } from '../simulation/ecologySystem';
 import { migrateLegacyMainWorldAreas } from './mainWorldAreaMigration';
 
-export const LATEST_SAVE_VERSION = 12;
+export const LATEST_SAVE_VERSION = 13;
 
 function stableStringSeed(value: string): number {
   let hash = 2166136261;
@@ -112,6 +114,12 @@ function migrateToV12(state: GameState): void {
   migrateLegacyMainWorldAreas(state);
   state.saveVersion = 12;
 }
+function migrateToV13(state: GameState): void {
+  // Ecology is lazy by design. Old saves receive an empty persistent container;
+  // macro regions/subareas are generated deterministically only when observed.
+  ensureWorldEcology(state);
+  state.saveVersion = 13;
+}
 
 export function migrateGameState(rawState: GameState): GameState {
   const state = rawState;
@@ -127,6 +135,7 @@ export function migrateGameState(rawState: GameState): GameState {
   if (fromVersion < 10) migrateToV10(state);
   if (fromVersion < 11) migrateToV11(state);
   if (fromVersion < 12) migrateToV12(state);
+  if (fromVersion < 13) migrateToV13(state);
 
   // Idempotent repair pass: if a newer subsystem accidentally persisted a known
   // retired main-map alias, normalize it on load without touching archived
@@ -160,6 +169,7 @@ export function migrateGameState(rawState: GameState): GameState {
   getOrCreatePoiBuildGrid(state, 'AREA_CAMP_CLEARING');
   const storageSystem = ensureStorageSystem(state);
   ensureAgricultureSystem(state);
+  ensureWorldEcology(state);
 
   // Crafting owns the first reservation rebuild. Every later system then reapplies
   // its persistent exact slices in deterministic ownership order.
