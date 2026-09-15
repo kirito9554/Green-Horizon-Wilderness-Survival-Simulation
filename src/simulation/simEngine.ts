@@ -7,6 +7,7 @@ import '../types/buildingSimulation';
 import '../types/structureSimulation';
 import '../types/structureMaintenanceSimulation';
 import '../types/storageSimulation';
+import '../types/agricultureSimulation';
 import { INITIAL_SURVIVORS } from '../data/survivors';
 import { getDefaultResourcePools } from './resourcePools';
 import { advanceTime } from './timeSystem';
@@ -26,6 +27,7 @@ import { tickStructureLifecycle } from './structureLifecycleSystem';
 import { tickStructureWorkRuntime } from './structureMaintenanceSystem';
 import { createStorageSystemState, tickStorageSimulation } from './storageSystem';
 import { tickStorageHauling } from './storageHaulSystem';
+import { createAgricultureSystemState, tickAgriculture } from './agricultureSystem';
 import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
@@ -60,11 +62,12 @@ export * from './structureMaintenanceSystem';
 export * from './storageSystem';
 export * from './storageHaulSystem';
 export * from './storageRouteSystem';
+export * from './agricultureSystem';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 
 export const INITIAL_GAME_STATE: GameState = {
-  saveVersion: 10,
+  saveVersion: 11,
   campName: 'Canopy Bay Settlement',
   gameTime: { day: 1, minuteOfDay: 510, speed: 1 },
   weather: {
@@ -102,6 +105,7 @@ export const INITIAL_GAME_STATE: GameState = {
   }],
   buildingSimulation: createBuildingSimulationState(),
   storageSystem: createStorageSystemState(),
+  agricultureSystem: createAgricultureSystemState(),
   poiStorages: {
     AREA_CAMP_CLEARING: {
       maxWeightKg: 120, maxVolumeL: 180,
@@ -109,6 +113,8 @@ export const INITIAL_GAME_STATE: GameState = {
         { instanceId: 'poi_camp_1', itemId: 'ITEM_DRIFTWOOD_BRANCH', quantity: 12, quality: 'standard', qualityBreakdown: { crude: 4, standard: 8 }, storageLocationId: campGroundStorageId },
         { instanceId: 'poi_camp_2', itemId: 'ITEM_RIVER_PEBBLE', quantity: 8, quality: 'standard', qualityBreakdown: { standard: 8 }, storageLocationId: campGroundStorageId },
         { instanceId: 'poi_camp_3', itemId: 'ITEM_PALM_LEAF', quantity: 10, quality: 'standard', qualityBreakdown: { standard: 10 }, storageLocationId: campGroundStorageId },
+        { instanceId: 'poi_seed_cassava', itemId: 'ITEM_CASSAVA_CUTTING', quantity: 6, quality: 'standard', qualityBreakdown: { standard: 6 }, storageLocationId: campGroundStorageId },
+        { instanceId: 'poi_seed_chili', itemId: 'ITEM_CHILI_SEED', quantity: 10, quality: 'standard', qualityBreakdown: { standard: 10 }, storageLocationId: campGroundStorageId },
       ],
     },
     AREA_COASTAL_SHALLOWS: { maxWeightKg: 45, maxVolumeL: 70, items: [{ instanceId: 'poi_coast_1', itemId: 'ITEM_WILD_COCONUT', quantity: 4, quality: 'standard', qualityBreakdown: { standard: 4 }, storageLocationId: 'storage_ground_AREA_COASTAL_SHALLOWS' }] },
@@ -166,6 +172,11 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   prepareUpgradeWorkstations(next);
   tickUpgradeSystem(next, deltaGameSeconds);
   tickCraftingAndResearch(next, deltaGameSeconds);
+
+  // Agriculture owns living-entity physiology and its own persistent work queue.
+  // Running it after other schedulers prevents farm jobs from stealing workers that
+  // were already claimed by critical production/repair jobs earlier in this tick.
+  tickAgriculture(next, deltaGameMinutes, deltaGameSeconds);
 
   if (next.logs.length > 35) next.logs = next.logs.slice(0, 35);
   return next;
