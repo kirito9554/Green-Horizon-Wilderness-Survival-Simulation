@@ -1,5 +1,6 @@
 name: Predator Long-Run Diagnostics
 
+# PR runs use the fast multi-resolution gate; canonical validation remains manual.
 on:
   pull_request:
     branches:
