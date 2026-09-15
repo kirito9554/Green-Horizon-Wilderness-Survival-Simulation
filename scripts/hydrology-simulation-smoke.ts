@@ -18,6 +18,20 @@ function cloneState(): GameState {
   return JSON.parse(JSON.stringify(INITIAL_GAME_STATE)) as GameState;
 }
 
+function averageRegionSoilWater(state: GameState, cellStateIds: string[]): number {
+  const cells = cellStateIds
+    .map(id => state.hydrologySystem!.cellStatesById[id])
+    .filter(Boolean);
+  return cells.reduce((sum, cell) => sum + cell.soilWaterMm, 0) / Math.max(1, cells.length);
+}
+
+function averageRegionRootMoisture(state: GameState, cellStateIds: string[]): number {
+  const cells = cellStateIds
+    .map(id => state.hydrologySystem!.cellStatesById[id])
+    .filter(Boolean);
+  return cells.reduce((sum, cell) => sum + cell.rootZoneMoisture, 0) / Math.max(1, cells.length);
+}
+
 function testV14MigrationIsLazy(): void {
   const state = cloneState();
   state.saveVersion = 13;
@@ -111,10 +125,13 @@ function testRainRechargeAndDrydown(): void {
   state.weather.temperatureC = 38;
   state.weather.humidityPercent = 42;
   state.weather.wind.speedKmh = 10;
-  const beforeDry = getTotalHydrologyWaterM3(state);
+  const beforeDrySoil = averageRegionSoilWater(state, region!.cellStateIds);
+  const beforeDryRoot = averageRegionRootMoisture(state, region!.cellStateIds);
   tickWorldHydrology(state, 720);
-  const afterDry = getTotalHydrologyWaterM3(state);
-  assert.ok(afterDry < beforeDry, 'dry hot weather should remove surface/root-zone water rather than create it');
+  const afterDrySoil = averageRegionSoilWater(state, region!.cellStateIds);
+  const afterDryRoot = averageRegionRootMoisture(state, region!.cellStateIds);
+  assert.ok(afterDrySoil < beforeDrySoil, 'dry hot weather must remove stored root-zone soil water');
+  assert.ok(afterDryRoot < beforeDryRoot, 'dry hot weather must lower root-zone moisture');
 }
 
 function testRuntimeOnlyBootstrapsStartRegion(): void {
