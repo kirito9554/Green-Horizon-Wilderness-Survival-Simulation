@@ -1,0 +1,103 @@
+name: Predator Long-Run Diagnostics
+
+# PR runs use the fast multi-resolution gate; canonical validation remains manual.
+# During P5b tuning, the 1-year energy probe runs in parallel with the fast gate.
+on:
+  pull_request:
+    branches:
+      - feature/predator-pressure-response
+    paths:
+      - 'scripts/predator-long-run-diagnostics.ts'
+      - 'scripts/predator-energy-throughput-probe.ts'
+      - 'src/simulation/predatorHungerTelemetry.ts'
+      - 'src/simulation/predatorPressureResponseSystem.ts'
+      - 'src/simulation/ecologyPredatorSystem.ts'
+      - 'src/simulation/longRunEcosystemSystem.ts'
+      - '.github/workflows/predator-long-run-diagnostics.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'P5 validation profile'
+        required: true
+        default: fast
+        type: choice
+        options:
+          - fast
+          - canonical
+
+permissions:
+  contents: read
+
+concurrency:
+  group: predator-long-run-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-fast:
+    if: github.event_name == 'pull_request' || inputs.mode == 'fast'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Run fast multi-resolution 1/5/20-year predator diagnostics
+        run: npx tsx scripts/predator-long-run-diagnostics.ts --mode=fast --out=artifacts/predator-long-run
+      - name: Upload predator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predator-long-run-report-fast
+          path: artifacts/predator-long-run/predator-long-run-report.json
+          if-no-files-found: warn
+
+  energy-probe:
+    if: github.event_name == 'pull_request' || inputs.mode == 'fast'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Run 1-year predator energy throughput probe
+        run: npx tsx scripts/predator-energy-throughput-probe.ts --out=artifacts/predator-energy-probe
+      - name: Upload predator energy throughput probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predator-energy-throughput-report
+          path: artifacts/predator-energy-probe/predator-energy-throughput-report.json
+          if-no-files-found: warn
+
+  validate-canonical:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'canonical'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Run canonical full-resolution 20-year predator diagnostics
+        run: npx tsx scripts/predator-long-run-diagnostics.ts --mode=canonical --out=artifacts/predator-long-run
+      - name: Upload canonical predator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predator-long-run-report-canonical
+          path: artifacts/predator-long-run/predator-long-run-report.json
+          if-no-files-found: warn

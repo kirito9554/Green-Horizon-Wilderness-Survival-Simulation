@@ -51,9 +51,9 @@ function testReserveHorizonMatchesFeedingCadence(): void {
   const monitor = getPredatorEnergyReserveDays(WILD_PREDATOR_SPECIES.PREDATOR_MONITOR_LIZARD);
   const python = getPredatorEnergyReserveDays(WILD_PREDATOR_SPECIES.PREDATOR_PYTHON);
   const crocodile = getPredatorEnergyReserveDays(WILD_PREDATOR_SPECIES.PREDATOR_ESTUARINE_CROCODILE);
-  assert.ok(monitor >= 1.75 && monitor < 4, 'frequent monitor hunters should keep only a short reserve');
+  assert.ok(monitor >= 3.5 && monitor < 6, 'frequent monitor hunters should keep a bounded multi-day reserve');
   assert.ok(python > monitor, 'python should bridge more kill-free days than monitor lizards');
-  assert.ok(crocodile > python && crocodile <= 14, 'crocodiles should have the longest bounded reserve horizon');
+  assert.ok(crocodile > python && crocodile <= 24, 'crocodiles should have the longest bounded reserve horizon');
 }
 
 function testLegacySaveMigrationIsFiniteAndConservative(): void {
@@ -136,9 +136,11 @@ function testReserveBuffersRealPredatorTick(): void {
   const empty = freshIntegrationState();
   empty.predator.energyReserveKg = 0;
   empty.predator.hungerStress = 10;
+  const emptyBefore = empty.predator.hungerStress;
   advanceMinutes(empty.state, 1440);
   tickWildPredators(empty.state, 1440);
-  assert.ok(empty.predator.hungerStress >= 70, 'same prey-free day with an empty reserve should create severe hunger');
+  assert.ok(empty.predator.hungerStress > emptyBefore + 15, 'an empty reserve must still create clear hunger pressure after one prey-free day');
+  assert.ok(empty.predator.hungerStress < 70, 'one prey-free day should not force a healthy predator directly into near-critical hunger');
 }
 
 function main(): void {
