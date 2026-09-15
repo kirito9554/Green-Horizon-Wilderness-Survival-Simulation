@@ -2,19 +2,22 @@ import { ItemDefinition } from '../../types';
 import { RAW_MATERIALS_ITEMS } from './rawMaterials';
 import { SURVIVAL_SUPPLIES_ITEMS } from './survivalSupplies';
 import { TOOLS_AND_GEAR_ITEMS } from './toolsAndGear';
+import { AGRICULTURE_ITEMS } from './agricultureProducts';
 
 export { RAW_MATERIALS_ITEMS } from './rawMaterials';
 export { SURVIVAL_SUPPLIES_ITEMS } from './survivalSupplies';
 export { TOOLS_AND_GEAR_ITEMS } from './toolsAndGear';
+export { AGRICULTURE_ITEMS } from './agricultureProducts';
 
 /**
  * TỔNG HỢP TOÀN BỘ ITEMS DATABASE TRONG GAME
- * Bao gồm đầy đủ 82 nguyên liệu thô (raw-materials) cùng toàn bộ vật phẩm sinh tồn, nước, thức ăn & dụng cụ.
+ * Bao gồm nguyên liệu thô, vật phẩm sinh tồn, công cụ và đầu vào/đầu ra nông nghiệp.
  */
 export const ITEMS_DATABASE: Record<string, ItemDefinition> = {
   ...RAW_MATERIALS_ITEMS,
   ...SURVIVAL_SUPPLIES_ITEMS,
   ...TOOLS_AND_GEAR_ITEMS,
+  ...AGRICULTURE_ITEMS,
 
   // --- CÁC ALIAS TƯƠNG THÍCH NGƯỢC (Đảm bảo 100% tương thích với code cũ & recipes) ---
   ITEM_DRIFTWOOD_BRANCH: {
