@@ -1,0 +1,39 @@
+name: Predator Pressure Response
+
+on:
+  pull_request:
+    branches:
+      - feature/predator-home-range-hunting
+    paths:
+      - 'src/simulation/predatorPressureResponseSystem.ts'
+      - 'src/simulation/simEngine.ts'
+      - 'scripts/predator-pressure-response-smoke.ts'
+      - 'scripts/predator-home-range-hunting-smoke.ts'
+      - 'scripts/predator-energy-reserve-smoke.ts'
+      - 'scripts/ecology-predator-smoke.ts'
+      - 'scripts/predator-hunger-telemetry-smoke.ts'
+      - '.github/workflows/predator-pressure-response.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Predator pressure response smoke test
+        run: npx tsx scripts/predator-pressure-response-smoke.ts
+      - name: Predator home-range hunting regression
+        run: npx tsx scripts/predator-home-range-hunting-smoke.ts
+      - name: Predator energy reserve regression
+        run: npx tsx scripts/predator-energy-reserve-smoke.ts
+      - name: Existing predator balance regression
+        run: npm run test:ecology-predators
+      - name: Predator hunger telemetry regression
+        run: npx tsx scripts/predator-hunger-telemetry-smoke.ts
