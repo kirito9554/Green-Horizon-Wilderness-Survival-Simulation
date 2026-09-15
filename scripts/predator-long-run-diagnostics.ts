@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import type { GameState, WeatherType } from '../src/types';
 import type { WildPredatorPopulation } from '../src/types/ecologySimulation';
 import { MAIN_WORLD_AREA_IDS } from '../src/data/mainWorldAreas';
@@ -34,10 +35,16 @@ import { getCardinalDirection, WEATHER_BASELINES } from '../src/simulation/weath
 
 const DAYS_PER_YEAR = 365;
 const MINUTES_PER_DAY = 1440;
-const STEP_MINUTES = 360;
+const FINE_STEP_MINUTES = 360;
+const MID_STEP_MINUTES = 720;
+const COARSE_STEP_MINUTES = 1440;
+const WEATHER_SAMPLE_MINUTES = 360;
 const WARMUP_DAYS = 30;
+const VERIFICATION_DAYS = 30;
 const TARGET_YEARS = [1, 5, 20] as const;
 const DEFAULT_SEED = 'predator-long-run-p5';
+
+type RunMode = 'fast' | 'canonical';
 
 type EnergyAwarePredator = WildPredatorPopulation & {
   energyReserveKg?: number;
@@ -81,13 +88,42 @@ interface PredatorCheckpoint {
   warnings: string[];
 }
 
+interface PhaseExecution {
+  fromYear: number;
+  toYear: number;
+  days: number;
+  coarseStepMinutes: number;
+  verificationDays: number;
+  verificationStepMinutes: number;
+  ticks: number;
+  elapsedMs: number;
+}
+
 interface PredatorLongRunReport {
   seed: string;
-  stepMinutes: number;
+  mode: RunMode;
+  profile: 'multi-resolution' | 'full-resolution';
   warmupDays: number;
+  warmupStepMinutes: number;
+  verificationDays: number;
+  executedTicks: number;
+  canonicalEquivalentTicks: number;
+  tickReductionRatio: number;
+  elapsedMs: number;
+  phases: PhaseExecution[];
   baseline: PredatorCheckpoint;
   checkpoints: PredatorCheckpoint[];
   warnings: string[];
+}
+
+interface WeatherSample {
+  type: WeatherType;
+  temperatureC: number;
+  humidityPercent: number;
+  rainIntensity: number;
+  cloudCover: number;
+  windSpeedKmh: number;
+  windDirectionDeg: number;
 }
 
 const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value));
@@ -122,40 +158,76 @@ function freshState(seed: string): GameState {
   return state;
 }
 
-function deterministicWeather(state: GameState): void {
-  const dayOfYear = ((state.gameTime.day - 1) % DAYS_PER_YEAR + DAYS_PER_YEAR) % DAYS_PER_YEAR;
-  const slot = Math.floor(state.gameTime.minuteOfDay / 360);
+function weatherTypeAt(day: number, minuteOfDay: number): WeatherType {
+  const dayOfYear = ((day - 1) % DAYS_PER_YEAR + DAYS_PER_YEAR) % DAYS_PER_YEAR;
+  const slot = Math.floor(minuteOfDay / WEATHER_SAMPLE_MINUTES);
   const wetness = (Math.sin(((dayOfYear - 135) / DAYS_PER_YEAR) * Math.PI * 2) + 1) / 2;
   const pulse = (dayOfYear * 7 + slot * 13) % 31;
 
-  let current: WeatherType = 'clear';
-  if (wetness < 0.16 && pulse <= 2) current = 'heat_wave';
-  else if (wetness > 0.78 && pulse <= 2) current = 'storm';
-  else if (wetness > 0.58 && pulse <= 8) current = 'heavy_rain';
-  else if (wetness > 0.28 && pulse <= 14) current = 'light_rain';
-  else if (pulse <= 20) current = 'cloudy';
+  if (wetness < 0.16 && pulse <= 2) return 'heat_wave';
+  if (wetness > 0.78 && pulse <= 2) return 'storm';
+  if (wetness > 0.58 && pulse <= 8) return 'heavy_rain';
+  if (wetness > 0.28 && pulse <= 14) return 'light_rain';
+  if (pulse <= 20) return 'cloudy';
+  return 'clear';
+}
 
-  const base = WEATHER_BASELINES[current];
-  state.weather.previous = current;
-  state.weather.current = current;
-  state.weather.next = current;
-  state.weather.temperatureC = round3(base.temperatureC + (0.5 - wetness) * 2.2);
-  state.weather.humidityPercent = clamp(base.humidityPercent + (wetness - 0.5) * 8);
-  state.weather.rainIntensity = base.rainIntensity;
-  state.weather.cloudCover = base.cloudCover;
-  state.weather.totalDurationMinutes = 360;
-  state.weather.durationRemainingMinutes = 360;
+function weatherSampleAt(day: number, minuteOfDay: number): WeatherSample {
+  const type = weatherTypeAt(day, minuteOfDay);
+  const dayOfYear = ((day - 1) % DAYS_PER_YEAR + DAYS_PER_YEAR) % DAYS_PER_YEAR;
+  const wetness = (Math.sin(((dayOfYear - 135) / DAYS_PER_YEAR) * Math.PI * 2) + 1) / 2;
+  const base = WEATHER_BASELINES[type];
+  return {
+    type,
+    temperatureC: base.temperatureC + (0.5 - wetness) * 2.2,
+    humidityPercent: clamp(base.humidityPercent + (wetness - 0.5) * 8),
+    rainIntensity: base.rainIntensity,
+    cloudCover: base.cloudCover,
+    windSpeedKmh: base.windSpeedKmh,
+    windDirectionDeg: base.windDirectionDeg,
+  };
+}
+
+function sampleWeatherInterval(state: GameState, minutes: number): WeatherSample[] {
+  const sampleCount = Math.max(1, Math.ceil(minutes / WEATHER_SAMPLE_MINUTES));
+  const samples: WeatherSample[] = [];
+  for (let index = 0; index < sampleCount; index += 1) {
+    const offset = ((index + 0.5) / sampleCount) * minutes;
+    const absoluteMinutes = state.gameTime.minuteOfDay + offset;
+    const dayOffset = Math.floor(absoluteMinutes / MINUTES_PER_DAY);
+    const minuteOfDay = ((absoluteMinutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+    samples.push(weatherSampleAt(state.gameTime.day + dayOffset, minuteOfDay));
+  }
+  return samples;
+}
+
+function deterministicWeather(state: GameState, minutes: number): void {
+  const samples = sampleWeatherInterval(state, minutes);
+  const representative = samples[Math.floor(samples.length / 2)];
+  const average = (read: (sample: WeatherSample) => number) =>
+    samples.reduce((sum, sample) => sum + read(sample), 0) / samples.length;
+
+  state.weather.previous = state.weather.current;
+  state.weather.current = representative.type;
+  state.weather.next = representative.type;
+  state.weather.temperatureC = round3(average(sample => sample.temperatureC));
+  state.weather.humidityPercent = round3(average(sample => sample.humidityPercent));
+  state.weather.rainIntensity = round3(average(sample => sample.rainIntensity));
+  state.weather.cloudCover = round3(average(sample => sample.cloudCover));
+  state.weather.totalDurationMinutes = minutes;
+  state.weather.durationRemainingMinutes = minutes;
   state.weather.transitionProgress = 0;
+  const windSpeedKmh = average(sample => sample.windSpeedKmh);
   state.weather.wind = {
-    speedKmh: base.windSpeedKmh,
-    gustKmh: round3(base.windSpeedKmh * (current === 'storm' ? 1.55 : 1.25)),
-    directionDeg: base.windDirectionDeg,
-    cardinal: getCardinalDirection(base.windDirectionDeg),
+    speedKmh: round3(windSpeedKmh),
+    gustKmh: round3(average(sample => sample.windSpeedKmh * (sample.type === 'storm' ? 1.55 : 1.25))),
+    directionDeg: representative.windDirectionDeg,
+    cardinal: getCardinalDirection(representative.windDirectionDeg),
   };
 }
 
 function tickTerrestrialEcosystem(state: GameState, minutes: number): void {
-  deterministicWeather(state);
+  deterministicWeather(state, minutes);
   advanceTime(state, minutes);
   tickWorldHydrology(state, minutes);
   tickSurfaceWaterHydrology(state, minutes);
@@ -176,14 +248,53 @@ function tickTerrestrialEcosystem(state: GameState, minutes: number): void {
   }
 }
 
-function simulateDays(state: GameState, days: number): void {
+function simulateDays(state: GameState, days: number, stepMinutes: number): number {
   const targetMinutes = days * MINUTES_PER_DAY;
   let elapsed = 0;
+  let ticks = 0;
   while (elapsed < targetMinutes) {
-    const step = Math.min(STEP_MINUTES, targetMinutes - elapsed);
+    const step = Math.min(stepMinutes, targetMinutes - elapsed);
     tickTerrestrialEcosystem(state, step);
     elapsed += step;
+    ticks += 1;
   }
+  return ticks;
+}
+
+function phaseStepMinutes(mode: RunMode, targetYear: number): number {
+  if (mode === 'canonical' || targetYear <= 1) return FINE_STEP_MINUTES;
+  if (targetYear <= 5) return MID_STEP_MINUTES;
+  return COARSE_STEP_MINUTES;
+}
+
+function simulatePhase(
+  state: GameState,
+  mode: RunMode,
+  fromYear: number,
+  toYear: number,
+): PhaseExecution {
+  const startedAt = performance.now();
+  const days = (toYear - fromYear) * DAYS_PER_YEAR;
+  const coarseStepMinutes = phaseStepMinutes(mode, toYear);
+  const verificationDays = mode === 'fast' && coarseStepMinutes > FINE_STEP_MINUTES
+    ? Math.min(VERIFICATION_DAYS, days)
+    : 0;
+  const coarseDays = days - verificationDays;
+  let ticks = 0;
+
+  if (coarseDays > 0) ticks += simulateDays(state, coarseDays, coarseStepMinutes);
+  if (verificationDays > 0) ticks += simulateDays(state, verificationDays, FINE_STEP_MINUTES);
+
+  return {
+    fromYear,
+    toYear,
+    days,
+    coarseStepMinutes,
+    verificationDays,
+    verificationStepMinutes: FINE_STEP_MINUTES,
+    ticks,
+    elapsedMs: round3(performance.now() - startedAt),
+  };
 }
 
 function energyRatio(populations: EnergyAwarePredator[]): number {
@@ -200,7 +311,6 @@ function captureCheckpoint(state: GameState, year: number): PredatorCheckpoint {
   const hungerSummary = summarizePredatorHungerTelemetry(hungerRows);
   const pressureRows = getPredatorPressureResponseDiagnostics(state);
 
-  const pressureById = new Map(pressureRows.map(row => [row.populationId, row]));
   const hungerBySpecies = new Map(hungerSummary.bySpecies.map(row => [row.key, row]));
   const speciesIds = [...new Set(predators.map(population => population.speciesId))].sort();
 
@@ -279,31 +389,58 @@ function parseStringArg(name: string, fallback: string): string {
   return process.argv.find(value => value.startsWith(prefix))?.slice(prefix.length) || fallback;
 }
 
+function parseMode(): RunMode {
+  const mode = parseStringArg('mode', 'fast');
+  assert.ok(mode === 'fast' || mode === 'canonical', `unsupported P5 mode: ${mode}`);
+  return mode;
+}
+
 function main(): void {
   const seed = parseStringArg('seed', DEFAULT_SEED);
   const outputDir = parseStringArg('out', 'artifacts/predator-long-run');
+  const mode = parseMode();
   mkdirSync(outputDir, { recursive: true });
 
+  const startedAt = performance.now();
   const state = freshState(seed);
-  simulateDays(state, WARMUP_DAYS);
+  const warmupTicks = simulateDays(state, WARMUP_DAYS, FINE_STEP_MINUTES);
   const baseline = captureCheckpoint(state, 0);
   assert.ok(baseline.predatorPopulation > 0, 'predators must seed during warmup before P5 validation');
 
+  console.log(`P5 mode=${mode} warmup=${WARMUP_DAYS}d@${FINE_STEP_MINUTES}m ticks=${warmupTicks}`);
+
   const checkpoints: PredatorCheckpoint[] = [];
+  const phases: PhaseExecution[] = [];
   let elapsedYears = 0;
   for (const targetYear of TARGET_YEARS) {
-    simulateDays(state, (targetYear - elapsedYears) * DAYS_PER_YEAR);
+    const phase = simulatePhase(state, mode, elapsedYears, targetYear);
+    phases.push(phase);
     const checkpoint = captureCheckpoint(state, targetYear);
     checkpoint.warnings.push(...compareExtinctions(baseline, checkpoint));
     checkpoints.push(checkpoint);
     elapsedYears = targetYear;
-    console.log(`P5 ${targetYear}y: predators=${checkpoint.predatorPopulation} hunger=${checkpoint.populationWeightedHunger} reserve=${checkpoint.reserveRatio} chronic=${checkpoint.chronicStressDays} emigrants=${checkpoint.totalEmigrants} warnings=${checkpoint.warnings.length}`);
+    console.log(
+      `P5 ${targetYear}y: step=${phase.coarseStepMinutes}m verify=${phase.verificationDays}d ticks=${phase.ticks} ` +
+      `predators=${checkpoint.predatorPopulation} hunger=${checkpoint.populationWeightedHunger} ` +
+      `reserve=${checkpoint.reserveRatio} chronic=${checkpoint.chronicStressDays} ` +
+      `emigrants=${checkpoint.totalEmigrants} warnings=${checkpoint.warnings.length}`,
+    );
   }
 
+  const executedTicks = warmupTicks + phases.reduce((sum, phase) => sum + phase.ticks, 0);
+  const canonicalEquivalentTicks = Math.ceil(((WARMUP_DAYS + TARGET_YEARS[TARGET_YEARS.length - 1] * DAYS_PER_YEAR) * MINUTES_PER_DAY) / FINE_STEP_MINUTES);
   const report: PredatorLongRunReport = {
     seed,
-    stepMinutes: STEP_MINUTES,
+    mode,
+    profile: mode === 'fast' ? 'multi-resolution' : 'full-resolution',
     warmupDays: WARMUP_DAYS,
+    warmupStepMinutes: FINE_STEP_MINUTES,
+    verificationDays: mode === 'fast' ? VERIFICATION_DAYS : 0,
+    executedTicks,
+    canonicalEquivalentTicks,
+    tickReductionRatio: round3(1 - executedTicks / canonicalEquivalentTicks),
+    elapsedMs: round3(performance.now() - startedAt),
+    phases,
     baseline,
     checkpoints,
     warnings: checkpoints.flatMap(checkpoint => checkpoint.warnings.map(warning => `${checkpoint.year}y: ${warning}`)),
