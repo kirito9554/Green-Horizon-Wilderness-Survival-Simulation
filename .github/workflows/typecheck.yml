@@ -47,5 +47,8 @@ jobs:
       - name: Storage network optimizer smoke test
         run: npm run test:storage-network
 
+      - name: Living agriculture smoke test
+        run: npm run test:agriculture
+
       - name: Production build
         run: npm run build
