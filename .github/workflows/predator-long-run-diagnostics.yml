@@ -7,6 +7,7 @@ on:
       - feature/predator-pressure-response
     paths:
       - 'scripts/predator-long-run-diagnostics.ts'
+      - 'scripts/predator-energy-throughput-probe.ts'
       - 'src/simulation/predatorHungerTelemetry.ts'
       - 'src/simulation/predatorPressureResponseSystem.ts'
       - 'src/simulation/ecologyPredatorSystem.ts'
@@ -52,6 +53,29 @@ jobs:
         with:
           name: predator-long-run-report-fast
           path: artifacts/predator-long-run/predator-long-run-report.json
+          if-no-files-found: warn
+
+  energy-probe:
+    if: github.event_name == 'pull_request' || inputs.mode == 'fast'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Run 1-year predator energy throughput probe
+        run: npx tsx scripts/predator-energy-throughput-probe.ts --out=artifacts/predator-energy-probe
+      - name: Upload predator energy throughput probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predator-energy-throughput-report
+          path: artifacts/predator-energy-probe/predator-energy-throughput-report.json
           if-no-files-found: warn
 
   validate-canonical:
