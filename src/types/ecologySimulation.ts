@@ -202,6 +202,14 @@ export interface WildPredatorPopulation {
   mortalityProgress: number;
   movementProgress: number;
   predationProgressByPreySpecies: Record<string, number>;
+  /** Stored edible-energy buffer. Optional for backward-compatible save migration. */
+  energyReserveKg?: number;
+  /** Dynamic reserve ceiling for the current age structure. Optional on legacy saves. */
+  maxEnergyReserveKg?: number;
+  /** Diagnostic value from the latest predator tick. */
+  lastEnergyIntakeKg?: number;
+  /** Diagnostic metabolic demand from the latest predator tick. */
+  lastEnergyDemandKg?: number;
   lastMoveGameMinute: number;
   lastUpdatedGameMinute: number;
 }

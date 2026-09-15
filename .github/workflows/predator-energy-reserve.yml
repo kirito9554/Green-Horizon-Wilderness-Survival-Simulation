@@ -1,0 +1,29 @@
+name: Predator Energy Reserve
+
+on:
+  pull_request:
+    branches:
+      - feature/predator-hunger-telemetry
+    paths:
+      - 'src/simulation/ecologyPredatorSystem.ts'
+      - 'src/types/ecologySimulation.ts'
+      - 'scripts/predator-energy-reserve-smoke.ts'
+      - '.github/workflows/predator-energy-reserve.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Predator energy reserve smoke test
+        run: npx tsx scripts/predator-energy-reserve-smoke.ts
+      - name: Existing predator balance smoke test
+        run: npm run test:ecology-predators
