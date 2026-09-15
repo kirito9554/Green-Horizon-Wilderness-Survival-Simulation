@@ -2,6 +2,16 @@ import type { MainWorldAreaId } from '../data/mainWorldAreas';
 
 export type EcologySubareaKind = 'physical' | 'ecological' | 'ephemeral';
 export type EcologyMaterializationState = 'latent' | 'materialized';
+export type WildFoodResource =
+  | 'fruit'
+  | 'seeds'
+  | 'browse'
+  | 'ground_vegetation'
+  | 'roots_tubers'
+  | 'insects'
+  | 'aquatic_plants'
+  | 'carrion';
+export type WildAnimalLifeStage = 'juvenile' | 'adult' | 'old';
 
 export interface EcologyTerrainState {
   elevation: number;
@@ -46,6 +56,12 @@ export interface EcologyDisturbanceState {
   foragingPressure: number;
 }
 
+export interface EcologyFoodWebState {
+  insectBiomassKg: number;
+  carrionBiomassKg: number;
+  aquaticPlantBiomassKg: number;
+}
+
 export interface EcologicalSubarea {
   id: string;
   poiId: MainWorldAreaId;
@@ -61,6 +77,7 @@ export interface EcologicalSubarea {
   resources: EcologyResourceState;
   ecology: EcologyPressureState;
   disturbance: EcologyDisturbanceState;
+  foodWeb?: EcologyFoodWebState;
   plantPopulationIds: string[];
   generatedAtGameMinute: number;
 }
@@ -108,6 +125,57 @@ export interface SignificantWildPlant {
   genetics: Record<string, number>;
 }
 
+export interface WildAnimalPopulation {
+  id: string;
+  speciesId: string;
+  poiId: MainWorldAreaId;
+  currentSubareaId: string;
+  homeRangeSubareaIds: string[];
+  population: number;
+  juveniles: number;
+  adults: number;
+  old: number;
+  maleRatio: number;
+  biomassKg: number;
+  averageHealth: number;
+  bodyCondition: number;
+  foodStress: number;
+  waterStress: number;
+  reproductionPressure: number;
+  migrationPressure: number;
+  humanFear: number;
+  geneticDiversity: number;
+  reproductionProgress: number;
+  maturationProgress: number;
+  agingProgress: number;
+  mortalityProgress: number;
+  movementProgress: number;
+  lastMoveGameMinute: number;
+  lastUpdatedGameMinute: number;
+}
+
+export interface SignificantWildAnimal {
+  id: string;
+  speciesId: string;
+  poiId: MainWorldAreaId;
+  currentSubareaId: string;
+  homeRangeSubareaIds: string[];
+  sourcePopulationId: string;
+  lifeStage: WildAnimalLifeStage;
+  sex: 'male' | 'female';
+  ageHours: number;
+  weightKg: number;
+  health: number;
+  bodyCondition: number;
+  hunger: number;
+  thirst: number;
+  stress: number;
+  humanFear: number;
+  genetics: Record<string, number>;
+  lastMoveGameMinute: number;
+  lastUpdatedGameMinute: number;
+}
+
 export interface RegionEcology {
   poiId: MainWorldAreaId;
   generationVersion: number;
@@ -116,6 +184,7 @@ export interface RegionEcology {
   subareaIds: string[];
   connectionIds: string[];
   discoveredSubareaIds: string[];
+  faunaSeeded?: boolean;
   humanPressure: number;
   huntingPressure: number;
   fishingPressure: number;
@@ -132,6 +201,8 @@ export interface WorldEcologyState {
   connections: EcologyConnection[];
   plantPopulations: WildPlantPopulation[];
   significantPlants: SignificantWildPlant[];
+  animalPopulations?: WildAnimalPopulation[];
+  significantAnimals?: SignificantWildAnimal[];
   ecologyTickIndex: number;
 }
 
