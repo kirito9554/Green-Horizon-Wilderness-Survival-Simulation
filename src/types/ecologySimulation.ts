@@ -187,6 +187,7 @@ export interface PredatorHuntTelemetry {
   encounters: number;
   attacks: number;
   successfulKills: number;
+  successfulKillsByLifeStage: Partial<Record<WildAnimalLifeStage, number>>;
   edibleConsumedKg: number;
   carcassBiomassCreatedKg: number;
   byPreySpecies: Record<string, PredatorHuntPreyTelemetry>;
