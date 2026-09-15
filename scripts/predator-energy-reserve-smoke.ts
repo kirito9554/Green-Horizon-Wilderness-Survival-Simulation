@@ -136,9 +136,11 @@ function testReserveBuffersRealPredatorTick(): void {
   const empty = freshIntegrationState();
   empty.predator.energyReserveKg = 0;
   empty.predator.hungerStress = 10;
+  const emptyBefore = empty.predator.hungerStress;
   advanceMinutes(empty.state, 1440);
   tickWildPredators(empty.state, 1440);
-  assert.ok(empty.predator.hungerStress >= 70, 'same prey-free day with an empty reserve should create severe hunger');
+  assert.ok(empty.predator.hungerStress > emptyBefore + 15, 'an empty reserve must still create clear hunger pressure after one prey-free day');
+  assert.ok(empty.predator.hungerStress < 70, 'one prey-free day should not force a healthy predator directly into near-critical hunger');
 }
 
 function main(): void {
