@@ -96,9 +96,9 @@ function testTerrestrialHabitatContainsIndividualsAndProducesByAnimal(): void {
 
 function testAquacultureUsesNaturalWaterAndIndividualAnimals(): void {
   let state = freshState();
-  state = establishPrimitiveAquaticHabitat(state, 'AREA_RIVERBANK');
+  state = establishPrimitiveAquaticHabitat(state, 'AREA_WATERFALL_BASIN');
   const habitat = state.agricultureSystem?.aquaticHabitats[0];
-  assert.ok(habitat, 'river POI should expose a usable natural-water aquaculture site');
+  assert.ok(habitat, 'River Gorge should expose a usable natural-water aquaculture site');
   assert.ok(['river_segment', 'lake_edge', 'pond_site'].includes(habitat.siteType), 'aquaculture must record its physical water-site type');
   assert.equal(habitat.aquaticAnimalIds.length, 0, 'water enclosure must not spawn fish automatically');
 
@@ -116,13 +116,13 @@ function testAquacultureUsesNaturalWaterAndIndividualAnimals(): void {
   assert.ok((state.agricultureSystem?.aquaticAnimals.length || 0) < 2, 'harvested fish entity must be removed from the living population');
 }
 
-function testMigrationToV11(): void {
+function testAgricultureMigrationSurvivesLatestSchema(): void {
   const legacy = freshState();
   legacy.saveVersion = 10;
   delete legacy.agricultureSystem;
   const migrated = migrateGameState(legacy);
-  assert.equal(LATEST_SAVE_VERSION, 11, 'agriculture schema must own save version 11');
-  assert.equal(migrated.saveVersion, 11, 'v10 saves must migrate to v11');
+  assert.equal(LATEST_SAVE_VERSION, 12, 'canonical main-world migration must own save version 12');
+  assert.equal(migrated.saveVersion, 12, 'older saves must reach the latest schema after agriculture initialization');
   assert.ok(migrated.agricultureSystem, 'migration must initialize persistent agriculture state');
   assert.deepEqual(migrated.agricultureSystem?.plants, [], 'migration must not fabricate living entities for old saves');
 }
@@ -132,7 +132,7 @@ function main(): void {
   testHarvestEmergesFromPlantAndLandsInGroundCache();
   testTerrestrialHabitatContainsIndividualsAndProducesByAnimal();
   testAquacultureUsesNaturalWaterAndIndividualAnimals();
-  testMigrationToV11();
+  testAgricultureMigrationSurvivesLatestSchema();
   console.log('Agriculture simulation smoke tests passed.');
 }
 
