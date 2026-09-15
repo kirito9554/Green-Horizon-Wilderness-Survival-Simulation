@@ -30,6 +30,7 @@ import { createStorageSystemState, tickStorageSimulation } from './storageSystem
 import { tickStorageHauling } from './storageHaulSystem';
 import { createAgricultureSystemState, tickAgriculture } from './agricultureSystem';
 import { createWorldEcologyState, tickWorldEcology } from './ecologySystem';
+import { tickWildFauna } from './ecologyFaunaSystem';
 import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
@@ -66,6 +67,7 @@ export * from './storageHaulSystem';
 export * from './storageRouteSystem';
 export * from './agricultureSystem';
 export * from './ecologySystem';
+export * from './ecologyFaunaSystem';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 const rockyShoreGroundStorageId = 'storage_ground_AREA_FISHING_LAGOON';
@@ -188,10 +190,10 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickCraftingAndResearch(next, deltaGameSeconds);
 
   // Agriculture owns managed living entities; ecology owns the surrounding wild world.
-  // Ecology runs after construction/agriculture so physical clearing and managed land
-  // changes are visible to wild habitat simulation in the same tick.
+  // Flora/habitat advances first, then fauna consumes that same physical biological state.
   tickAgriculture(next, deltaGameMinutes, deltaGameSeconds);
   tickWorldEcology(next, deltaGameMinutes);
+  tickWildFauna(next, deltaGameMinutes);
 
   if (next.logs.length > 35) next.logs = next.logs.slice(0, 35);
   return next;
