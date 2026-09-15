@@ -75,10 +75,6 @@ function sourcePoiId(job: StorageHaulJob): string {
   return job.sourcePoiId || job.poiId;
 }
 
-function targetPoiId(job: StorageHaulJob, state: GameState): string {
-  return job.targetPoiId || state.storageSystem?.locations.find(location => location.id === job.targetLocationId)?.poiId || job.poiId;
-}
-
 function representativeReservedItem(state: GameState, job: StorageHaulJob): InventoryItem | undefined {
   const first = job.materialReservations[0];
   const poiId = first?.source.areaId || sourcePoiId(job);
@@ -88,6 +84,24 @@ function representativeReservedItem(state: GameState, job: StorageHaulJob): Inve
 
 function totalReserved(job: StorageHaulJob): number {
   return job.materialReservations.reduce((sum, reservation) => sum + reservation.quantity, 0);
+}
+
+/**
+ * Destination capacity must be checked against cargo already owned by this haul,
+ * not against the source stack's currently-unreserved quantity. Otherwise a haul
+ * that reserved an entire stack would block itself at completion.
+ */
+function reservedCargoProbe(item: InventoryItem, quantity: number): InventoryItem {
+  const perUnitLiquid = item.liquidLiters !== undefined && item.quantity > 0
+    ? item.liquidLiters / item.quantity
+    : undefined;
+  return {
+    ...item,
+    quantity,
+    reservedQuantity: 0,
+    reservedQualityBreakdown: { crude: 0, standard: 0, prime: 0, masterwork: 0 },
+    liquidLiters: perUnitLiquid === undefined ? undefined : perUnitLiquid * quantity,
+  };
 }
 
 function activeJobForTarget(state: GameState, targetLocationId: string): boolean {
@@ -305,10 +319,11 @@ function completeHaul(state: GameState, job: StorageHaulJob): boolean {
   const source = system.locations.find(location => location.id === job.sourceLocationId);
   const target = system.locations.find(location => location.id === job.targetLocationId);
   const sample = representativeReservedItem(state, job);
-  if (!source || !target || !sample) return false;
+  const quantity = totalReserved(job);
+  if (!source || !target || !sample || quantity <= 0) return false;
 
-  const acceptance = canStoreItemInLocation(state, target.id, sample, totalReserved(job));
-  if (!acceptance.accepted || acceptance.maxAcceptableQuantity < totalReserved(job)) {
+  const acceptance = canStoreItemInLocation(state, target.id, reservedCargoProbe(sample, quantity), quantity);
+  if (!acceptance.accepted || acceptance.maxAcceptableQuantity < quantity) {
     job.status = 'blocked';
     job.blockedReasons = [acceptance.reasons[0] || 'Kho đích không còn đủ dung tích'];
     releaseWorker(state, job);
@@ -442,7 +457,8 @@ export function tickStorageHauling(state: GameState, deltaGameSeconds: number): 
 
     if (job.status === 'blocked') {
       const sample = representativeReservedItem(state, job);
-      if (sample && canStoreItemInLocation(state, target.id, sample, totalReserved(job)).accepted) {
+      const quantity = totalReserved(job);
+      if (sample && quantity > 0 && canStoreItemInLocation(state, target.id, reservedCargoProbe(sample, quantity), quantity).accepted) {
         job.status = 'waiting_worker';
         job.blockedReasons = [];
       } else continue;
