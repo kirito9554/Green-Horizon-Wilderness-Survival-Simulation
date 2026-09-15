@@ -8,6 +8,7 @@ import '../types/structureSimulation';
 import '../types/structureMaintenanceSimulation';
 import '../types/storageSimulation';
 import '../types/agricultureSimulation';
+import '../types/ecologySimulation';
 import { INITIAL_SURVIVORS } from '../data/survivors';
 import { getDefaultResourcePools } from './resourcePools';
 import { advanceTime } from './timeSystem';
@@ -28,6 +29,7 @@ import { tickStructureWorkRuntime } from './structureMaintenanceSystem';
 import { createStorageSystemState, tickStorageSimulation } from './storageSystem';
 import { tickStorageHauling } from './storageHaulSystem';
 import { createAgricultureSystemState, tickAgriculture } from './agricultureSystem';
+import { createWorldEcologyState, tickWorldEcology } from './ecologySystem';
 import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
@@ -63,13 +65,14 @@ export * from './storageSystem';
 export * from './storageHaulSystem';
 export * from './storageRouteSystem';
 export * from './agricultureSystem';
+export * from './ecologySystem';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 const rockyShoreGroundStorageId = 'storage_ground_AREA_FISHING_LAGOON';
 const riverGorgeGroundStorageId = 'storage_ground_AREA_WATERFALL_BASIN';
 
 export const INITIAL_GAME_STATE: GameState = {
-  saveVersion: 12,
+  saveVersion: 13,
   campName: 'Canopy Bay Settlement',
   gameTime: { day: 1, minuteOfDay: 510, speed: 1 },
   weather: {
@@ -108,6 +111,7 @@ export const INITIAL_GAME_STATE: GameState = {
   buildingSimulation: createBuildingSimulationState(),
   storageSystem: createStorageSystemState(),
   agricultureSystem: createAgricultureSystemState(),
+  ecologySystem: createWorldEcologyState(),
   poiStorages: {
     AREA_CAMP_CLEARING: {
       maxWeightKg: 120, maxVolumeL: 180,
@@ -183,10 +187,11 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickUpgradeSystem(next, deltaGameSeconds);
   tickCraftingAndResearch(next, deltaGameSeconds);
 
-  // Agriculture owns living-entity physiology and its own persistent work queue.
-  // Running it after other schedulers prevents farm jobs from stealing workers that
-  // were already claimed by critical production/repair jobs earlier in this tick.
+  // Agriculture owns managed living entities; ecology owns the surrounding wild world.
+  // Ecology runs after construction/agriculture so physical clearing and managed land
+  // changes are visible to wild habitat simulation in the same tick.
   tickAgriculture(next, deltaGameMinutes, deltaGameSeconds);
+  tickWorldEcology(next, deltaGameMinutes);
 
   if (next.logs.length > 35) next.logs = next.logs.slice(0, 35);
   return next;
