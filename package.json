@@ -21,6 +21,7 @@
     "test:ecology": "tsx scripts/ecology-simulation-smoke.ts",
     "test:ecology-fauna": "tsx scripts/ecology-fauna-smoke.ts",
     "test:ecology-predators": "tsx scripts/ecology-predator-smoke.ts",
+    "test:ecology-aquatic": "tsx scripts/ecology-aquatic-smoke.ts",
     "test:hydrology": "tsx scripts/hydrology-simulation-smoke.ts",
     "test:hydrology-surface": "tsx scripts/hydrology-surface-water-smoke.ts",
     "test:hydrology-management": "tsx scripts/hydrology-water-management-smoke.ts",

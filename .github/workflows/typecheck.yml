@@ -41,6 +41,9 @@ jobs:
       - name: Predator and prey balance smoke test
         run: npm run test:ecology-predators
 
+      - name: Aquatic ecology foundation smoke test
+        run: npm run test:ecology-aquatic
+
       - name: World hydrology foundation smoke test
         run: npm run test:hydrology
 
