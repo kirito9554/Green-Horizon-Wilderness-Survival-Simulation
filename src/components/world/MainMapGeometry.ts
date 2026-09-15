@@ -1,3 +1,8 @@
+import {
+  MAIN_WORLD_AREA_IDS,
+  MAIN_WORLD_START_AREA_ID,
+} from '../../data/mainWorldAreas';
+
 /**
  * Geometry calibration for public/maps/main.png (1672 x 941).
  * All coordinates are percentages of the source image so they stay aligned
@@ -29,21 +34,9 @@ export interface MainMapLabelExclusion {
   h: number;
 }
 
-/** Only these compact POIs are exposed on the current main map. */
-export const MAIN_MAP_AREA_IDS = [
-  'AREA_CAVE_ENTRANCE',       // Limestone Cave
-  'AREA_STONE_RIDGE',         // Misty Highlands
-  'AREA_BAMBOO_GROVE',        // Bamboo Valley
-  'AREA_ANCIENT_RUINS',       // Ancient Ruins
-  'AREA_CAMP_CLEARING',       // Plane Wreck (start)
-  'AREA_MANGROVE_EDGE',       // Mangrove Delta
-  'AREA_FOREST_EDGE',         // Deep Rainforest
-  'AREA_SWAMP_CROSSING',      // Flooded Forest
-  'AREA_WATERFALL_BASIN',     // River Gorge
-  'AREA_FISHING_LAGOON',      // Rocky Shore
-] as const;
-
-export const MAIN_MAP_START_AREA_ID = 'AREA_CAMP_CLEARING' as const;
+/** Backward-compatible map exports; canonical IDs live in data/mainWorldAreas.ts. */
+export const MAIN_MAP_AREA_IDS = MAIN_WORLD_AREA_IDS;
+export const MAIN_MAP_START_AREA_ID = MAIN_WORLD_START_AREA_ID;
 
 /**
  * Flow spines follow visible channels rather than POI labels. Width is a
