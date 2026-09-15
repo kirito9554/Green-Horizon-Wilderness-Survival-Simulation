@@ -6,6 +6,7 @@ import '../types/upgradeSimulation';
 import '../types/buildingSimulation';
 import '../types/structureMaintenanceSimulation';
 import '../types/storageSimulation';
+import '../types/agricultureSimulation';
 import { ITEMS_DATABASE } from '../data/items';
 import { ensureToolComponentInstances } from '../simulation/componentSystem';
 import { rebuildReservationCounters } from '../simulation/materialReservationSystem';
@@ -16,8 +17,9 @@ import { rebuildJobReservationCounters } from '../simulation/jobReservationSyste
 import { ensureBuildingSimulation, getOrCreatePoiBuildGrid } from '../simulation/buildGridSystem';
 import { ensureStorageSystem } from '../simulation/storageSystem';
 import { calculateStorageRoute } from '../simulation/storageRouteSystem';
+import { ensureAgricultureSystem, rebuildAgricultureReservations } from '../simulation/agricultureSystem';
 
-export const LATEST_SAVE_VERSION = 10;
+export const LATEST_SAVE_VERSION = 11;
 
 function stableStringSeed(value: string): number {
   let hash = 2166136261;
@@ -34,13 +36,7 @@ function clamp(value: number, min = 0, max = 100): number {
 
 function normalizeInventoryItem(item: InventoryItem): void {
   item.reservedQuantity = Math.max(0, Math.min(item.quantity, item.reservedQuantity || 0));
-  item.reservedQualityBreakdown = item.reservedQualityBreakdown || {
-    crude: 0,
-    standard: 0,
-    prime: 0,
-    masterwork: 0,
-  };
-
+  item.reservedQualityBreakdown = item.reservedQualityBreakdown || { crude: 0, standard: 0, prime: 0, masterwork: 0 };
   const def = ITEMS_DATABASE[item.itemId];
   if (def?.toolProperties || def?.category === 'tool') {
     const fallbackMax = def.toolProperties?.durabilityMax || 100;
@@ -49,10 +45,7 @@ function normalizeInventoryItem(item: InventoryItem): void {
     item.originalConditionMax = item.originalConditionMax || item.conditionMax;
     ensureToolComponentInstances(item, def);
   }
-
-  if (def && (def.category === 'water' || def.tags.includes('liquid'))) {
-    item.liquidLiters = Math.max(0, item.liquidLiters ?? def.volume * item.quantity);
-  }
+  if (def && (def.category === 'water' || def.tags.includes('liquid'))) item.liquidLiters = Math.max(0, item.liquidLiters ?? def.volume * item.quantity);
   if (def?.category === 'medicine') item.medicinePotency = clamp(item.medicinePotency ?? 100);
   if (item.moisture !== undefined) item.moisture = clamp(item.moisture);
   if (item.contamination !== undefined) item.contamination = clamp(item.contamination);
@@ -64,122 +57,60 @@ function normalizeInventoryItem(item: InventoryItem): void {
 function migrateToV2(state: GameState): void {
   state.poiStorages = state.poiStorages || {};
   for (const item of state.inventory.items || []) normalizeInventoryItem(item);
-  for (const storage of Object.values(state.poiStorages)) {
-    for (const item of storage.items || []) normalizeInventoryItem(item);
-  }
+  for (const storage of Object.values(state.poiStorages)) for (const item of storage.items || []) normalizeInventoryItem(item);
   for (const building of state.buildings || []) if (!building.areaId) building.areaId = 'AREA_CAMP_CLEARING';
   state.craftingQueue = state.craftingQueue || [];
   for (const queueItem of state.craftingQueue) {
-    queueItem.materialReservations = queueItem.materialReservations || [];
-    queueItem.blockedReasons = queueItem.blockedReasons || [];
+    queueItem.materialReservations ||= [];
+    queueItem.blockedReasons ||= [];
     queueItem.deterministicSeed = queueItem.deterministicSeed ?? stableStringSeed(queueItem.id);
-    if (!queueItem.reservationStatus) {
-      queueItem.reservationStatus = (queueItem.activeIngredientQualities?.length || 0) > 0 ? 'legacy_consumed' : 'unreserved';
-    }
+    if (!queueItem.reservationStatus) queueItem.reservationStatus = (queueItem.activeIngredientQualities?.length || 0) > 0 ? 'legacy_consumed' : 'unreserved';
   }
   state.saveVersion = 2;
 }
 
-function migrateToV3(state: GameState): void {
-  ensureResearchSystem(state);
-  state.craftedRecipeCounts ||= {};
-  refreshResearchEvidence(state, { recordMaterialDiscoveries: false, recordIdeaDiscoveries: false });
-  state.saveVersion = 3;
-}
-
-function migrateToV4(state: GameState): void {
-  const maintenance = ensureMaintenanceSystem(state);
-  maintenance.queue ||= [];
-  maintenance.history ||= [];
-  for (const job of maintenance.queue) {
-    job.materialReservations ||= [];
-    job.blockedReasons ||= [];
-    job.materialsConsumed = Boolean(job.materialsConsumed);
-    job.deterministicSeed = job.deterministicSeed ?? stableStringSeed(job.id);
-  }
-  state.saveVersion = 4;
-}
-
-function migrateToV5(state: GameState): void {
-  const upgrades = ensureUpgradeSystem(state);
-  upgrades.queue ||= [];
-  upgrades.history ||= [];
-  for (const job of upgrades.queue) {
-    job.materialReservations ||= [];
-    job.blockedReasons ||= [];
-    job.materialsConsumed = Boolean(job.materialsConsumed);
-    job.deterministicSeed = job.deterministicSeed ?? stableStringSeed(job.id);
-  }
-  state.saveVersion = 5;
-}
-
-function migrateToV6(state: GameState): void {
-  const simulation = ensureBuildingSimulation(state);
-  simulation.version = 1;
-  simulation.clusters ||= [];
-  simulation.preparationJobs ||= [];
-  simulation.gridsByPoiId ||= {};
-  getOrCreatePoiBuildGrid(state, 'AREA_CAMP_CLEARING');
-  state.saveVersion = 6;
-}
-
-function migrateToV7(state: GameState): void {
-  const simulation = ensureBuildingSimulation(state);
-  simulation.version = 2;
-  simulation.constructionJobs ||= [];
-  for (const job of simulation.constructionJobs) {
-    job.materialReservations ||= [];
-    job.blockedReasons ||= [];
-    job.materialQualityByItemId ||= {};
-    job.phases ||= [];
-    job.currentPhaseIndex ||= 0;
-    job.haulProgressSeconds ||= 0;
-    job.haulTotalSeconds ||= 0;
-    job.materialsDelivered = Boolean(job.materialsDelivered);
-  }
-  state.saveVersion = 7;
-}
-
-function migrateToV8(state: GameState): void {
-  const simulation = ensureBuildingSimulation(state);
-  simulation.version = 3;
-  simulation.structureWorkJobs ||= [];
-  simulation.structureWorkHistory ||= [];
-  for (const job of simulation.structureWorkJobs) {
-    job.materialReservations ||= [];
-    job.blockedReasons ||= [];
-    job.consumedQualities ||= [];
-    job.materialsConsumed = Boolean(job.materialsConsumed);
-    job.progressSeconds ||= 0;
-  }
-  state.saveVersion = 8;
-}
-
-function migrateToV9(state: GameState): void {
-  ensureStorageSystem(state);
-  state.saveVersion = 9;
-}
-
+function migrateToV3(state: GameState): void { ensureResearchSystem(state); state.craftedRecipeCounts ||= {}; refreshResearchEvidence(state, { recordMaterialDiscoveries: false, recordIdeaDiscoveries: false }); state.saveVersion = 3; }
+function migrateToV4(state: GameState): void { const system = ensureMaintenanceSystem(state); system.queue ||= []; system.history ||= []; for (const job of system.queue) { job.materialReservations ||= []; job.blockedReasons ||= []; job.materialsConsumed = Boolean(job.materialsConsumed); job.deterministicSeed = job.deterministicSeed ?? stableStringSeed(job.id); } state.saveVersion = 4; }
+function migrateToV5(state: GameState): void { const system = ensureUpgradeSystem(state); system.queue ||= []; system.history ||= []; for (const job of system.queue) { job.materialReservations ||= []; job.blockedReasons ||= []; job.materialsConsumed = Boolean(job.materialsConsumed); job.deterministicSeed = job.deterministicSeed ?? stableStringSeed(job.id); } state.saveVersion = 5; }
+function migrateToV6(state: GameState): void { const simulation = ensureBuildingSimulation(state); simulation.version = 1; simulation.clusters ||= []; simulation.preparationJobs ||= []; simulation.gridsByPoiId ||= {}; getOrCreatePoiBuildGrid(state, 'AREA_CAMP_CLEARING'); state.saveVersion = 6; }
+function migrateToV7(state: GameState): void { const simulation = ensureBuildingSimulation(state); simulation.version = 2; simulation.constructionJobs ||= []; for (const job of simulation.constructionJobs) { job.materialReservations ||= []; job.blockedReasons ||= []; job.materialQualityByItemId ||= {}; job.phases ||= []; job.currentPhaseIndex ||= 0; job.haulProgressSeconds ||= 0; job.haulTotalSeconds ||= 0; job.materialsDelivered = Boolean(job.materialsDelivered); } state.saveVersion = 7; }
+function migrateToV8(state: GameState): void { const simulation = ensureBuildingSimulation(state); simulation.version = 3; simulation.structureWorkJobs ||= []; simulation.structureWorkHistory ||= []; for (const job of simulation.structureWorkJobs) { job.materialReservations ||= []; job.blockedReasons ||= []; job.consumedQualities ||= []; job.materialsConsumed = Boolean(job.materialsConsumed); job.progressSeconds ||= 0; } state.saveVersion = 8; }
+function migrateToV9(state: GameState): void { ensureStorageSystem(state); state.saveVersion = 9; }
 function migrateToV10(state: GameState): void {
   const system = ensureStorageSystem(state);
   system.version = Math.max(3, system.version || 1);
   for (const job of system.haulJobs) {
     const source = system.locations.find(location => location.id === job.sourceLocationId);
     const target = system.locations.find(location => location.id === job.targetLocationId);
-    if (source) {
-      job.poiId = source.poiId;
-      job.sourcePoiId = source.poiId;
-    }
+    if (source) { job.poiId = source.poiId; job.sourcePoiId = source.poiId; }
     if (target) job.targetPoiId = target.poiId;
     if (source && target && !job.route) job.route = calculateStorageRoute(state, source, target);
   }
   state.saveVersion = 10;
 }
+function migrateToV11(state: GameState): void {
+  const system = ensureAgricultureSystem(state);
+  system.version = Math.max(1, system.version || 1);
+  system.cultivationAreas ||= [];
+  system.plants ||= [];
+  system.terrestrialHabitats ||= [];
+  system.terrestrialAnimals ||= [];
+  system.aquaticHabitats ||= [];
+  system.aquaticAnimals ||= [];
+  system.jobs ||= [];
+  system.productionHistory ||= [];
+  for (const job of system.jobs) {
+    job.materialReservations ||= [];
+    job.blockedReasons ||= [];
+    job.materialsConsumed = Boolean(job.materialsConsumed);
+    if (job.status === 'in_progress') { job.status = 'waiting_worker'; job.assignedSurvivorId = undefined; }
+  }
+  state.saveVersion = 11;
+}
 
 export function migrateGameState(rawState: GameState): GameState {
   const state = rawState;
   const fromVersion = Math.max(1, state.saveVersion || 1);
-
   if (fromVersion < 2) migrateToV2(state);
   if (fromVersion < 3) migrateToV3(state);
   if (fromVersion < 4) migrateToV4(state);
@@ -189,24 +120,21 @@ export function migrateGameState(rawState: GameState): GameState {
   if (fromVersion < 8) migrateToV8(state);
   if (fromVersion < 9) migrateToV9(state);
   if (fromVersion < 10) migrateToV10(state);
+  if (fromVersion < 11) migrateToV11(state);
 
-  state.poiStorages = state.poiStorages || {};
-  state.craftingQueue = state.craftingQueue || [];
+  state.poiStorages ||= {};
+  state.craftingQueue ||= [];
   for (const item of state.inventory.items || []) normalizeInventoryItem(item);
-  for (const storage of Object.values(state.poiStorages)) {
-    for (const item of storage.items || []) normalizeInventoryItem(item);
-  }
+  for (const storage of Object.values(state.poiStorages)) for (const item of storage.items || []) normalizeInventoryItem(item);
   for (const building of state.buildings || []) {
     if (!building.areaId) building.areaId = 'AREA_CAMP_CLEARING';
-    if (building.stagingInventory) {
-      for (const item of building.stagingInventory.items || []) normalizeInventoryItem(item);
-    }
+    if (building.stagingInventory) for (const item of building.stagingInventory.items || []) normalizeInventoryItem(item);
   }
   for (const queueItem of state.craftingQueue) {
-    queueItem.materialReservations = queueItem.materialReservations || [];
-    queueItem.blockedReasons = queueItem.blockedReasons || [];
+    queueItem.materialReservations ||= [];
+    queueItem.blockedReasons ||= [];
     queueItem.deterministicSeed = queueItem.deterministicSeed ?? stableStringSeed(queueItem.id);
-    queueItem.reservationStatus = queueItem.reservationStatus || 'unreserved';
+    queueItem.reservationStatus ||= 'unreserved';
   }
 
   ensureResearchSystem(state);
@@ -220,87 +148,50 @@ export function migrateGameState(rawState: GameState): GameState {
   buildingSimulation.structureWorkHistory ||= [];
   getOrCreatePoiBuildGrid(state, 'AREA_CAMP_CLEARING');
   const storageSystem = ensureStorageSystem(state);
+  ensureAgricultureSystem(state);
 
+  // Crafting owns the first reservation rebuild. Every later system then reapplies
+  // its persistent exact slices in deterministic ownership order.
   rebuildReservationCounters(state);
-
   for (const job of maintenance.queue) {
-    if (!job.materialsConsumed) {
-      job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations || []);
-      if (job.materialReservations.length === 0 && job.status !== 'in_progress' && job.status !== 'paused') job.status = 'waiting_materials';
-    } else job.materialReservations = [];
+    if (!job.materialsConsumed) { job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations || []); if (!job.materialReservations.length && job.status !== 'in_progress' && job.status !== 'paused') job.status = 'waiting_materials'; }
+    else job.materialReservations = [];
   }
-
   for (const job of upgrades.queue) {
-    if (!job.materialsConsumed) {
-      job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations || []);
-      if (job.materialReservations.length === 0 && job.status !== 'in_progress' && job.status !== 'paused') job.status = 'waiting_materials';
-    } else job.materialReservations = [];
+    if (!job.materialsConsumed) { job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations || []); if (!job.materialReservations.length && job.status !== 'in_progress' && job.status !== 'paused') job.status = 'waiting_materials'; }
+    else job.materialReservations = [];
   }
-
   for (const job of buildingSimulation.constructionJobs) {
-    job.materialReservations ||= [];
-    job.blockedReasons ||= [];
-    job.materialQualityByItemId ||= {};
-    if (job.materialsDelivered) {
-      job.materialReservations = [];
-    } else {
-      job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations);
-      if (job.materialReservations.length === 0 && job.status !== 'paused') {
-        job.status = 'waiting_materials';
-        if (!job.blockedReasons.length) job.blockedReasons = ['Vật liệu đã thay đổi sau khi tải save'];
-      }
-    }
+    job.materialReservations ||= []; job.blockedReasons ||= []; job.materialQualityByItemId ||= {};
+    if (job.materialsDelivered) job.materialReservations = [];
+    else { job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations); if (!job.materialReservations.length && job.status !== 'paused') { job.status = 'waiting_materials'; if (!job.blockedReasons.length) job.blockedReasons = ['Vật liệu đã thay đổi sau khi tải save']; } }
   }
-
   for (const job of buildingSimulation.structureWorkJobs) {
-    job.materialReservations ||= [];
-    job.blockedReasons ||= [];
-    job.consumedQualities ||= [];
-    job.materialsConsumed = Boolean(job.materialsConsumed);
-    if (job.materialsConsumed) {
-      job.materialReservations = [];
-      continue;
-    }
-
+    job.materialReservations ||= []; job.blockedReasons ||= []; job.consumedQualities ||= []; job.materialsConsumed = Boolean(job.materialsConsumed);
+    if (job.materialsConsumed) { job.materialReservations = []; continue; }
     job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations);
-    if (job.materialReservations.length === 0 && job.status !== 'in_progress' && job.status !== 'paused') {
-      job.status = 'waiting_materials';
-      if (!job.blockedReasons.length) job.blockedReasons = ['Vật liệu đã thay đổi sau khi tải save'];
-    }
+    if (!job.materialReservations.length && job.status !== 'in_progress' && job.status !== 'paused') { job.status = 'waiting_materials'; if (!job.blockedReasons.length) job.blockedReasons = ['Vật liệu đã thay đổi sau khi tải save']; }
   }
-
   for (const job of storageSystem.haulJobs) {
-    job.materialReservations ||= [];
-    job.blockedReasons ||= [];
+    job.materialReservations ||= []; job.blockedReasons ||= [];
     const source = storageSystem.locations.find(location => location.id === job.sourceLocationId);
     const target = storageSystem.locations.find(location => location.id === job.targetLocationId);
-    if (source) {
-      job.poiId = source.poiId;
-      job.sourcePoiId = source.poiId;
-    }
+    if (source) { job.poiId = source.poiId; job.sourcePoiId = source.poiId; }
     if (target) job.targetPoiId = target.poiId;
     if (source && target && !job.route) job.route = calculateStorageRoute(state, source, target);
-
-    if (job.status === 'completed') {
-      job.materialReservations = [];
-      continue;
-    }
+    if (job.status === 'completed') { job.materialReservations = []; continue; }
     job.materialReservations = rebuildJobReservationCounters(state, job.materialReservations);
     job.quantity = job.materialReservations.reduce((sum, reservation) => sum + reservation.quantity, 0);
-    if (job.materialReservations.length === 0) {
-      job.status = 'blocked';
-      job.blockedReasons = ['Vật phẩm nguồn đã thay đổi sau khi tải save'];
-      job.assignedSurvivorId = undefined;
-    } else if (job.status === 'in_progress') {
-      job.status = 'waiting_worker';
-      job.assignedSurvivorId = undefined;
-    }
+    if (!job.materialReservations.length) { job.status = 'blocked'; job.blockedReasons = ['Vật phẩm nguồn đã thay đổi sau khi tải save']; job.assignedSurvivorId = undefined; }
+    else if (job.status === 'in_progress') { job.status = 'waiting_worker'; job.assignedSurvivorId = undefined; }
   }
 
+  // Agriculture is rebuilt after production, construction and logistics so seed/feed
+  // jobs can never steal an exact stack already promised to a higher-priority system.
+  rebuildAgricultureReservations(state);
   rebuildMaintenanceLocks(state);
   rebuildUpgradeLocks(state);
   refreshResearchEvidence(state, { recordMaterialDiscoveries: false, recordIdeaDiscoveries: false });
-
   state.saveVersion = LATEST_SAVE_VERSION;
   return state;
 }
