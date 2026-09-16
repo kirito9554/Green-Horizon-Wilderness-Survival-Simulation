@@ -12,6 +12,7 @@ import type {
 import type { MainWorldAreaId } from '../data/mainWorldAreas';
 import { WILD_FAUNA_SPECIES, type WildFaunaSpeciesDefinition } from '../data/ecologyFauna';
 import { WILD_FLORA_SPECIES } from '../data/ecologyProfiles';
+import { demographicBalance, eventRecruitmentCount, initialPopulationFraction, resolveReproductionProfile, softBreedingFitness } from './ecologyDemographySystem';
 import { ensureRegionEcology, ensureWorldEcology, getRegionSubareas } from './ecologySystem';
 
 const WILD_FOOD_RESOURCES: WildFoodResource[] = [
@@ -272,7 +273,8 @@ function createPopulation(
   if (carryingCapacity <= 0) return undefined;
 
   const socialMinimum = species.socialMode === 'solitary' ? 1 : 2;
-  const population = Math.max(socialMinimum, Math.min(species.maxInitialPopulation, carryingCapacity, Math.round(carryingCapacity * (0.3 + random() * 0.34))));
+  const reproduction = resolveReproductionProfile(species.reproduction, species.offspringPerAdultFemalePerYear);
+  const population = Math.max(socialMinimum, Math.min(species.maxInitialPopulation, carryingCapacity, Math.round(carryingCapacity * initialPopulationFraction(reproduction, random))));
   const juvenileRatio = 0.18 + random() * 0.19;
   const oldRatio = 0.05 + random() * 0.1;
   const juveniles = Math.min(population, Math.round(population * juvenileRatio));
@@ -563,19 +565,36 @@ function tickAnimalPopulation(
       - elapsedDays * 5,
   );
 
+  const reproduction = resolveReproductionProfile(species.reproduction, species.offspringPerAdultFemalePerYear);
+  const balance = demographicBalance(population.population, carryingCapacity, reproduction);
   const matureAnimals = population.adults + population.old;
-  const mateFactor = matureAnimals < 2 ? matureAnimals / 2 : Math.min(1, matureAnimals / 4);
-  const densityBreeding = Math.max(0, 1 - Math.pow(Math.max(0, density - 0.28) / 0.92, 1.7));
-  const conditionFactor = clamp01((population.bodyCondition - 35) / 55) * clamp01((population.averageHealth - 38) / 50);
-  const stressFactor = clamp01(1 - (population.foodStress + population.waterStress) / 155);
-  population.reproductionPressure = clamp(mateFactor * densityBreeding * conditionFactor * stressFactor * 100);
+  // One represented mature animal can still encounter a mate in the surrounding
+  // aggregate habitat; two or more mature animals no longer receive an arbitrary
+  // mature/4 penalty.
+  const mateAvailability = matureAnimals <= 0 ? 0 : matureAnimals === 1 ? 0.38 : 1;
+  const conditionFactor = clamp01(
+    clamp01((population.bodyCondition - 32) / 60) * 0.55
+      + clamp01((population.averageHealth - 34) / 58) * 0.45,
+  );
+  const resourceState = clamp01(1 - (population.foodStress + population.waterStress) / 185);
+  const breedingFitness = softBreedingFitness(mateAvailability, conditionFactor, resourceState);
+  population.reproductionPressure = clamp(breedingFitness * Math.min(1.35, balance.reproductionMultiplier) * 100);
   const adultFemales = population.adults * (1 - population.maleRatio);
-  population.reproductionProgress += adultFemales * species.offspringPerAdultFemalePerYear / 365 * elapsedDays * population.reproductionPressure / 100;
-  let births = Math.floor(population.reproductionProgress);
-  if (births > 0) {
-    population.reproductionProgress -= births;
-    births = Math.min(births, Math.max(0, Math.ceil(carryingCapacity * 1.18 - population.population)));
-    population.juveniles += births;
+  population.reproductionProgress += adultFemales
+    * reproduction.eventsPerAdultFemalePerYear / 365
+    * elapsedDays
+    * breedingFitness
+    * balance.reproductionMultiplier;
+  const breedingEvents = Math.floor(population.reproductionProgress);
+  if (breedingEvents > 0) {
+    population.reproductionProgress -= breedingEvents;
+    let recruits = 0;
+    for (let eventIndex = 0; eventIndex < breedingEvents; eventIndex += 1) {
+      const random = mulberry32(hashString(`${population.id}:${gameMinute(state)}:${system.ecologyTickIndex}:${eventIndex}:breeding`));
+      recruits += eventRecruitmentCount(reproduction, random);
+    }
+    const burstCapacity = Math.max(0, Math.ceil(carryingCapacity * 1.22 - population.population));
+    population.juveniles += Math.min(recruits, burstCapacity);
   }
 
   population.maturationProgress += population.juveniles / Math.max(45, species.maturityDays) * elapsedDays;
@@ -597,7 +616,11 @@ function tickAnimalPopulation(
   const stressMortality = Math.max(0, population.foodStress + population.waterStress - 125) / 100 * population.population * 0.004;
   const oldMortality = population.old / Math.max(90, species.maxAgeDays * 0.28);
   const healthMortality = Math.max(0, 32 - population.averageHealth) / 100 * population.population * 0.006;
-  population.mortalityProgress += (stressMortality + oldMortality + healthMortality) * elapsedDays;
+  // The stabilizer only buffers stress/health losses at critically low density;
+  // natural old-age turnover is never suppressed.
+  population.mortalityProgress += (
+    oldMortality + (stressMortality + healthMortality) * balance.vulnerableMortalityMultiplier
+  ) * elapsedDays;
   let deaths = Math.min(population.population, Math.floor(population.mortalityProgress));
   if (deaths > 0) {
     population.mortalityProgress -= deaths;
