@@ -304,9 +304,25 @@ function tickWildCarcasses(state: GameState): void {
   });
 }
 
+function riparianForagingAccess(
+  system: WorldEcologyState,
+  population: WildPredatorPopulation,
+  species: WildPredatorSpeciesDefinition,
+  subarea: EcologicalSubarea,
+): number {
+  const maxHops = Math.max(0, Math.floor(species.riparianForagingReachHops || 0));
+  if (maxHops <= 0 || subarea.environment.waterAccess < 50) return 0;
+  const poiAccess = aquaticPoiAccess(population.poiId, subarea.poiId, maxHops);
+  if (poiAccess <= 0) return 0;
+  const shoreline = clamp01((subarea.environment.waterAccess - 50) / 50);
+  const habitat = getPredatorHabitatSuitability(subarea, species);
+  return clamp01(poiAccess * (0.5 + shoreline * 0.35 + habitat * 0.15));
+}
+
 function feedFromOwnedCarcasses(
   state: GameState,
   population: WildPredatorPopulation,
+  species: WildPredatorSpeciesDefinition,
   mealBudgetKg: number,
 ): number {
   const system = ensureWildPredators(state);
@@ -315,7 +331,11 @@ function feedFromOwnedCarcasses(
   const carcasses = (system.wildCarcasses || [])
     .filter(carcass => carcass.killerPopulationId === population.id)
     .filter(carcass => carcass.remainingEdibleKg > 0 && carcass.freshness >= MIN_CARCASS_FRESHNESS_TO_FEED)
-    .filter(carcass => homeRange.has(carcass.subareaId))
+    .filter(carcass => {
+      if (homeRange.has(carcass.subareaId)) return true;
+      const subarea = system.subareasById[carcass.subareaId];
+      return Boolean(subarea && riparianForagingAccess(system, population, species, subarea) > 0);
+    })
     .sort((a, b) => {
       const aLocal = a.subareaId === population.currentSubareaId ? 1 : 0;
       const bLocal = b.subareaId === population.currentSubareaId ? 1 : 0;
@@ -561,13 +581,17 @@ function collectHuntTargets(
   const homeRange = new Set(population.homeRangeSubareaIds.length ? population.homeRangeSubareaIds : [population.currentSubareaId]);
   homeRange.add(population.currentSubareaId);
   return (system.animalPopulations || [])
-    .filter(prey => prey.population > 1 && homeRange.has(prey.currentSubareaId))
+    .filter(prey => prey.population > 1)
     .map(prey => {
       const preference = species.preyWeights[prey.speciesId] || 0;
       const subarea = system.subareasById[prey.currentSubareaId];
-      const accessibility = preference > 0 && subarea
+      const localAccessibility = preference > 0 && subarea && homeRange.has(prey.currentSubareaId)
         ? getPredatorHuntingAccessibility(system, population, species, prey.currentSubareaId)
         : 0;
+      const riparianAccessibility = preference > 0 && subarea && !homeRange.has(prey.currentSubareaId)
+        ? riparianForagingAccess(system, population, species, subarea)
+        : 0;
+      const accessibility = Math.max(localAccessibility, riparianAccessibility);
       const energeticValue = preference > 0 ? energeticTargetValue(prey, species) : 0;
       const search = subarea && accessibility > 0
         ? huntSearchability(prey, subarea, species, accessibility)
@@ -857,7 +881,7 @@ function runDiscreteHunt(
 
   const mealRateMultiplier = 1.6 + getPredatorEnergyReserveDays(species) * 0.16;
   const mealBudgetKg = Math.max(0, dailyDemandKg * elapsedDays * mealRateMultiplier);
-  let edibleKg = feedFromOwnedCarcasses(state, population, mealBudgetKg);
+  let edibleKg = feedFromOwnedCarcasses(state, population, species, mealBudgetKg);
   const returningCarcassEdibleKg = edibleKg;
   let remainingMealBudgetKg = Math.max(0, mealBudgetKg - edibleKg);
 

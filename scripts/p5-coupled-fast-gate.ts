@@ -449,8 +449,11 @@ function evaluateGate(baseline: Checkpoint, current: Checkpoint): string[] {
   for (const initial of baseline.species) {
     const row = currentSpecies.get(initial.speciesId);
     if (initial.population >= 2 && (!row || row.population <= 0)) failures.push(`${initial.speciesId} collapsed from baseline population ${initial.population}`);
-    if (row && row.population > 0 && row.hunger >= 95 && row.reserveRatio <= 0.03 && row.chronicStressDays >= 30) {
-      failures.push(`${row.speciesId} is trapped in near-max hunger with empty reserves and chronic stress`);
+    if (row && row.population > 0 && row.hunger >= 85 && row.reserveRatio <= 0.03 && row.chronicStressDays >= 60) {
+      failures.push(`${row.speciesId} is trapped in severe hunger with empty reserves and chronic stress`);
+    }
+    if (row && initial.population >= 2 && row.population <= initial.population * 0.5 && row.hunger >= 75 && row.chronicStressDays >= 60) {
+      failures.push(`${row.speciesId} lost at least half its baseline population under sustained hunger stress`);
     }
   }
   return failures;

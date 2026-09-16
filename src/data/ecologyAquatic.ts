@@ -88,7 +88,7 @@ export const WILD_AQUATIC_SPECIES: Record<string, WildAquaticSpeciesDefinition> 
     preyWeights: { AQUATIC_FRESHWATER_PRAWN: 0.5, AQUATIC_FORAGE_FISH: 0.28 },
   },
   AQUATIC_LAGOON_SNAPPER: {
-    id: 'AQUATIC_LAGOON_SNAPPER', name: 'Lagoon Snapper', trophicGuild: 'mesopredator', adultWeightKg: 3.2,
+    id: 'AQUATIC_LAGOON_SNAPPER', name: 'Lagoon Snapper', trophicGuild: 'mesopredator', adultWeightKg: 2.2,
     maturityDays: 520, oldAgeDays: 3000, baseDensityPer100M3: 2.1, maxPopulationPerBody: 250,
     preferredHabitats: ['tidal_water'],
     hydrologyCriteria: { minDepthM: 0.35, maxDepthM: 12, minDissolvedOxygenMgL: 4.5, maxVelocityMps: 1.8, minSalinityPpt: 10, maxSalinityPpt: 40, maxTurbidity: 58, maxContamination: 35, minimumPassability: 0.22 },
@@ -98,7 +98,7 @@ export const WILD_AQUATIC_SPECIES: Record<string, WildAquaticSpeciesDefinition> 
     preyWeights: { AQUATIC_FORAGE_FISH: 1, AQUATIC_FRESHWATER_PRAWN: 0.6, AQUATIC_MUD_CRAB: 0.18 },
   },
   AQUATIC_RIVER_CATFISH: {
-    id: 'AQUATIC_RIVER_CATFISH', name: 'River Catfish', trophicGuild: 'omnivore', adultWeightKg: 6.5,
+    id: 'AQUATIC_RIVER_CATFISH', name: 'River Catfish', trophicGuild: 'omnivore', adultWeightKg: 3.8,
     maturityDays: 420, oldAgeDays: 2400, baseDensityPer100M3: 3.4, maxPopulationPerBody: 260,
     preferredHabitats: ['flowing_channel', 'standing_water', 'tidal_water'],
     hydrologyCriteria: { minDepthM: 0.28, maxDepthM: 9, minDissolvedOxygenMgL: 2.2, maxVelocityMps: 1.55, maxSalinityPpt: 18, maxTurbidity: 94, maxContamination: 60, minimumPassability: 0.12 },
@@ -108,7 +108,7 @@ export const WILD_AQUATIC_SPECIES: Record<string, WildAquaticSpeciesDefinition> 
     preyWeights: { AQUATIC_FRESHWATER_PRAWN: 0.7, AQUATIC_FORAGE_FISH: 0.5 },
   },
   AQUATIC_MANGROVE_MULLET: {
-    id: 'AQUATIC_MANGROVE_MULLET', name: 'Mangrove Mullet', trophicGuild: 'omnivore', adultWeightKg: 2.1,
+    id: 'AQUATIC_MANGROVE_MULLET', name: 'Mangrove Mullet', trophicGuild: 'omnivore', adultWeightKg: 1.6,
     maturityDays: 280, oldAgeDays: 1900, baseDensityPer100M3: 7.5, maxPopulationPerBody: 650,
     preferredHabitats: ['tidal_water', 'flowing_channel', 'standing_water'],
     hydrologyCriteria: { minDepthM: 0.18, maxDepthM: 8, minDissolvedOxygenMgL: 3, maxVelocityMps: 1.45, maxSalinityPpt: 30, maxTurbidity: 88, maxContamination: 52, minimumPassability: 0.12 },
@@ -117,7 +117,7 @@ export const WILD_AQUATIC_SPECIES: Record<string, WildAquaticSpeciesDefinition> 
     diet: { detritus: 0.44, periphyton: 0.24, aquatic_vegetation: 0.14, benthic_invertebrates: 0.18 },
   },
   AQUATIC_BARRAMUNDI: {
-    id: 'AQUATIC_BARRAMUNDI', name: 'Barramundi', trophicGuild: 'mesopredator', adultWeightKg: 14,
+    id: 'AQUATIC_BARRAMUNDI', name: 'Barramundi', trophicGuild: 'mesopredator', adultWeightKg: 7.5,
     maturityDays: 620, oldAgeDays: 3600, baseDensityPer100M3: 1.55, maxPopulationPerBody: 180,
     preferredHabitats: ['tidal_water', 'flowing_channel', 'standing_water'],
     hydrologyCriteria: { minDepthM: 0.45, maxDepthM: 14, minDissolvedOxygenMgL: 3.8, maxVelocityMps: 1.65, maxSalinityPpt: 28, maxTurbidity: 78, maxContamination: 42, minimumPassability: 0.22 },
