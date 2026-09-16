@@ -1,0 +1,36 @@
+name: Temporary P3.5 Riparian Patch
+
+on:
+  push:
+    branches:
+      - feature/p5-coupled-one-year-gate
+    paths:
+      - scripts/tmp-p35-riparian-patch.mjs
+      - .github/workflows/tmp-p35-riparian-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/p5-coupled-one-year-gate
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Apply riparian patch
+        run: node scripts/tmp-p35-riparian-patch.mjs
+      - name: Typecheck patched tree
+        run: npm run lint
+      - name: Commit patched ecology
+        run: |
+          git config user.name "kirito9554"
+          git config user.email "127989635+kirito9554@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: let crocodiles forage connected riparian prey"
+          git push origin HEAD:feature/p5-coupled-one-year-gate
