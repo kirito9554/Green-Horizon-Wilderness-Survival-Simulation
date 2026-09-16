@@ -123,7 +123,7 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
       FAUNA_FOREST_GECKO: 0.02,
       FAUNA_GROUND_FROG: 0.01,
     },
-    adultWeightKg: 24, dailyFoodKgPerAdult: 0.72, dailyWaterNeed: 32,
+    adultWeightKg: 24, dailyFoodKgPerAdult: 0.30, dailyWaterNeed: 32,
     maxKillsPerAdultPerDay: 0.16, halfSaturationPreyPer1000M2: 7,
     idealPredatorPreyBiomassRatio: 0.1, minimumViablePreyCount: 4,
     maxAdultPreyKg: 30, juvenilePreference: 0.72,
@@ -132,8 +132,10 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     disturbanceTolerance: 24, roamingPerDay: 0.32,
   },
 
+  // Keep the legacy PREDATOR_RAPTOR id for save/telemetry compatibility; this
+  // population represents a large rainforest eagle, not a dinosaurian raptor.
   PREDATOR_RAPTOR: {
-    id: 'PREDATOR_RAPTOR', name: 'Forest Raptor',
+    id: 'PREDATOR_RAPTOR', name: 'Forest Eagle',
     targets: { canopy: 38, sunlight: 62, slope: 18, rocks: 42, vegetation: 48 }, tolerance: 44,
     regionAffinity: {
       AREA_STONE_RIDGE: 1,
@@ -156,7 +158,7 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
       FAUNA_GROUND_FROG: 0.08,
       FAUNA_LARGE_FOREST_RODENT: 0.08,
     },
-    adultWeightKg: 4.8, dailyFoodKgPerAdult: 0.32, dailyWaterNeed: 20,
+    adultWeightKg: 4.8, dailyFoodKgPerAdult: 0.20, dailyWaterNeed: 20,
     maxKillsPerAdultPerDay: 0.34, halfSaturationPreyPer1000M2: 8,
     idealPredatorPreyBiomassRatio: 0.08, minimumViablePreyCount: 4,
     maxAdultPreyKg: 4.2, juvenilePreference: 0.52,
@@ -235,7 +237,7 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     maxAquaticDietShare: 0.7,
     aquaticForagingReachHops: 2,
     riparianForagingReachHops: 2,
-    adultWeightKg: 180, dailyFoodKgPerAdult: 1.05, dailyWaterNeed: 90,
+    adultWeightKg: 180, dailyFoodKgPerAdult: 0.60, dailyWaterNeed: 90,
     maxKillsPerAdultPerDay: 0.08, halfSaturationPreyPer1000M2: 5,
     idealPredatorPreyBiomassRatio: 0.14, minimumViablePreyCount: 3,
     maxAdultPreyKg: 90, juvenilePreference: 0.45,
