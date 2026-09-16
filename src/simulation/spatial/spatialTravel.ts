@@ -49,10 +49,13 @@ function addUndirectedEdge(
 }
 
 /**
- * Build a lightweight patch graph over the deterministic global lattice.
+ * Build a lightweight graph over one generated world's shared shifted lattice.
  * Same-cell pieces connect across macro-region borders; neighboring cells connect
- * when their representative centroids are locally reachable. This is a routing
- * foundation, not the final trail/river/slope navigation model.
+ * when their representative centroids are locally reachable. Because every macro
+ * region uses the same per-seed lattice origin, the graph remains continuous even
+ * though another save seed produces different local patch geometry.
+ *
+ * This is a routing foundation, not the final trail/river/slope navigation model.
  */
 export function buildSpatialRouteGraph(patches: readonly HabitatPatch[] = MAIN_HABITAT_PATCHES): SpatialRouteGraph {
   const patchesById: Record<string, HabitatPatch> = {};
@@ -121,8 +124,8 @@ interface QueueEntry {
 }
 
 /**
- * Dijkstra over habitat impedance. A future trail/navmesh layer can replace the
- * graph builder without changing callers of this estimator.
+ * Dijkstra over generated habitat impedance. A future trail/navmesh layer can
+ * replace the graph builder without changing callers of this estimator.
  */
 export function estimateSpatialRoute(
   start: WorldPointMeters,
