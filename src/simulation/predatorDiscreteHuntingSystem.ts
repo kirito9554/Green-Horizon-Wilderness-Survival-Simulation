@@ -14,7 +14,6 @@ import type { MainWorldAreaId } from '../data/mainWorldAreas';
 import type { WildAquaticPopulation } from '../types/aquaticEcology';
 import { WILD_FAUNA_SPECIES } from '../data/ecologyFauna';
 import { WILD_AQUATIC_SPECIES } from '../data/ecologyAquatic';
-import { REGION_HYDROLOGY_PROFILES } from '../data/hydrologyProfiles';
 import { WILD_PREDATOR_SPECIES, type WildPredatorSpeciesDefinition } from '../data/ecologyPredators';
 import { ensureRegionWildFauna } from './ecologyFaunaSystem';
 import {
@@ -29,6 +28,7 @@ import {
   preyRefugiaMultiplier,
   typeIIIPredationResponse,
 } from './ecologyPredatorSystem';
+import { getPredatorAccessibleWaterRatio, getPredatorFoodSupport, predatorPoiAccess } from './predatorResourceAccess';
 
 const BASE_EXPECTED_ATTEMPT_SUCCESS = 0.22;
 const MIN_CARCASS_FRESHNESS_TO_FEED = 15;
@@ -124,9 +124,9 @@ function estimatePredatorCarryingCapacity(
   const areaM2 = subareas.reduce((sum, subarea) => sum + subarea.areaM2, 0);
   const baseK = Math.max(0.25, areaM2 / 1000 * species.baseDensityPer1000M2);
   const habitat = subareas.reduce((sum, subarea) => sum + getPredatorHabitatSuitability(subarea, species), 0) / subareas.length;
-  const preyBiomass = subareas.reduce((sum, subarea) => sum + preyBiomassForPredator(system, subarea.id, species), 0);
-  const preySupport = preyBiomass / Math.max(0.2, species.dailyFoodKgPerAdult * 8);
-  const water = subareas.reduce((sum, subarea) => sum + clamp01(subarea.environment.waterAccess / Math.max(20, species.dailyWaterNeed)), 0) / subareas.length;
+  const foodSupport = getPredatorFoodSupport(system, subareaIds, species, subareas[0].poiId);
+  const preySupport = foodSupport.supportedAdultEquivalents;
+  const water = getPredatorAccessibleWaterRatio(state, system, subareaIds, species, subareas[0].poiId);
   const disturbance = subareas.reduce((sum, subarea) => {
     const excess = Math.max(0, subarea.disturbance.humanPressure - species.disturbanceTolerance);
     return sum + (1 - excess / 125);
@@ -145,8 +145,8 @@ function neighborIds(system: WorldEcologyState, subareaId: string): string[] {
 
 function movementScore(system: WorldEcologyState, subarea: EcologicalSubarea, species: WildPredatorSpeciesDefinition): number {
   const habitat = getPredatorHabitatSuitability(subarea, species);
-  const preyBiomass = preyBiomassForPredator(system, subarea.id, species);
-  const preyScore = clamp01(preyBiomass / Math.max(1.5, species.dailyFoodKgPerAdult * 12));
+  const foodSupport = getPredatorFoodSupport(system, [subarea.id], species, subarea.poiId);
+  const preyScore = clamp01(foodSupport.effectiveFoodBiomassKg / Math.max(1.5, species.dailyFoodKgPerAdult * 12));
   const water = clamp01(subarea.environment.waterAccess / Math.max(20, species.dailyWaterNeed));
   const humanPenalty = Math.max(0, subarea.disturbance.humanPressure - species.disturbanceTolerance) / 125;
   return habitat * 0.48 + preyScore * 0.36 + water * 0.16 - humanPenalty - subarea.disturbance.humanPressure / 220;
@@ -312,7 +312,7 @@ function riparianForagingAccess(
 ): number {
   const maxHops = Math.max(0, Math.floor(species.riparianForagingReachHops || 0));
   if (maxHops <= 0 || subarea.environment.waterAccess < 50) return 0;
-  const poiAccess = aquaticPoiAccess(population.poiId, subarea.poiId, maxHops);
+  const poiAccess = predatorPoiAccess(population.poiId, subarea.poiId, maxHops);
   if (poiAccess <= 0) return 0;
   const shoreline = clamp01((subarea.environment.waterAccess - 50) / 50);
   const habitat = getPredatorHabitatSuitability(subarea, species);
@@ -727,6 +727,7 @@ interface AquaticHuntTarget {
   prey: WildAquaticPopulation;
   preference: number;
   searchability: number;
+  refugia: number;
   targetWeight: number;
   waterNodeId: string;
 }
@@ -735,6 +736,25 @@ function aquaticStageMassMultiplier(stage: WildAnimalLifeStage): number {
   if (stage === 'juvenile') return 0.28;
   if (stage === 'old') return 0.82;
   return 1;
+}
+
+function aquaticRecoveryFloor(speciesId: string): number {
+  const preySpecies = WILD_AQUATIC_SPECIES[speciesId];
+  if (!preySpecies) return 8;
+  // P3.7: slow-maturing, slow-reproducing aquatic prey need a larger
+  // aggregate breeding refuge than fast forage species. This is not extra
+  // reproduction; it only makes predators progressively inefficient once a
+  // prey population approaches its life-history recovery floor.
+  const maturityPressure = clamp01((preySpecies.maturityDays - 90) / 600);
+  const lowReproductionPressure = clamp01((0.0035 - preySpecies.dailyReproductionRate) / 0.0032);
+  return Math.round(7 + (maturityPressure * 0.45 + lowReproductionPressure * 0.55) * 13);
+}
+
+function aquaticRecoveryRefugia(accessiblePopulation: number, speciesId: string): number {
+  const floor = aquaticRecoveryFloor(speciesId);
+  if (accessiblePopulation <= floor) return 0;
+  const recoveryBand = Math.max(6, floor * 0.75);
+  return clamp01((accessiblePopulation - floor) / recoveryBand);
 }
 
 function eligibleAquaticStages(
@@ -749,33 +769,6 @@ function eligibleAquaticStages(
     { stage: 'old', count: prey.old, bodyMassKg: preySpecies.adultWeightKg * 0.82, weight: prey.old * 0.86 },
   ];
   return rows.filter(row => row.count >= 1 && row.bodyMassKg <= predator.maxAdultPreyKg);
-}
-
-function aquaticPoiAccess(fromPoi: MainWorldAreaId, toPoi: MainWorldAreaId, maxHops: number): number {
-  if (fromPoi === toPoi) return 1;
-  if (maxHops <= 0) return 0;
-  const visited = new Set<MainWorldAreaId>([fromPoi]);
-  let frontier: MainWorldAreaId[] = [fromPoi];
-  for (let depth = 1; depth <= maxHops; depth += 1) {
-    const next: MainWorldAreaId[] = [];
-    for (const poiId of frontier) {
-      const profile = REGION_HYDROLOGY_PROFILES[poiId];
-      const neighbors = new Set<MainWorldAreaId>(profile?.downstreamPoiIds || []);
-      for (const [candidateId, candidate] of Object.entries(REGION_HYDROLOGY_PROFILES) as Array<[MainWorldAreaId, typeof REGION_HYDROLOGY_PROFILES[MainWorldAreaId]]>) {
-        if (candidate.downstreamPoiIds.includes(poiId)) neighbors.add(candidateId);
-      }
-      for (const neighbor of neighbors) {
-        if (neighbor === toPoi) return Math.pow(0.76, depth);
-        if (!visited.has(neighbor)) {
-          visited.add(neighbor);
-          next.push(neighbor);
-        }
-      }
-    }
-    frontier = next;
-    if (!frontier.length) break;
-  }
-  return 0;
 }
 
 function collectAquaticHuntTargets(
@@ -794,7 +787,7 @@ function collectAquaticHuntTargets(
     .map(prey => {
       const preference = weights[prey.speciesId] || 0;
       const reachHops = Math.max(0, Math.floor(species.aquaticForagingReachHops || 0));
-      const poiAccess = prey.poiIds.reduce((best, preyPoi) => Math.max(best, aquaticPoiAccess(population.poiId, preyPoi, reachHops)), 0);
+      const poiAccess = prey.poiIds.reduce((best, preyPoi) => Math.max(best, predatorPoiAccess(population.poiId, preyPoi, reachHops)), 0);
       const stages = poiAccess > 0 ? eligibleAquaticStages(prey, species) : [];
       const stageWeight = stages.reduce((sum, row) => sum + row.weight, 0);
       const expectedBodyMassKg = stageWeight > 0
@@ -835,25 +828,30 @@ function collectAquaticHuntTargets(
 
   return rawTargets.map(entry => {
     const density = speciesDensity.get(entry.prey.speciesId)!;
+    const recoveryFloor = aquaticRecoveryFloor(entry.prey.speciesId);
+    const refugia = aquaticRecoveryRefugia(density.population, entry.prey.speciesId);
     const availability = adaptivePreyAvailability(
       density.populationDensity,
       density.biomassDensity,
       communityPopulationDensity,
       communityBiomassDensity,
       density.population,
-      species.minimumViablePreyCount,
+      recoveryFloor,
     );
+    const protectedSearchability = entry.searchability * Math.sqrt(refugia);
     return {
       prey: entry.prey,
       preference: entry.preference,
-      searchability: entry.searchability,
+      searchability: protectedSearchability,
+      refugia,
       waterNodeId: entry.waterNodeId,
       targetWeight: entry.preference
         * entry.energeticValue
         * availability
-        * (0.35 + entry.searchability * 0.65),
+        * refugia
+        * (0.35 + protectedSearchability * 0.65),
     };
-  }).filter(entry => entry.targetWeight > 0);
+  }).filter(entry => entry.targetWeight > 0 && entry.refugia > 0);
 }
 
 function removeOneAquaticPrey(prey: WildAquaticPopulation, stage: WildAnimalLifeStage): number {
@@ -962,7 +960,7 @@ function runAquaticHunt(
       telemetry.lastOutcome = 'no_target';
       continue;
     }
-    const encounterChance = clamp01(0.12 + target.searchability * 0.82);
+    const encounterChance = clamp01((0.12 + target.searchability * 0.82) * target.refugia);
     telemetry.lastTargetSpeciesId = target.prey.speciesId;
     telemetry.lastEncounterChance = round3(encounterChance);
     if (random() >= encounterChance) {
@@ -1198,7 +1196,10 @@ function tickPredatorPopulationDiscrete(state: GameState, population: WildPredat
   const elapsedDays = elapsedMinutes / 1440;
   const huntResult = runDiscreteHunt(state, population, species, elapsedDays);
   const energyCoverage = applyPredatorEnergyAccounting(population, species, elapsedDays, huntResult.edibleKg);
-  const waterRatio = clamp01(subarea.environment.waterAccess / Math.max(20, species.dailyWaterNeed));
+  const waterRangeIds = [...new Set([...population.homeRangeSubareaIds, population.currentSubareaId])];
+  const waterRatio = getPredatorAccessibleWaterRatio(
+    state, system, waterRangeIds, species, population.poiId, population.currentSubareaId,
+  );
 
   population.hungerStress = clamp(population.hungerStress + (1 - energyCoverage) * elapsedDays * 16 - energyCoverage * elapsedDays * 30);
   population.waterStress = clamp(population.waterStress + (1 - waterRatio) * elapsedDays * 54 - waterRatio * elapsedDays * 20);
