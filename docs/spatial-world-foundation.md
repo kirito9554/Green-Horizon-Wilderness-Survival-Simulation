@@ -55,16 +55,7 @@ The macro map therefore remains recognizable between campaigns while the playabl
 
 Each seed therefore changes local patch boundaries, centroids and patch IDs while conserving the same 120 km² island and the same macro-region outlines.
 
-Terrain is generated as spatially correlated deterministic fields rather than independent dice rolls. Each habitat patch receives generated values for:
-
-- elevation;
-- slope;
-- roughness;
-- wetness;
-- drainage;
-- canopy/cover/forage/aquatic suitability;
-- movement impedance;
-- habitat and terrain tags.
+Terrain is generated as spatially correlated deterministic fields rather than independent dice rolls. Each habitat patch receives generated values for elevation, slope, roughness, wetness, drainage, canopy/cover/forage/aquatic suitability, movement impedance, habitat tags and terrain tags.
 
 Broad and detail noise layers make nearby patches related to each other while still allowing a different landscape for another seed.
 
@@ -80,78 +71,57 @@ This is still an abstract patch-scale drainage model, not a final rendered river
 
 `src/simulation/spatial/localSiteCatalog.ts` defines a deliberately larger vocabulary than any one campaign should use. The current catalog contains **70 natural local-site archetypes** plus the three required macro identity landmarks.
 
-The natural catalog spans six ecological families:
+The natural catalog spans six ecological families: water/hydrology, terrain/geology, vegetation/resource concentrations, wildlife-use sites, coastal sites and disturbance features.
 
-- **water/hydrology** — freshwater seeps, spring heads, forest and seasonal pools, fords, river bends, gravel bars, oxbows, marshes, mangrove channels, reed beds, cascade pools and similar features;
-- **terrain/geology** — rock shelters, karst shafts, ravines, cliffs, boulder fields, landslide scars, sinkholes, limestone pinnacles, hidden cave mouths, talus and erosion features;
-- **vegetation/resource concentrations** — kapok, medicinal glades, fallen giants, root hollows, fruiting groves, bamboo, palms, fern gullies, vine/rattan tangles, strangler figs, moss and epiphyte groves, tuber patches, resin trees and fungal deadwood;
-- **wildlife-use sites** — animal trails, nests, wallows, mineral licks, burrow colonies, nesting cliffs, bat roosts, feeding grounds, termite mounds, bee trees, predator dens, amphibian pools and basking/rooting sites;
-- **coastal sites** — tidal pools, sandbars, driftwood and shell banks, mangrove rookeries, sea caves and beach nesting grounds;
-- **disturbance features** — flood-debris fields, storm blowdowns and fallen-log jams.
+`src/simulation/spatial/localSiteGeneration.ts` does **not** make all archetypes available in every run. It first measures each archetype against generated terrain/hydrology and calculates a world-support score from the best matching patches. Unsupported archetypes are excluded entirely.
 
-`src/simulation/spatial/localSiteGeneration.ts` does **not** make all of those archetypes available in every run. It first measures each archetype against the generated terrain/hydrology and calculates a world-support score from the best matching patches. Unsupported archetypes are excluded entirely.
+The remaining supported archetypes compete inside deterministic category quotas. The world seed adds affinity to each archetype, while rarity reduces pool priority. Broad `core` archetypes survive only when terrain genuinely supports them; the rest are selected into a campaign-specific subset.
 
-The remaining supported archetypes compete inside deterministic category quotas. The world seed adds an affinity value to each archetype, while rarity reduces its pool priority. A small set of ecologically broad `core` archetypes survives whenever the terrain actually supports them; the rest are selected into a campaign-specific subset.
+The result is a `GeneratedLocalSitePool` with enabled/disabled archetypes and a stable signature. One seed can emphasize wetland channels, marsh pools, wallows and flood debris, while another can emphasize karst shafts, talus, bat roosts and mineral licks.
 
-The result is a `GeneratedLocalSitePool` with enabled/disabled archetypes and a stable signature. For example, one seed can emphasize wetland channels, marsh pools, wallows and flood debris, while another seed can emphasize karst shafts, talus, bat roosts and mineral licks. A campaign therefore does not need to contain every possible site merely because the macro regions are the same.
-
-After the pool is chosen, individual site instances still require **local patch suitability**. Rare/exceptional archetypes have a higher local suitability threshold, so an archetype being present in the world vocabulary does not mean it can spawn anywhere.
+After the pool is chosen, individual site instances still require **local patch suitability**. Rare/exceptional archetypes have higher local suitability thresholds, so an archetype being present in the world vocabulary does not mean it can spawn anywhere.
 
 Old center-map concepts such as `Medicinal Glade`, `Kapok Grove`, `Wildlife Nest`, `Clay Pit` and `Jungle Trail` are reused only as local-site concepts. Their legacy area IDs never re-enter active macro geometry.
 
-Three macro identity landmarks are guaranteed exactly once per generated world while their exact local placement is selected from the generated terrain:
-
-- Plane Wreck inside the Plane Wreck macro region;
-- Limestone Cavern inside Limestone Cave;
-- Ruin Complex inside Ancient Ruins.
+Three macro identity landmarks are guaranteed exactly once per generated world while their exact local placement is selected from generated terrain: Plane Wreck, Limestone Cavern and Ruin Complex.
 
 ## Local-site functional semantics
 
-`src/simulation/spatial/localSiteProfiles.ts` gives **every one of the 73 local-site types** an explicit machine-readable role instead of treating sites as decorative map labels.
+`src/simulation/spatial/localSiteProfiles.ts` gives **every one of the 73 local-site types** an explicit machine-readable role instead of treating sites as decorative labels.
 
 Each profile defines four layers:
 
-1. **player activities** — for example gather water, forage food/medicine, gather material/fuel, fish, hunt, trap, salvage, shelter, camp, cross, climb, survey or explore cave;
+1. **player activities** — gather water, forage food/medicine, gather material/fuel, fish, hunt, trap, salvage, shelter, camp, cross, climb, survey or explore cave;
 2. **gameplay effects** — movement impedance, navigation value, shelter quality, camp suitability, hazard and visibility;
 3. **ecology effects** — forage, cover, water, breeding habitat, prey refuge, predator opportunity, aquatic nursery value, decomposition, disturbance sensitivity and affinity for broad fauna guilds;
-4. **resource opportunities** — resource family, relative abundance, renewability, seasonality, extraction impact and optional mappings to item IDs that already exist in the item database.
+4. **resource opportunities** — resource family, relative abundance, renewability, seasonality, extraction impact and optional mappings to item IDs already present in the item database.
 
-Resource families are intentionally broader than the current item catalog. Fresh water, fish, insects, honey, tubers and similar ecological resources can therefore exist as simulation resources before every one of them has a dedicated inventory item. Existing material families such as clay, stone, bamboo, resin, timber, driftwood and shell can already point to current item IDs.
+Resource families are intentionally broader than the current item catalog. Fresh water, fish, insects, eggs/feathers, honey, tubers and similar ecological resources can exist in the simulation before every one has a dedicated inventory item. Existing material families such as clay, stone, bamboo, resin, timber, driftwood and shells can point directly to current item IDs.
 
-Examples of semantic differences:
+Examples:
 
-- `Burrow Colony` is a strong breeding/prey-refuge feature rather than a loot node;
-- `Animal Trail` lowers route cost and raises predator/hunting opportunity but directly yields no resource;
+- `Burrow Colony` is strong breeding habitat and prey refuge, not a generic loot node;
+- `Animal Trail` lowers route cost and raises hunting/predator opportunity but directly yields no resource;
 - `Freshwater Seep` is a water source and wildlife focus whose overuse can damage a sensitive microhabitat;
-- `Fallen Giant` supplies finite deadwood while strongly supporting decomposition, invertebrates and small-animal shelter;
-- `Rock Shelter` is valuable to the player primarily because of shelter/camp quality;
+- `Fallen Giant` supplies finite deadwood while supporting decomposition, invertebrates and small-animal shelter;
+- `Rock Shelter` is valuable primarily for shelter/camp quality;
 - `Fruit Grove` is productive but seasonal and concentrates both prey and predators;
-- `Predator Den` represents breeding/territorial habitat and danger rather than a generic harvest point;
-- `Plane Wreck` contains finite salvage and acts as a navigation landmark without pretending to be a natural renewable resource.
+- `Predator Den` represents breeding/territorial habitat and danger rather than harvest value;
+- `Plane Wreck` contains finite salvage and acts as a navigation landmark without pretending to be renewable ecology.
 
-`aggregateLocalSiteInfluenceByPatch()` converts all spawned sites in a patch into normalized read-only patch signals. `GeneratedSpatialWorld.localSiteInfluenceByPatchId` therefore exposes site-derived forage, cover, water, breeding habitat, prey refuge, predator opportunity, aquatic nursery value, decomposition, disturbance sensitivity, shelter/camp quality, hazard/navigation and resource richness.
+`aggregateLocalSiteInfluenceByPatch()` converts all spawned sites in a patch into normalized read-only patch signals. `GeneratedSpatialWorld.localSiteInfluenceByPatchId` exposes site-derived forage, cover, water, breeding habitat, prey refuge, predator opportunity, aquatic nursery value, decomposition, disturbance sensitivity, shelter/camp quality, hazard/navigation and resource richness.
 
-These signals are **not wired into current fauna/resource balance yet**. This keeps the foundation deterministic and testable while giving later ecology, gathering, travel and camp systems a single source of truth instead of adding new site-name conditionals.
+These signals are **not wired into current fauna/resource balance yet**. This keeps the foundation deterministic and testable while giving later ecology, gathering, travel and camp systems a single source of truth instead of adding more site-name conditionals.
 
 ## Travel foundation
 
-`src/simulation/spatial/spatialTravel.ts` builds a lightweight adjacency graph from the generated habitat patches and exposes a read-only Dijkstra route estimator. Edge cost combines physical distance and generated patch movement impedance.
+`src/simulation/spatial/spatialTravel.ts` builds a lightweight adjacency graph from generated habitat patches and exposes a read-only Dijkstra route estimator. Edge cost combines physical distance and generated patch movement impedance.
 
 This is **not yet** the final expedition navigation system. Existing `distanceKm` and `baseTravelMinutes` remain live gameplay data until generated trails, slope barriers, river crossings, weather/load/fatigue effects and route validation are added.
 
 ## Ecology integration plan
 
-Fauna and predator populations should migrate from macro-region buckets toward patch-aware populations in later phases. The generated spatial layer is designed to support:
-
-- local population density instead of whole-region headcount;
-- habitat-specific carrying capacity;
-- home-range overlap;
-- predator encounter probability and competition based on shared space;
-- refugia emerging from terrain/habitat and local-site structure rather than hard low-population buffs;
-- breeding/nesting/wallow/feeding sites influencing local animal distribution;
-- water-linked animal movement and resource availability;
-- extraction pressure degrading sensitive site resources instead of generic timer-only respawn;
-- local extirpation and recolonization without treating every disappearance as island-wide extinction.
+Fauna and predator populations should migrate from macro-region buckets toward patch-aware populations in later phases. The generated spatial layer is designed to support local density, habitat-specific carrying capacity, home-range overlap, spatial predator competition, terrain/site refugia, breeding/nesting/wallow/feeding-site effects, water-linked movement and resource availability, extraction-driven degradation of sensitive sites, and local extirpation/recolonization.
 
 No fauna/predator balance values are changed by this foundation PR.
 
