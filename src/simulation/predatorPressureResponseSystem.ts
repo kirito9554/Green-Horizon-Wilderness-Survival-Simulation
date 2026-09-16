@@ -98,17 +98,20 @@ function pressureSignals(
     accessiblePrey,
     species.idealPredatorPreyBiomassRatio,
   );
-  // Current resource pressure should dominate the chronic response. Body
-  // condition is deliberately a weak lagging signal so a population can recover
-  // once food/water/competition improve instead of remaining self-locked by the
-  // damage caused during an earlier shortage.
+  // P4's preferred-terrestrial-prey proxy is intentionally narrower than the
+  // actual P3/P3.5 diet. Aquatic prey, riparian prey, carrion, fruit and insects
+  // can all cover metabolic demand without appearing in accessiblePrey. Therefore
+  // competition is an early-warning pressure signal, not sufficient evidence by
+  // itself for chronic physiological stress. Corroborate it with actual hunger,
+  // which already reflects every feeding source plus stored energy reserves.
   const hungerSeverity = clamp01((population.hungerStress - 62) / 38);
   const competitionSeverity = clamp01((0.7 - competition) / 0.56);
+  const corroboratedCompetitionSeverity = competitionSeverity * (0.25 + hungerSeverity * 0.75);
   const waterSeverity = clamp01((population.waterStress - 74) / 26);
   const conditionSeverity = clamp01((42 - population.bodyCondition) / 30);
   const severity = Math.max(
     hungerSeverity,
-    competitionSeverity * 0.85,
+    corroboratedCompetitionSeverity,
     waterSeverity * 0.55,
     conditionSeverity * 0.25,
   );
