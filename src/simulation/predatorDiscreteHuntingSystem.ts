@@ -546,13 +546,27 @@ function eligibleStages(prey: WildAnimalPopulation, predator: WildPredatorSpecie
   return rows.filter(row => row.count > 0 && row.bodyMassKg <= predator.maxAdultPreyKg);
 }
 
+function mealTargetValue(expectedEdibleDays: number): number {
+  // P3.5: predators should value a meal by how long it can actually feed them.
+  // The previous sqrt curve compressed medium/large prey too aggressively, so
+  // very abundant tiny prey could dominate target selection even when dozens
+  // of kills were required to cover maintenance. Keep small prey as fallback,
+  // but strongly prefer prey that provides roughly a day or more of food.
+  const mealDays = Math.max(0.05, Math.min(10, expectedEdibleDays));
+  const sizeValue = Math.pow(mealDays, 0.8);
+  const smallMealPenalty = mealDays >= 0.75
+    ? 1
+    : 0.4 + 0.6 * (mealDays / 0.75);
+  return Math.max(0.15, sizeValue * smallMealPenalty);
+}
+
 function energeticTargetValue(prey: WildAnimalPopulation, predator: WildPredatorSpeciesDefinition): number {
   const stages = eligibleStages(prey, predator);
   const totalWeight = stages.reduce((sum, row) => sum + row.weight, 0);
   if (totalWeight <= 0) return 0;
   const expectedBodyMassKg = stages.reduce((sum, row) => sum + row.bodyMassKg * row.weight, 0) / totalWeight;
   const expectedEdibleDays = expectedBodyMassKg * 0.58 / Math.max(0.05, predator.dailyFoodKgPerAdult);
-  return Math.max(0.35, Math.sqrt(Math.max(0.05, expectedEdibleDays)));
+  return mealTargetValue(expectedEdibleDays);
 }
 
 function huntSearchability(
@@ -598,7 +612,7 @@ function collectHuntTargets(
         : { functionalResponse: 0, refugia: 0, searchability: 0 };
       const targetWeight = preference > 0 && energeticValue > 0
         ? preference
-          * Math.sqrt(Math.max(1, prey.population))
+          * Math.pow(Math.max(1, prey.population), 0.35)
           * energeticValue
           * (0.3 + search.searchability * 0.7)
         : 0;
@@ -705,7 +719,7 @@ function collectAquaticHuntTargets(
         ? stages.reduce((sum, row) => sum + row.bodyMassKg * row.weight, 0) / stageWeight
         : 0;
       const energeticValue = expectedBodyMassKg > 0
-        ? Math.max(0.35, Math.sqrt(expectedBodyMassKg * 0.58 / Math.max(0.05, species.dailyFoodKgPerAdult)))
+        ? mealTargetValue(expectedBodyMassKg * 0.58 / Math.max(0.05, species.dailyFoodKgPerAdult))
         : 0;
       const abundance = clamp01(prey.population / (prey.population + 12));
       const condition = clamp01(prey.bodyCondition / 100 * 0.6 + prey.averageHealth / 100 * 0.4);
@@ -717,7 +731,7 @@ function collectAquaticHuntTargets(
         preference,
         searchability,
         waterNodeId,
-        targetWeight: preference * Math.sqrt(Math.max(1, prey.population)) * energeticValue * (0.35 + searchability * 0.65),
+        targetWeight: preference * Math.pow(Math.max(1, prey.population), 0.35) * energeticValue * (0.35 + searchability * 0.65),
       };
     })
     .filter(entry => entry.targetWeight > 0 && Boolean(state.hydrologySystem?.nodesById?.[entry.waterNodeId]));
