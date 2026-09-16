@@ -1,0 +1,40 @@
+name: P3.9b Validation
+
+on:
+  pull_request:
+    branches:
+      - tmp/p39b-runner-base
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/p39b-breeding-cohort-recovery
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Breeding cohort regression
+        run: npm run test:ecology-demography
+      - name: Fauna regression
+        run: npm run test:ecology-fauna
+      - name: Predator regression
+        run: npm run test:ecology-predators
+      - name: Coupled 1y and 5y gate
+        run: npx tsx scripts/p5-coupled-fast-gate.ts --coarse-aquatic-substep=360 --out=artifacts/p39b-coupled
+      - name: Upload coupled report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p39b-coupled-report
+          path: artifacts/p39b-coupled/p5-coupled-fast-report.json
+          if-no-files-found: warn
