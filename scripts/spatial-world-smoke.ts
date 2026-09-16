@@ -28,6 +28,20 @@ import {
   getLocalSiteFunctionalProfile,
 } from '../src/simulation/spatial/localSiteProfiles';
 import {
+  DEFAULT_LOCAL_RESOURCE_RECOVERY_CONTEXT,
+  RESOURCE_ABSOLUTE_CAP_MULTIPLIER,
+  RESOURCE_CRITICAL_ENTER_RATIO,
+  RESOURCE_CRITICAL_EXIT_RATIO,
+  RESOURCE_RESERVE_FLOOR_RATIO,
+  classifyLocalResourceRecoveryFamily,
+  getLocalResourceMetrics,
+  harvestLocalSiteResource,
+  initializeLocalSiteResourceSimulation,
+  tickLocalSiteResource,
+  type LocalResourceDynamicState,
+  type LocalResourceRecoveryFamily,
+} from '../src/simulation/spatial/localSiteResourceSimulation';
+import {
   generateSpatialWorld,
 } from '../src/simulation/spatial/worldGeneration';
 
@@ -117,6 +131,107 @@ function testLocalSiteFunctionalProfiles(): void {
   assert.ok(getLocalSiteFunctionalProfile('predator_den').ecology.guildAffinity.predator! >= .8, 'predator den must strongly favor predators');
   assert.ok(getLocalSiteFunctionalProfile('burrow_colony').ecology.preyRefuge >= .9, 'burrow colony must act as strong prey refuge');
   assert.ok(getLocalSiteFunctionalProfile('animal_trail').ecology.predatorOpportunity >= .7, 'animal trail must create hunting opportunity');
+}
+
+function syntheticResource(
+  family: LocalResourceRecoveryFamily,
+  stock: number,
+  overrides: Partial<LocalResourceDynamicState> = {},
+): LocalResourceDynamicState {
+  return {
+    id: `synthetic:${family}`,
+    siteId: 'synthetic-site',
+    kind: family === 'flow' ? 'fresh_water' : family === 'geological_flux' ? 'stone' : family === 'salvage_exposure' ? 'salvage' : 'fruit',
+    recoveryFamily: family,
+    baseCapacity: 100,
+    effectiveCapacity: 100,
+    stock,
+    condition: 1,
+    depletionPressure: 0,
+    criticalLatched: stock / 100 <= RESOURCE_CRITICAL_ENTER_RATIO,
+    extractionImpact: .8,
+    seasonality: 'year_round',
+    itemIds: [],
+    lastUpdatedHours: 0,
+    ...overrides,
+  };
+}
+
+function testLocalResourceDepletionAndRecovery(): void {
+  assert.equal(RESOURCE_RESERVE_FLOOR_RATIO, .1, 'critical reserve floor must be 10% of base capacity');
+  assert.ok(RESOURCE_CRITICAL_ENTER_RATIO > RESOURCE_RESERVE_FLOOR_RATIO);
+  assert.ok(RESOURCE_CRITICAL_EXIT_RATIO > RESOURCE_CRITICAL_ENTER_RATIO, 'critical state must use recovery hysteresis');
+
+  const normalMetrics = getLocalResourceMetrics(syntheticResource('renewable_biomass', 55));
+  const criticalMetrics = getLocalResourceMetrics(syntheticResource('renewable_biomass', 12));
+  assert.equal(criticalMetrics.depletionState, 'critical');
+  assert.ok(criticalMetrics.yieldEfficiency < normalMetrics.yieldEfficiency * .4, 'critical depletion must heavily punish yield');
+  assert.ok(criticalMetrics.quality < normalMetrics.quality, 'critical depletion must reduce quality');
+  assert.ok(criticalMetrics.laborCostMultiplier > normalMetrics.laborCostMultiplier * 1.7, 'critical depletion must sharply increase labor cost');
+  assert.ok(criticalMetrics.recoveryMultiplier < normalMetrics.recoveryMultiplier * .5, 'critical depletion must strongly suppress recovery');
+
+  const nearlyCritical = syntheticResource('renewable_biomass', 16, { criticalLatched: false });
+  const harvested = harvestLocalSiteResource(nearlyCritical, 20);
+  approx(harvested.state.stock, 10, 1e-9, 'harvest may reach but never cross the reserve floor');
+  assert.equal(harvested.state.criticalLatched, true, 'crossing the critical threshold must latch critical state');
+  assert.equal(harvested.result.reserveFloorReached, true);
+
+  const futile = harvestLocalSiteResource(harvested.state, 12);
+  assert.equal(futile.result.resourceDraw, 0, 'the 10% ecological reserve is not harvestable stock');
+  assert.equal(futile.result.yieldedUnits, 0, 'repeated extraction at the floor must not create free resources');
+  assert.ok(futile.state.depletionPressure > harvested.state.depletionPressure, 'futile extraction must deepen depletion pressure');
+  assert.ok(futile.state.condition < harvested.state.condition, 'futile extraction must damage site condition');
+  approx(futile.state.stock, 10, 1e-9, 'futile extraction must preserve the reserve floor');
+
+  const stillLatched = tickLocalSiteResource(
+    syntheticResource('renewable_biomass', 24, { criticalLatched: true }),
+    .01,
+    DEFAULT_LOCAL_RESOURCE_RECOVERY_CONTEXT,
+  );
+  assert.equal(stillLatched.criticalLatched, true, 'critical must persist below the 25% recovery threshold');
+
+  const recovered = tickLocalSiteResource(
+    syntheticResource('renewable_biomass', 26, { criticalLatched: true }),
+    .01,
+    DEFAULT_LOCAL_RESOURCE_RECOVERY_CONTEXT,
+  );
+  assert.equal(recovered.criticalLatched, false, 'critical must clear after recovery exceeds the hysteresis threshold');
+
+  const lowPlant = syntheticResource('renewable_biomass', 11);
+  const midPlant = syntheticResource('renewable_biomass', 50, { criticalLatched: false });
+  const lowPlantAfter = tickLocalSiteResource(lowPlant, 24, DEFAULT_LOCAL_RESOURCE_RECOVERY_CONTEXT);
+  const midPlantAfter = tickLocalSiteResource(midPlant, 24, DEFAULT_LOCAL_RESOURCE_RECOVERY_CONTEXT);
+  assert.ok(
+    lowPlantAfter.stock - lowPlant.stock < midPlantAfter.stock - midPlant.stock,
+    'plant biomass near the reserve floor must regrow much slower than a healthy mid-stock population',
+  );
+
+  const geology = syntheticResource('geological_flux', 50, { criticalLatched: false });
+  const lowErosion = tickLocalSiteResource(geology, 24, { ...DEFAULT_LOCAL_RESOURCE_RECOVERY_CONTEXT, erosion: 0, flooding: 0, rainfall: .2 });
+  const highErosion = tickLocalSiteResource(geology, 24, { ...DEFAULT_LOCAL_RESOURCE_RECOVERY_CONTEXT, erosion: 1, flooding: .8, rainfall: .9 });
+  assert.ok(highErosion.stock - geology.stock > lowErosion.stock - geology.stock, 'erosion/flooding must bonus fixed geological replenishment');
+
+  for (const family of [
+    'renewable_biomass', 'geological_flux', 'flow', 'episodic', 'population_backed', 'salvage_exposure',
+  ] as const) {
+    const atFloor = syntheticResource(family, 10, { criticalLatched: true });
+    const context = {
+      ...DEFAULT_LOCAL_RESOURCE_RECOVERY_CONTEXT,
+      stormPulse: family === 'episodic' || family === 'salvage_exposure' ? .4 : 0,
+      tidalPulse: family === 'episodic' ? .3 : 0,
+    };
+    const after = tickLocalSiteResource(atFloor, 24, context);
+    assert.ok(after.stock > atFloor.stock, `${family}: every repeatable resource family must have a non-zero recovery path`);
+    assert.ok(after.stock >= atFloor.baseCapacity * RESOURCE_RESERVE_FLOOR_RATIO, `${family}: recovery must preserve reserve floor`);
+    assert.ok(after.stock <= atFloor.baseCapacity * RESOURCE_ABSOLUTE_CAP_MULTIPLIER + 1e-9, `${family}: recovery must obey absolute cap`);
+  }
+
+  assert.equal(classifyLocalResourceRecoveryFamily({ kind: 'fruit', renewability: 'seasonal' }), 'renewable_biomass');
+  assert.equal(classifyLocalResourceRecoveryFamily({ kind: 'stone', renewability: 'finite' }), 'geological_flux');
+  assert.equal(classifyLocalResourceRecoveryFamily({ kind: 'fresh_water', renewability: 'continuous' }), 'flow');
+  assert.equal(classifyLocalResourceRecoveryFamily({ kind: 'driftwood', renewability: 'episodic' }), 'episodic');
+  assert.equal(classifyLocalResourceRecoveryFamily({ kind: 'fish', renewability: 'continuous' }), 'population_backed');
+  assert.equal(classifyLocalResourceRecoveryFamily({ kind: 'salvage', renewability: 'finite' }), 'salvage_exposure');
 }
 
 function patchFingerprint(world: ReturnType<typeof generateSpatialWorld>): string {
@@ -219,6 +334,18 @@ function validateWorld(seed: string): ReturnType<typeof generateSpatialWorld> {
     }
   }
 
+  const resourceState = initializeLocalSiteResourceSimulation(seed, world.localSites);
+  const resourceStateAgain = initializeLocalSiteResourceSimulation(seed, world.localSites);
+  assert.deepEqual(resourceState, resourceStateAgain, `${seed}: local resource initialization must be deterministic`);
+  assert.ok(Object.keys(resourceState.resourcesById).length > 20, `${seed}: generated sites should materialize many dynamic resource states`);
+  for (const resource of Object.values(resourceState.resourcesById)) {
+    const metrics = getLocalResourceMetrics(resource);
+    assert.ok(resource.stock >= metrics.reserveFloor - 1e-9, `${resource.id}: generated stock may not start below reserve floor`);
+    assert.ok(resource.stock <= resource.baseCapacity * RESOURCE_ABSOLUTE_CAP_MULTIPLIER + 1e-9, `${resource.id}: generated stock exceeds absolute cap`);
+    assert.ok(resource.condition >= 0 && resource.condition <= 1);
+    assert.ok(resource.depletionPressure >= 0 && resource.depletionPressure <= 1);
+  }
+
   const route = estimateSpatialRoute(
     MAIN_WORLD_REGIONS.AREA_CAMP_CLEARING.centroid,
     MAIN_WORLD_REGIONS.AREA_FOREST_EDGE.centroid,
@@ -254,8 +381,9 @@ function main(): void {
   testCanonicalMetricGeometry();
   testLegacyExclusion();
   testLocalSiteFunctionalProfiles();
+  testLocalResourceDepletionAndRecovery();
   testSeededWorldSimulation();
-  console.log('Seeded spatial world, local-site functions/ecology/resources, hydrology and route smoke tests passed.');
+  console.log('Seeded spatial world, local-site resource depletion/recovery, ecology, hydrology and route smoke tests passed.');
 }
 
 main();
