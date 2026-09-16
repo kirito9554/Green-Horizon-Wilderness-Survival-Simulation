@@ -1,4 +1,4 @@
-name: P5 Coupled Calibrated 1Y-5Y Gate
+name: P5 Predator Tuning Gate
 
 on:
   push:
@@ -13,11 +13,35 @@ permissions:
   contents: read
 
 concurrency:
-  group: p5-coupled-calibrated-${{ github.ref }}
+  group: p5-predator-tuning-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  validate:
+  diagnostic:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Run targeted predator diagnostic
+        run: npx tsx scripts/predator-hunt-event-probe.ts --out=artifacts/p5-predator-diagnostic
+      - name: Upload predator diagnostic report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p5-predator-diagnostic-report
+          path: artifacts/p5-predator-diagnostic/predator-hunt-event-report.json
+          if-no-files-found: warn
+
+  validate-long-run:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
