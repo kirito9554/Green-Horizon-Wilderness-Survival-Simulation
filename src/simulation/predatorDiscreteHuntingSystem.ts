@@ -29,6 +29,7 @@ import {
   typeIIIPredationResponse,
 } from './ecologyPredatorSystem';
 import { getPredatorAccessibleWaterRatio, getPredatorFoodSupport, predatorPoiAccess } from './predatorResourceAccess';
+import { demographicBalance, eventRecruitmentCount, initialPopulationFraction, resolveReproductionProfile, softBreedingFitness } from './ecologyDemographySystem';
 
 const MIN_CARCASS_FRESHNESS_TO_FEED = 15;
 
@@ -1303,19 +1304,33 @@ function tickPredatorPopulationDiscrete(state: GameState, population: WildPredat
       - elapsedDays * 4,
   );
 
+  const reproduction = resolveReproductionProfile(species.reproduction, species.offspringPerAdultFemalePerYear);
+  const balance = demographicBalance(population.population, carryingCapacity, reproduction);
   const mature = population.adults + population.old;
-  const mateFactor = mature < 2 ? mature / 2 : Math.min(1, mature / 3);
-  const densityFactor = Math.max(0, 1 - Math.pow(Math.max(0, density - 0.25) / 0.95, 1.8));
-  const condition = clamp01((population.bodyCondition - 42) / 50) * clamp01((population.averageHealth - 42) / 48);
-  const foodFactor = clamp01(1 - population.hungerStress / 90);
-  population.reproductionPressure = clamp(mateFactor * densityFactor * condition * foodFactor * 100);
+  const mateAvailability = mature <= 0 ? 0 : mature === 1 ? 0.42 : 1;
+  const condition = clamp01(
+    clamp01((population.bodyCondition - 38) / 56) * 0.55
+      + clamp01((population.averageHealth - 38) / 56) * 0.45,
+  );
+  const foodState = clamp01(1 - population.hungerStress / 96);
+  const breedingFitness = softBreedingFitness(mateAvailability, condition, foodState);
+  population.reproductionPressure = clamp(breedingFitness * Math.min(1.35, balance.reproductionMultiplier) * 100);
   const adultFemales = population.adults * (1 - population.maleRatio);
-  population.reproductionProgress += adultFemales * species.offspringPerAdultFemalePerYear / 365 * elapsedDays * population.reproductionPressure / 100;
-  let births = Math.floor(population.reproductionProgress);
-  if (births > 0) {
-    population.reproductionProgress -= births;
-    births = Math.min(births, Math.max(0, Math.ceil(carryingCapacity * 1.08 - population.population)));
-    population.juveniles += births;
+  population.reproductionProgress += adultFemales
+    * reproduction.eventsPerAdultFemalePerYear / 365
+    * elapsedDays
+    * breedingFitness
+    * balance.reproductionMultiplier;
+  const breedingEvents = Math.floor(population.reproductionProgress);
+  if (breedingEvents > 0) {
+    population.reproductionProgress -= breedingEvents;
+    let recruits = 0;
+    for (let eventIndex = 0; eventIndex < breedingEvents; eventIndex += 1) {
+      const random = mulberry32(hashString(`${population.id}:${gameMinute(state)}:${system.ecologyTickIndex}:${eventIndex}:predator-breeding`));
+      recruits += eventRecruitmentCount(reproduction, random);
+    }
+    const burstCapacity = Math.max(0, Math.ceil(carryingCapacity * 1.18 - population.population));
+    population.juveniles += Math.min(recruits, burstCapacity);
   }
 
   population.maturationProgress += population.juveniles / Math.max(90, species.maturityDays) * elapsedDays;
@@ -1338,7 +1353,9 @@ function tickPredatorPopulationDiscrete(state: GameState, population: WildPredat
   const dehydration = Math.max(0, population.waterStress - 78) / 100 * population.population * 0.005;
   const oldMortality = population.old / Math.max(180, species.maxAgeDays * 0.32);
   const healthMortality = Math.max(0, 30 - population.averageHealth) / 100 * population.population * 0.005;
-  population.mortalityProgress += (starvation + dehydration + oldMortality + healthMortality) * elapsedDays;
+  population.mortalityProgress += (
+    oldMortality + (starvation + dehydration + healthMortality) * balance.vulnerableMortalityMultiplier
+  ) * elapsedDays;
   let deaths = Math.min(population.population, Math.floor(population.mortalityProgress));
   if (deaths > 0) {
     population.mortalityProgress -= deaths;

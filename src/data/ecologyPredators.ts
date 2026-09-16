@@ -1,6 +1,7 @@
 import type { MainWorldAreaId } from './mainWorldAreas';
 import type { EcologyTargetProfile } from './ecologyProfiles';
 import type { WildFoodResource } from '../types/ecologySimulation';
+import type { EcologyReproductionProfile } from './ecologyDemography';
 
 export interface WildPredatorSpeciesDefinition {
   id: string;
@@ -39,6 +40,7 @@ export interface WildPredatorSpeciesDefinition {
   maturityDays: number;
   maxAgeDays: number;
   offspringPerAdultFemalePerYear: number;
+  reproduction?: EcologyReproductionProfile;
   disturbanceTolerance: number;
   roamingPerDay: number;
 }
@@ -93,8 +95,9 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     maxKillsPerAdultPerDay: 0.42, halfSaturationPreyPer1000M2: 9,
     idealPredatorPreyBiomassRatio: 0.12, minimumViablePreyCount: 4,
     maxAdultPreyKg: 4.5, juvenilePreference: 0.58,
-    baseDensityPer1000M2: 1.8, maxInitialPopulation: 4, homeRangeMin: 3, homeRangeMax: 6,
+    baseDensityPer1000M2: 1.9, maxInitialPopulation: 5, homeRangeMin: 3, homeRangeMax: 6,
     maturityDays: 540, maxAgeDays: 5475, offspringPerAdultFemalePerYear: 1.8,
+    reproduction: { mode: 'egg_clutch', eventsPerAdultFemalePerYear: 1.0, minOffspringPerEvent: 6, maxOffspringPerEvent: 12, juvenileRecruitmentRate: 0.22, lowPopulationRecoveryBoost: 0.80, overcrowdingSuppressionStart: 0.88, criticalMortalityBuffer: 0.40, initialPopulationMinFraction: 0.55, initialPopulationMaxFraction: 0.82 },
     disturbanceTolerance: 44, roamingPerDay: 0.52,
   },
 
@@ -127,8 +130,9 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     maxKillsPerAdultPerDay: 0.16, halfSaturationPreyPer1000M2: 7,
     idealPredatorPreyBiomassRatio: 0.1, minimumViablePreyCount: 4,
     maxAdultPreyKg: 30, juvenilePreference: 0.72,
-    baseDensityPer1000M2: 1.25, maxInitialPopulation: 3, homeRangeMin: 3, homeRangeMax: 6,
+    baseDensityPer1000M2: 1.35, maxInitialPopulation: 4, homeRangeMin: 3, homeRangeMax: 6,
     maturityDays: 900, maxAgeDays: 7300, offspringPerAdultFemalePerYear: 1.1,
+    reproduction: { mode: 'egg_clutch', eventsPerAdultFemalePerYear: 0.55, minOffspringPerEvent: 20, maxOffspringPerEvent: 40, juvenileRecruitmentRate: 0.08, lowPopulationRecoveryBoost: 0.95, overcrowdingSuppressionStart: 0.90, criticalMortalityBuffer: 0.50, initialPopulationMinFraction: 0.60, initialPopulationMaxFraction: 0.88 },
     disturbanceTolerance: 24, roamingPerDay: 0.32,
   },
 
@@ -162,8 +166,9 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     maxKillsPerAdultPerDay: 0.34, halfSaturationPreyPer1000M2: 8,
     idealPredatorPreyBiomassRatio: 0.08, minimumViablePreyCount: 4,
     maxAdultPreyKg: 4.2, juvenilePreference: 0.52,
-    baseDensityPer1000M2: 1.05, maxInitialPopulation: 2, homeRangeMin: 4, homeRangeMax: 8,
+    baseDensityPer1000M2: 1.20, maxInitialPopulation: 3, homeRangeMin: 4, homeRangeMax: 8,
     maturityDays: 730, maxAgeDays: 6570, offspringPerAdultFemalePerYear: 0.85,
+    reproduction: { mode: 'egg_clutch', eventsPerAdultFemalePerYear: 1.0, minOffspringPerEvent: 1, maxOffspringPerEvent: 3, juvenileRecruitmentRate: 0.65, lowPopulationRecoveryBoost: 1.10, overcrowdingSuppressionStart: 0.92, criticalMortalityBuffer: 0.55, initialPopulationMinFraction: 0.68, initialPopulationMaxFraction: 0.94 },
     disturbanceTolerance: 26, roamingPerDay: 0.7,
   },
 
@@ -195,8 +200,9 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     maxKillsPerAdultPerDay: 0.3, halfSaturationPreyPer1000M2: 10,
     idealPredatorPreyBiomassRatio: 0.11, minimumViablePreyCount: 4,
     maxAdultPreyKg: 3.5, juvenilePreference: 0.54,
-    baseDensityPer1000M2: 1.85, maxInitialPopulation: 4, homeRangeMin: 3, homeRangeMax: 6,
+    baseDensityPer1000M2: 1.95, maxInitialPopulation: 5, homeRangeMin: 3, homeRangeMax: 6,
     maturityDays: 420, maxAgeDays: 3650, offspringPerAdultFemalePerYear: 1.9,
+    reproduction: { mode: 'live_birth', eventsPerAdultFemalePerYear: 1.1, minOffspringPerEvent: 2, maxOffspringPerEvent: 4, juvenileRecruitmentRate: 0.68, lowPopulationRecoveryBoost: 0.65, overcrowdingSuppressionStart: 0.86, criticalMortalityBuffer: 0.35, initialPopulationMinFraction: 0.55, initialPopulationMaxFraction: 0.82 },
     disturbanceTolerance: 58, roamingPerDay: 0.6,
   },
 
@@ -243,6 +249,7 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     maxAdultPreyKg: 90, juvenilePreference: 0.45,
     baseDensityPer1000M2: 0.72, maxInitialPopulation: 2, homeRangeMin: 3, homeRangeMax: 6,
     maturityDays: 3650, maxAgeDays: 21900, offspringPerAdultFemalePerYear: 0.38,
+    reproduction: { mode: 'egg_clutch', eventsPerAdultFemalePerYear: 0.35, minOffspringPerEvent: 25, maxOffspringPerEvent: 45, juvenileRecruitmentRate: 0.05, lowPopulationRecoveryBoost: 1.00, overcrowdingSuppressionStart: 0.95, criticalMortalityBuffer: 0.55, initialPopulationMinFraction: 0.70, initialPopulationMaxFraction: 0.95 },
     disturbanceTolerance: 20, roamingPerDay: 0.24,
   },
 };

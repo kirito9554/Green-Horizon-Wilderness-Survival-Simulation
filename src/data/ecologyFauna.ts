@@ -1,6 +1,7 @@
 import type { MainWorldAreaId } from './mainWorldAreas';
 import type { EcologyTargetProfile } from './ecologyProfiles';
 import type { WildFoodResource } from '../types/ecologySimulation';
+import type { EcologyReproductionProfile } from './ecologyDemography';
 
 export type WildAnimalSocialMode = 'solitary' | 'pair' | 'flock' | 'herd' | 'sounder';
 export type WildAnimalTrophicRole = 'herbivore' | 'omnivore' | 'frugivore' | 'insectivore' | 'detritivore';
@@ -24,6 +25,7 @@ export interface WildFaunaSpeciesDefinition {
   maturityDays: number;
   maxAgeDays: number;
   offspringPerAdultFemalePerYear: number;
+  reproduction?: EcologyReproductionProfile;
   disturbanceTolerance: number;
   roamingPerDay: number;
 }
@@ -46,6 +48,7 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     adultWeightKg: 68, dailyFoodKgPerAdult: 3.4, dailyWaterNeed: 56,
     baseDensityPer1000M2: 4.2, maxInitialPopulation: 9, homeRangeMin: 3, homeRangeMax: 6,
     maturityDays: 300, maxAgeDays: 3650, offspringPerAdultFemalePerYear: 3.2,
+    reproduction: { mode: 'live_birth', eventsPerAdultFemalePerYear: 1.2, minOffspringPerEvent: 4, maxOffspringPerEvent: 7, juvenileRecruitmentRate: 0.62, lowPopulationRecoveryBoost: 0.55, overcrowdingSuppressionStart: 0.86, criticalMortalityBuffer: 0.30, initialPopulationMinFraction: 0.50, initialPopulationMaxFraction: 0.78 },
     disturbanceTolerance: 34, roamingPerDay: 0.72,
   },
 
@@ -64,6 +67,7 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     adultWeightKg: 42, dailyFoodKgPerAdult: 2.2, dailyWaterNeed: 42,
     baseDensityPer1000M2: 5.2, maxInitialPopulation: 11, homeRangeMin: 3, homeRangeMax: 6,
     maturityDays: 330, maxAgeDays: 4380, offspringPerAdultFemalePerYear: 1.7,
+    reproduction: { mode: 'live_birth', eventsPerAdultFemalePerYear: 1.1, minOffspringPerEvent: 1, maxOffspringPerEvent: 2, juvenileRecruitmentRate: 0.82, lowPopulationRecoveryBoost: 0.45, overcrowdingSuppressionStart: 0.84, criticalMortalityBuffer: 0.30, initialPopulationMinFraction: 0.50, initialPopulationMaxFraction: 0.78 },
     disturbanceTolerance: 46, roamingPerDay: 0.82,
   },
 
@@ -82,6 +86,7 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     adultWeightKg: 3.6, dailyFoodKgPerAdult: 0.22, dailyWaterNeed: 34,
     baseDensityPer1000M2: 11, maxInitialPopulation: 22, homeRangeMin: 2, homeRangeMax: 4,
     maturityDays: 180, maxAgeDays: 2190, offspringPerAdultFemalePerYear: 3.5,
+    reproduction: { mode: 'live_birth', eventsPerAdultFemalePerYear: 2.2, minOffspringPerEvent: 1, maxOffspringPerEvent: 3, juvenileRecruitmentRate: 0.78, lowPopulationRecoveryBoost: 0.75, overcrowdingSuppressionStart: 0.82, criticalMortalityBuffer: 0.35, initialPopulationMinFraction: 0.55, initialPopulationMaxFraction: 0.82 },
     disturbanceTolerance: 28, roamingPerDay: 0.88,
   },
 
@@ -100,6 +105,7 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     adultWeightKg: 9, dailyFoodKgPerAdult: 0.52, dailyWaterNeed: 40,
     baseDensityPer1000M2: 4.6, maxInitialPopulation: 10, homeRangeMin: 2, homeRangeMax: 5,
     maturityDays: 260, maxAgeDays: 2920, offspringPerAdultFemalePerYear: 2.4,
+    reproduction: { mode: 'live_birth', eventsPerAdultFemalePerYear: 2.0, minOffspringPerEvent: 1, maxOffspringPerEvent: 3, juvenileRecruitmentRate: 0.68, lowPopulationRecoveryBoost: 0.75, overcrowdingSuppressionStart: 0.82, criticalMortalityBuffer: 0.35, initialPopulationMinFraction: 0.52, initialPopulationMaxFraction: 0.80 },
     disturbanceTolerance: 24, roamingPerDay: 0.62,
   },
 
@@ -118,6 +124,7 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     adultWeightKg: 1.8, dailyFoodKgPerAdult: 0.16, dailyWaterNeed: 24,
     baseDensityPer1000M2: 16, maxInitialPopulation: 30, homeRangeMin: 2, homeRangeMax: 4,
     maturityDays: 120, maxAgeDays: 1825, offspringPerAdultFemalePerYear: 8.5,
+    reproduction: { mode: 'live_birth', eventsPerAdultFemalePerYear: 4.5, minOffspringPerEvent: 3, maxOffspringPerEvent: 7, juvenileRecruitmentRate: 0.68, lowPopulationRecoveryBoost: 1.15, overcrowdingSuppressionStart: 0.78, criticalMortalityBuffer: 0.45, initialPopulationMinFraction: 0.62, initialPopulationMaxFraction: 0.90 },
     disturbanceTolerance: 38, roamingPerDay: 1.05,
   },
 
@@ -136,6 +143,7 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     adultWeightKg: 0.72, dailyFoodKgPerAdult: 0.08, dailyWaterNeed: 20,
     baseDensityPer1000M2: 18, maxInitialPopulation: 34, homeRangeMin: 3, homeRangeMax: 7,
     maturityDays: 260, maxAgeDays: 3650, offspringPerAdultFemalePerYear: 1.2,
+    reproduction: { mode: 'live_birth', eventsPerAdultFemalePerYear: 1.0, minOffspringPerEvent: 1, maxOffspringPerEvent: 1, juvenileRecruitmentRate: 0.82, lowPopulationRecoveryBoost: 0.55, overcrowdingSuppressionStart: 0.88, criticalMortalityBuffer: 0.40, initialPopulationMinFraction: 0.50, initialPopulationMaxFraction: 0.78 },
     disturbanceTolerance: 32, roamingPerDay: 1.15,
   },
 
@@ -154,6 +162,7 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     adultWeightKg: 0.36, dailyFoodKgPerAdult: 0.045, dailyWaterNeed: 18,
     baseDensityPer1000M2: 22, maxInitialPopulation: 38, homeRangeMin: 2, homeRangeMax: 6,
     maturityDays: 150, maxAgeDays: 2190, offspringPerAdultFemalePerYear: 3.2,
+    reproduction: { mode: 'egg_clutch', eventsPerAdultFemalePerYear: 2.4, minOffspringPerEvent: 1, maxOffspringPerEvent: 2, juvenileRecruitmentRate: 0.68, lowPopulationRecoveryBoost: 0.85, overcrowdingSuppressionStart: 0.80, criticalMortalityBuffer: 0.40, initialPopulationMinFraction: 0.58, initialPopulationMaxFraction: 0.86 },
     disturbanceTolerance: 34, roamingPerDay: 1.0,
   },
 
@@ -171,6 +180,7 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     adultWeightKg: 1.4, dailyFoodKgPerAdult: 0.13, dailyWaterNeed: 28,
     baseDensityPer1000M2: 14, maxInitialPopulation: 24, homeRangeMin: 2, homeRangeMax: 4,
     maturityDays: 150, maxAgeDays: 1825, offspringPerAdultFemalePerYear: 7.5,
+    reproduction: { mode: 'egg_clutch', eventsPerAdultFemalePerYear: 3.0, minOffspringPerEvent: 6, maxOffspringPerEvent: 10, juvenileRecruitmentRate: 0.50, lowPopulationRecoveryBoost: 1.05, overcrowdingSuppressionStart: 0.78, criticalMortalityBuffer: 0.40, initialPopulationMinFraction: 0.62, initialPopulationMaxFraction: 0.90 },
     disturbanceTolerance: 72, roamingPerDay: 0.82,
   },
 
@@ -188,6 +198,7 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     adultWeightKg: 1.25, dailyFoodKgPerAdult: 0.15, dailyWaterNeed: 74,
     baseDensityPer1000M2: 12, maxInitialPopulation: 24, homeRangeMin: 2, homeRangeMax: 5,
     maturityDays: 180, maxAgeDays: 2555, offspringPerAdultFemalePerYear: 6.2,
+    reproduction: { mode: 'egg_clutch', eventsPerAdultFemalePerYear: 1.4, minOffspringPerEvent: 7, maxOffspringPerEvent: 12, juvenileRecruitmentRate: 0.55, lowPopulationRecoveryBoost: 0.95, overcrowdingSuppressionStart: 0.80, criticalMortalityBuffer: 0.40, initialPopulationMinFraction: 0.58, initialPopulationMaxFraction: 0.86 },
     disturbanceTolerance: 48, roamingPerDay: 1.0,
   },
 
@@ -206,6 +217,7 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     adultWeightKg: 0.085, dailyFoodKgPerAdult: 0.012, dailyWaterNeed: 70,
     baseDensityPer1000M2: 42, maxInitialPopulation: 70, homeRangeMin: 1, homeRangeMax: 3,
     maturityDays: 120, maxAgeDays: 1460, offspringPerAdultFemalePerYear: 18,
+    reproduction: { mode: 'egg_clutch', eventsPerAdultFemalePerYear: 2.5, minOffspringPerEvent: 30, maxOffspringPerEvent: 80, juvenileRecruitmentRate: 0.15, lowPopulationRecoveryBoost: 1.35, overcrowdingSuppressionStart: 0.75, criticalMortalityBuffer: 0.50, initialPopulationMinFraction: 0.68, initialPopulationMaxFraction: 0.94 },
     disturbanceTolerance: 18, roamingPerDay: 0.72,
   },
 
@@ -225,6 +237,7 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     adultWeightKg: 0.14, dailyFoodKgPerAdult: 0.018, dailyWaterNeed: 24,
     baseDensityPer1000M2: 34, maxInitialPopulation: 58, homeRangeMin: 1, homeRangeMax: 3,
     maturityDays: 150, maxAgeDays: 1825, offspringPerAdultFemalePerYear: 4.8,
+    reproduction: { mode: 'egg_clutch', eventsPerAdultFemalePerYear: 3.0, minOffspringPerEvent: 1, maxOffspringPerEvent: 2, juvenileRecruitmentRate: 0.75, lowPopulationRecoveryBoost: 0.95, overcrowdingSuppressionStart: 0.78, criticalMortalityBuffer: 0.40, initialPopulationMinFraction: 0.62, initialPopulationMaxFraction: 0.90 },
     disturbanceTolerance: 54, roamingPerDay: 0.76,
   },
 
@@ -241,6 +254,7 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     adultWeightKg: 0.46, dailyFoodKgPerAdult: 0.035, dailyWaterNeed: 96,
     baseDensityPer1000M2: 26, maxInitialPopulation: 48, homeRangeMin: 1, homeRangeMax: 3,
     maturityDays: 210, maxAgeDays: 1825, offspringPerAdultFemalePerYear: 12,
+    reproduction: { mode: 'egg_clutch', eventsPerAdultFemalePerYear: 2.0, minOffspringPerEvent: 40, maxOffspringPerEvent: 100, juvenileRecruitmentRate: 0.10, lowPopulationRecoveryBoost: 1.10, overcrowdingSuppressionStart: 0.76, criticalMortalityBuffer: 0.45, initialPopulationMinFraction: 0.65, initialPopulationMaxFraction: 0.92 },
     disturbanceTolerance: 44, roamingPerDay: 0.62,
   },
 
@@ -260,6 +274,7 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     adultWeightKg: 0.34, dailyFoodKgPerAdult: 0.045, dailyWaterNeed: 18,
     baseDensityPer1000M2: 30, maxInitialPopulation: 46, homeRangeMin: 2, homeRangeMax: 4,
     maturityDays: 90, maxAgeDays: 1095, offspringPerAdultFemalePerYear: 11,
+    reproduction: { mode: 'live_birth', eventsPerAdultFemalePerYear: 4.0, minOffspringPerEvent: 4, maxOffspringPerEvent: 7, juvenileRecruitmentRate: 0.65, lowPopulationRecoveryBoost: 1.20, overcrowdingSuppressionStart: 0.76, criticalMortalityBuffer: 0.45, initialPopulationMinFraction: 0.68, initialPopulationMaxFraction: 0.94 },
     disturbanceTolerance: 82, roamingPerDay: 1.1,
   },
 };

@@ -13,6 +13,7 @@ import { WILD_PREDATOR_SPECIES, type WildPredatorSpeciesDefinition } from '../da
 import { ensureRegionEcology, ensureWorldEcology } from './ecologySystem';
 import { ensureRegionWildFauna, ensureWildFauna } from './ecologyFaunaSystem';
 import { getPredatorAccessibleWaterRatio, getPredatorFoodSupport } from './predatorResourceAccess';
+import { initialPopulationFraction, resolveReproductionProfile } from './ecologyDemographySystem';
 
 function clamp(value: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, Math.round(value * 1000) / 1000));
@@ -374,7 +375,9 @@ function createPredatorPopulation(
   const homeRange = connectedHomeRange(state, current.id, desiredHomeRange, new Set(region.subareaIds), species);
   const carryingCapacity = estimatePredatorCarryingCapacity(state, homeRange, species);
   if (carryingCapacity <= 0) return undefined;
-  const population = Math.max(1, Math.min(species.maxInitialPopulation, carryingCapacity, Math.max(1, Math.round(carryingCapacity * (0.36 + random() * 0.36)))));
+  const reproduction = resolveReproductionProfile(species.reproduction, species.offspringPerAdultFemalePerYear);
+  const demographicMinimum = carryingCapacity >= 2 && species.maxInitialPopulation >= 2 ? 2 : 1;
+  const population = Math.max(demographicMinimum, Math.min(species.maxInitialPopulation, carryingCapacity, Math.max(1, Math.round(carryingCapacity * initialPopulationFraction(reproduction, random)))));
   const juvenileRatio = 0.12 + random() * 0.16;
   const oldRatio = 0.04 + random() * 0.08;
   const juveniles = Math.min(population, Math.round(population * juvenileRatio));

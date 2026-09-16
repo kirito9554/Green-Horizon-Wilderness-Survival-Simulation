@@ -252,7 +252,11 @@ function applyDispersalAndMortality(
     const wholeDispersers = Math.floor(response.dispersalProgress);
     if (wholeDispersers > 0) {
       response.dispersalProgress -= wholeDispersers;
-      const removed = removeDispersers(population, wholeDispersers);
+      // Do not let a pressure-response event erase the last local breeding pair.
+      // Real dispersal/metapopulation transfer can be added later; until then,
+      // this buffer prevents aggregate cohorts of 1-2 animals from being deleted.
+      const removable = Math.max(0, population.population - 2);
+      const removed = removeDispersers(population, Math.min(wholeDispersers, removable));
       response.totalEmigrants += removed;
       if (removed > 0) population.migrationPressure = Math.max(0, population.migrationPressure - Math.min(24, removed * 5));
     }
