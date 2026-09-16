@@ -92,7 +92,7 @@ Examples:
 
 `aggregateLocalSiteInfluenceByPatch()` converts spawned sites into normalized patch signals. `GeneratedSpatialWorld.localSiteInfluenceByPatchId` exposes site-derived forage, cover, water, breeding habitat, prey refuge, predator opportunity, aquatic nursery value, decomposition, disturbance sensitivity, shelter/camp quality, hazard/navigation and resource richness.
 
-These signals are **read-only foundation data for now**. Current fauna/resource balance does not consume them yet, avoiding accidental rebalance while later ecology, gathering, travel and camp systems gain one shared source of truth.
+These signals are intentionally **read-only foundation data for now**. Current fauna, predator, hydrology and resource balance do not consume them yet. This avoids accidental rebalance while later ecology, gathering, travel and camp systems gain one shared source of truth.
 
 ## Travel foundation
 
