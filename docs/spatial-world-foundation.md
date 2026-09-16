@@ -35,6 +35,7 @@ Main Island
       -> Per-seed Local Site Pool
         -> Local Site instances (seeded position and properties)
           -> Gameplay / ecology / resource semantics
+          -> Dynamic local resource state
       -> Future trails / crossings / encounter spaces
 ```
 
@@ -92,7 +93,45 @@ Examples:
 
 `aggregateLocalSiteInfluenceByPatch()` converts spawned sites into normalized patch signals. `GeneratedSpatialWorld.localSiteInfluenceByPatchId` exposes site-derived forage, cover, water, breeding habitat, prey refuge, predator opportunity, aquatic nursery value, decomposition, disturbance sensitivity, shelter/camp quality, hazard/navigation and resource richness.
 
-These signals are intentionally **read-only foundation data for now**. Current fauna, predator, hydrology and resource balance do not consume them yet. This avoids accidental rebalance while later ecology, gathering, travel and camp systems gain one shared source of truth.
+## Dynamic local resource simulation
+
+`src/simulation/spatial/localSiteResourceSimulation.ts` turns the resource opportunities above into serializable dynamic state. It deliberately avoids the old generic `currentStock/maxStock + timer` model.
+
+Every repeatable local resource has:
+
+- `baseCapacity` and a condition/environment-driven `effectiveCapacity`;
+- current `stock`;
+- site/resource `condition`;
+- `depletionPressure` accumulated by aggressive extraction;
+- one of six recovery families;
+- a **10% ecological reserve floor** measured from base capacity;
+- critical-state hysteresis: enter at or below **15%**, leave only after recovering to at least **25%**.
+
+The reserve floor is **not harvestable emergency stock**. Harvest can reach the floor but cannot cross it. Continuing to extract at the floor returns no free resource; instead it raises depletion pressure and damages condition.
+
+Critical depletion strongly penalizes:
+
+- harvest yield;
+- average material/food quality;
+- labor efficiency;
+- recovery speed.
+
+This means a small primitive community cannot permanently erase a natural resource, but it can make a local source economically useless and ecologically degraded for a long time.
+
+### Recovery families
+
+1. `renewable_biomass` — plants, fruit, fungi and similar biomass use stock-dependent/logistic recovery. Low surviving stock recovers slowly, middle stock fastest, near-capacity stock slows again.
+2. `geological_flux` — stone, clay, sand and minerals recover at a very slow fixed geological rate with bonuses from erosion, weathering, rainfall and flooding.
+3. `flow` — water resources recover through inflow and local hydrology rather than biological growth.
+4. `episodic` — driftwood and comparable deposits use a tiny background rate plus storm/flood/tidal pulses.
+5. `population_backed` — fish, shellfish, insects, eggs/feathers, honey and similar resources retain a small background recolonization path until the living fauna/aquatic systems own these values directly.
+6. `salvage_exposure` — wreck/ruin salvage does not regrow; an extremely slow repeatable source represents erosion, collapse, flooding or storms exposing previously inaccessible material.
+
+All six families therefore have a non-zero restock path, but their timescales and causes differ radically.
+
+`harvestLocalSiteResource()` applies extraction pressure and floor protection. `tickLocalSiteResource()` applies recovery, critical hysteresis, slow condition repair and depletion-pressure decay. `deriveLocalResourceRecoveryContext()` derives baseline rainfall/erosion/flooding/recruitment/capacity signals from the generated habitat patch and hydrology, with room for later live weather/season/event overrides.
+
+The resource state is not yet wired into legacy gathering UI/actions. That migration is intentionally separate so this PR cannot silently rebalance the existing game loop.
 
 ## Travel foundation
 
@@ -110,6 +149,7 @@ Procedural generation must obey:
 
 1. **same seed + same generation version = same spatial world and same local-site pool**;
 2. **different seed = materially different local terrain/site topology and vocabulary while preserving the macro map**;
-3. **a natural local site may spawn only if its archetype is enabled for that world and its patch satisfies local requirements**.
+3. **a natural local site may spawn only if its archetype is enabled for that world and its patch satisfies local requirements**;
+4. **repeatable local resources may be locally devastated but may never cross the ecological reserve floor**.
 
-The spatial smoke test verifies those rules plus complete local-site profile coverage, valid item references, normalized effects, exact 120 km² area conservation, polygon containment, drainage direction and cross-region route connectivity.
+The spatial smoke test verifies those rules plus complete local-site profile coverage, valid item references, critical depletion/hysteresis, recovery-family behavior, exact 120 km² area conservation, polygon containment, drainage direction and cross-region route connectivity.
