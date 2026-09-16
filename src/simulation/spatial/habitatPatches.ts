@@ -3,6 +3,7 @@ import {
   type MainWorldAreaId,
 } from '../../data/mainWorldAreas';
 import {
+  MAIN_WORLD_HEIGHT_METERS,
   MAIN_WORLD_REGIONS,
   type WorldBoundsMeters,
   type WorldPointMeters,
@@ -12,14 +13,21 @@ import {
   pointInPolygon,
   polygonArea,
 } from '../../data/worldGeometry';
+import {
+  hashSpatialSeed,
+  sampleFractalSpatialNoise,
+  spatialUnitRandom,
+} from './spatialRandom';
 
 /**
- * A 600 m authored-space lattice gives the 120 km² island a few hundred
- * ecological patches: detailed enough for habitat/travel/ecology without
- * pretending to simulate every square metre.
+ * 600 m is the nominal ecological patch scale. The global lattice origin is
+ * shifted by the per-save world seed, so every run clips the fixed macro map
+ * into a different set of local habitat polygons while keeping the simulation
+ * light enough for long-run ecology.
  */
 export const HABITAT_PATCH_CELL_SIZE_METERS = 600;
-export const DEFAULT_SPATIAL_WORLD_SEED = 'green-horizon-main-v1';
+export const SPATIAL_TERRAIN_GENERATION_VERSION = 2;
+export const DEFAULT_SPATIAL_WORLD_SEED = 'green-horizon-main-v2';
 
 export type HabitatTag =
   | 'karst_forest'
@@ -79,6 +87,18 @@ export interface HabitatSuitability {
   forage: number;
 }
 
+export interface HabitatTerrainState {
+  elevationMeters: number;
+  /** 0..1 local terrain steepness/grade proxy for routing and habitat. */
+  slope: number;
+  /** 0..1 rocks, roots and microrelief. */
+  roughness: number;
+  /** 0..1 persistent water saturation. */
+  wetness: number;
+  /** 0..1 ability to shed surface water rather than retain it. */
+  drainage: number;
+}
+
 interface HabitatVariant {
   habitat: HabitatTag;
   weight: number;
@@ -87,9 +107,18 @@ interface HabitatVariant {
   suitability: HabitatSuitability;
 }
 
+interface RegionTerrainProfile {
+  baseElevationMeters: number;
+  elevationReliefMeters: number;
+  roughness: number;
+  wetness: number;
+  drainage: number;
+}
+
 export interface HabitatPatch {
   id: string;
   seed: number;
+  worldSignature: string;
   parentRegionId: MainWorldAreaId;
   gridX: number;
   gridY: number;
@@ -98,13 +127,14 @@ export interface HabitatPatch {
   bounds: WorldBoundsMeters;
   areaM2: number;
   areaKm2: number;
-  /** Portion of the 600 m lattice cell occupied by this clipped land patch. */
+  /** Portion of the nominal 600 m lattice cell occupied by this clipped land patch. */
   coverageFraction: number;
   habitat: HabitatTag;
   terrainTags: readonly TerrainTag[];
   /** Relative route impedance. 1 = easy open terrain; larger = slower/harder. */
   movementCost: number;
   suitability: HabitatSuitability;
+  terrain: HabitatTerrainState;
 }
 
 const V = (
@@ -172,19 +202,28 @@ const REGION_HABITAT_PROFILES: Readonly<Record<MainWorldAreaId, readonly Habitat
   ],
 };
 
-function hash32(value: string): number {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < value.length; i += 1) {
-    hash ^= value.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
+const REGION_TERRAIN_PROFILES: Readonly<Record<MainWorldAreaId, RegionTerrainProfile>> = {
+  AREA_CAVE_ENTRANCE: { baseElevationMeters: 260, elevationReliefMeters: 210, roughness: .72, wetness: .68, drainage: .7 },
+  AREA_STONE_RIDGE: { baseElevationMeters: 430, elevationReliefMeters: 300, roughness: .88, wetness: .58, drainage: .86 },
+  AREA_BAMBOO_GROVE: { baseElevationMeters: 210, elevationReliefMeters: 170, roughness: .62, wetness: .64, drainage: .63 },
+  AREA_ANCIENT_RUINS: { baseElevationMeters: 170, elevationReliefMeters: 130, roughness: .52, wetness: .55, drainage: .68 },
+  AREA_CAMP_CLEARING: { baseElevationMeters: 32, elevationReliefMeters: 55, roughness: .24, wetness: .42, drainage: .74 },
+  AREA_MANGROVE_EDGE: { baseElevationMeters: 4, elevationReliefMeters: 9, roughness: .34, wetness: .98, drainage: .18 },
+  AREA_FOREST_EDGE: { baseElevationMeters: 110, elevationReliefMeters: 120, roughness: .58, wetness: .7, drainage: .54 },
+  AREA_SWAMP_CROSSING: { baseElevationMeters: 14, elevationReliefMeters: 24, roughness: .38, wetness: .96, drainage: .16 },
+  AREA_WATERFALL_BASIN: { baseElevationMeters: 180, elevationReliefMeters: 250, roughness: .84, wetness: .8, drainage: .84 },
+  AREA_FISHING_LAGOON: { baseElevationMeters: 18, elevationReliefMeters: 42, roughness: .48, wetness: .56, drainage: .78 },
+};
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
 
-function chooseHabitat(regionId: MainWorldAreaId, gridX: number, gridY: number, worldSeed: string): { variant: HabitatVariant; seed: number } {
-  const seed = hash32(`${worldSeed}|${regionId}|${gridX}|${gridY}`);
-  // Two-cell blocks create broad habitat patches instead of visual-noise-like per-cell randomness.
-  const habitatNoise = hash32(`${worldSeed}|habitat|${regionId}|${Math.floor(gridX / 2)}|${Math.floor(gridY / 2)}`) / 0x1_0000_0000;
+function chooseHabitat(regionId: MainWorldAreaId, point: WorldPointMeters, worldSeed: string): { variant: HabitatVariant; seed: number } {
+  const seed = hashSpatialSeed(`${worldSeed}|patch|${regionId}|${Math.round(point.x)}|${Math.round(point.y)}`);
+  const broad = sampleFractalSpatialNoise(worldSeed, `habitat:${regionId}`, point, 1700);
+  const jitter = spatialUnitRandom(worldSeed, `habitat-jitter|${regionId}|${Math.floor(point.x / 600)}|${Math.floor(point.y / 600)}`) * 2 - 1;
+  const habitatNoise = clamp01((broad * .78 + jitter * .22 + 1) / 2);
   const variants = REGION_HABITAT_PROFILES[regionId];
   const totalWeight = variants.reduce((sum, variant) => sum + variant.weight, 0);
   let cursor = habitatNoise * totalWeight;
@@ -193,6 +232,43 @@ function chooseHabitat(regionId: MainWorldAreaId, gridX: number, gridY: number, 
     if (cursor <= 0) return { variant, seed };
   }
   return { variant: variants[variants.length - 1], seed };
+}
+
+function makeTerrainState(
+  regionId: MainWorldAreaId,
+  point: WorldPointMeters,
+  worldSeed: string,
+  variant: HabitatVariant,
+): { terrain: HabitatTerrainState; suitability: HabitatSuitability; movementCost: number } {
+  const profile = REGION_TERRAIN_PROFILES[regionId];
+  const elevationNoise = sampleFractalSpatialNoise(worldSeed, `elevation:${regionId}`, point, 2600);
+  const reliefNoise = sampleFractalSpatialNoise(worldSeed, `relief:${regionId}`, point, 820);
+  const wetNoise = sampleFractalSpatialNoise(worldSeed, `wetness:${regionId}`, point, 1450);
+  const roughNoise = sampleFractalSpatialNoise(worldSeed, `roughness:${regionId}`, point, 950);
+  const northHighlandBias = (0.5 - point.y / MAIN_WORLD_HEIGHT_METERS) * (regionId === 'AREA_STONE_RIDGE' || regionId === 'AREA_CAVE_ENTRANCE' ? 90 : 18);
+
+  const elevationMeters = Math.max(0, profile.baseElevationMeters + elevationNoise * profile.elevationReliefMeters + northHighlandBias);
+  const roughness = clamp01(profile.roughness + roughNoise * .22);
+  const wetness = clamp01(profile.wetness + wetNoise * .22 - Math.max(0, elevationMeters - 350) / 2200);
+  const drainage = clamp01(profile.drainage + reliefNoise * .16 - wetness * .08);
+  const slope = clamp01(roughness * .62 + Math.abs(reliefNoise) * .38);
+
+  const suitability: HabitatSuitability = {
+    canopy: clamp01(variant.suitability.canopy + sampleFractalSpatialNoise(worldSeed, `canopy:${regionId}`, point, 1200) * .12),
+    cover: clamp01(variant.suitability.cover + roughNoise * .09),
+    moisture: clamp01(variant.suitability.moisture * .62 + wetness * .38),
+    aquatic: clamp01(variant.suitability.aquatic * .58 + wetness * .32 + (1 - drainage) * .1),
+    elevation: clamp01(variant.suitability.elevation * .62 + Math.min(1, elevationMeters / 700) * .38),
+    disturbance: clamp01(variant.suitability.disturbance + sampleFractalSpatialNoise(worldSeed, `disturbance:${regionId}`, point, 1800) * .08),
+    forage: clamp01(variant.suitability.forage + sampleFractalSpatialNoise(worldSeed, `forage:${regionId}`, point, 1050) * .13),
+  };
+
+  const movementCost = Math.max(1.02, variant.movementCost * (1 + slope * .2 + roughness * .1 + wetness * .08));
+  return {
+    terrain: { elevationMeters, slope, roughness, wetness, drainage },
+    suitability,
+    movementCost,
+  };
 }
 
 function intersectionAtX(a: WorldPointMeters, b: WorldPointMeters, x: number): WorldPointMeters {
@@ -262,21 +338,37 @@ function makePatchCentroid(polygon: WorldPolygon, parentPolygon: WorldPolygon): 
   return { ...polygon[0] };
 }
 
+export interface HabitatGridOrigin {
+  offsetX: number;
+  offsetY: number;
+}
+
+export function getHabitatGridOrigin(worldSeed: string): HabitatGridOrigin {
+  // One global origin is shared by all macro regions so pieces on opposite sides
+  // of a macro border still occupy the same logical cell and can route together.
+  return {
+    offsetX: (spatialUnitRandom(worldSeed, 'habitat-grid-origin-x') - .5) * HABITAT_PATCH_CELL_SIZE_METERS,
+    offsetY: (spatialUnitRandom(worldSeed, 'habitat-grid-origin-y') - .5) * HABITAT_PATCH_CELL_SIZE_METERS,
+  };
+}
+
 export function generateHabitatPatches(worldSeed = DEFAULT_SPATIAL_WORLD_SEED): HabitatPatch[] {
   const patches: HabitatPatch[] = [];
   const cellAreaM2 = HABITAT_PATCH_CELL_SIZE_METERS ** 2;
+  const origin = getHabitatGridOrigin(worldSeed);
+  const worldSignature = hashSpatialSeed(`${worldSeed}|terrain-v${SPATIAL_TERRAIN_GENERATION_VERSION}`).toString(36).toUpperCase().slice(0, 6);
 
   for (const regionId of MAIN_WORLD_AREA_IDS) {
     const region = MAIN_WORLD_REGIONS[regionId];
-    const minGridX = Math.floor(region.bounds.minX / HABITAT_PATCH_CELL_SIZE_METERS);
-    const maxGridX = Math.floor((region.bounds.maxX - 1e-7) / HABITAT_PATCH_CELL_SIZE_METERS);
-    const minGridY = Math.floor(region.bounds.minY / HABITAT_PATCH_CELL_SIZE_METERS);
-    const maxGridY = Math.floor((region.bounds.maxY - 1e-7) / HABITAT_PATCH_CELL_SIZE_METERS);
+    const minGridX = Math.floor((region.bounds.minX - origin.offsetX) / HABITAT_PATCH_CELL_SIZE_METERS);
+    const maxGridX = Math.floor((region.bounds.maxX - origin.offsetX - 1e-7) / HABITAT_PATCH_CELL_SIZE_METERS);
+    const minGridY = Math.floor((region.bounds.minY - origin.offsetY) / HABITAT_PATCH_CELL_SIZE_METERS);
+    const maxGridY = Math.floor((region.bounds.maxY - origin.offsetY - 1e-7) / HABITAT_PATCH_CELL_SIZE_METERS);
 
     for (let gridY = minGridY; gridY <= maxGridY; gridY += 1) {
       for (let gridX = minGridX; gridX <= maxGridX; gridX += 1) {
-        const minX = gridX * HABITAT_PATCH_CELL_SIZE_METERS;
-        const minY = gridY * HABITAT_PATCH_CELL_SIZE_METERS;
+        const minX = origin.offsetX + gridX * HABITAT_PATCH_CELL_SIZE_METERS;
+        const minY = origin.offsetY + gridY * HABITAT_PATCH_CELL_SIZE_METERS;
         const cellBounds: WorldBoundsMeters = {
           minX,
           minY,
@@ -290,23 +382,27 @@ export function generateHabitatPatches(worldSeed = DEFAULT_SPATIAL_WORLD_SEED): 
         const areaM2 = polygonArea(polygon);
         if (areaM2 < 1) continue;
 
-        const { variant, seed } = chooseHabitat(regionId, gridX, gridY, worldSeed);
+        const centroid = makePatchCentroid(polygon, region.polygon);
+        const { variant, seed } = chooseHabitat(regionId, centroid, worldSeed);
+        const generated = makeTerrainState(regionId, centroid, worldSeed, variant);
         patches.push(Object.freeze({
-          id: `HAB_${regionId.replace(/^AREA_/, '')}_${gridX}_${gridY}`,
+          id: `HAB_${regionId.replace(/^AREA_/, '')}_${worldSignature}_${gridX}_${gridY}`,
           seed,
+          worldSignature,
           parentRegionId: regionId,
           gridX,
           gridY,
           polygon,
-          centroid: makePatchCentroid(polygon, region.polygon),
+          centroid,
           bounds: getPolygonBounds(polygon),
           areaM2,
           areaKm2: areaM2 / 1_000_000,
           coverageFraction: Math.min(1, areaM2 / cellAreaM2),
           habitat: variant.habitat,
           terrainTags: variant.terrainTags,
-          movementCost: variant.movementCost,
-          suitability: { ...variant.suitability },
+          movementCost: generated.movementCost,
+          suitability: generated.suitability,
+          terrain: generated.terrain,
         }));
       }
     }
@@ -315,6 +411,7 @@ export function generateHabitatPatches(worldSeed = DEFAULT_SPATIAL_WORLD_SEED): 
   return patches;
 }
 
+/** Fixed reference world for tests/tools that do not have a live save state. */
 export const MAIN_HABITAT_PATCHES: readonly HabitatPatch[] = Object.freeze(generateHabitatPatches());
 
 export function getHabitatPatchesForRegion(regionId: MainWorldAreaId, patches: readonly HabitatPatch[] = MAIN_HABITAT_PATCHES): HabitatPatch[] {
