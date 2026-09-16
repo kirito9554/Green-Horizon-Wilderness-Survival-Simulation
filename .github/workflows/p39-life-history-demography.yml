@@ -1,0 +1,51 @@
+name: P3.9 Life-History Demography
+
+on:
+  push:
+    branches:
+      - feature/p39-life-history-demography
+
+permissions:
+  contents: write
+
+concurrency:
+  group: p39-life-history-demography
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Apply P3.9 demography patch
+        run: python scripts/p39-apply-life-history-demography.py
+      - name: Typecheck patched source
+        run: npm run lint
+      - name: Commit validated source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/ecologyDemography.ts src/data/ecologyFauna.ts src/data/ecologyPredators.ts src/simulation/ecologyDemographySystem.ts src/simulation/ecologyFaunaSystem.ts src/simulation/predatorDiscreteHuntingSystem.ts src/simulation/predatorPressureResponseSystem.ts
+          if git diff --cached --quiet; then
+            echo "No source changes to commit"
+          else
+            git commit -m "feat: add event-based ecology demography and stabilizer"
+            git push origin HEAD:feature/p39-life-history-demography
+          fi
+      - name: Run full coupled one-year and five-year gate
+        run: npx tsx scripts/p5-coupled-fast-gate.ts --coarse-aquatic-substep=360 --out=artifacts/p39-five-year
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p39-five-year-report
+          path: artifacts/p39-five-year/p5-coupled-fast-report.json
+          if-no-files-found: warn
