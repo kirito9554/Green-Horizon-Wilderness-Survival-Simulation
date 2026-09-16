@@ -13,6 +13,14 @@ export interface WildPredatorSpeciesDefinition {
   supplementalDiet?: Partial<Record<WildFoodResource, number>>;
   /** Upper share of daily maintenance demand that supplemental foraging may cover. */
   maxSupplementalDietShare?: number;
+  /** Aquatic populations that can be targeted while hunting from wet habitat. */
+  aquaticPreyWeights?: Partial<Record<string, number>>;
+  /** Small-prey capture attempts per equivalent adult predator-day. */
+  aquaticCaptureRatePerAdultDay?: number;
+  /** Maximum share of tick maintenance demand intentionally sourced from aquatic prey. */
+  maxAquaticDietShare?: number;
+  /** Maximum hydrology-network hops used while searching aquatic prey. Defaults to local POI only. */
+  aquaticForagingReachHops?: number;
   adultWeightKg: number;
   dailyFoodKgPerAdult: number;
   dailyWaterNeed: number;
@@ -67,6 +75,18 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     },
     supplementalDiet: { insects: 0.86, carrion: 0.14 },
     maxSupplementalDietShare: 0.55,
+    aquaticPreyWeights: {
+      AQUATIC_FRESHWATER_PRAWN: 1,
+      AQUATIC_MUD_CRAB: 0.9,
+      AQUATIC_FORAGE_FISH: 0.78,
+      AQUATIC_TILAPIA: 0.45,
+      AQUATIC_MANGROVE_MULLET: 0.28,
+      AQUATIC_RIVER_CATFISH: 0.18,
+      AQUATIC_RIVER_CARP: 0.28,
+      AQUATIC_FRESHWATER_EEL: 0.18,
+    },
+    aquaticCaptureRatePerAdultDay: 0.24,
+    maxAquaticDietShare: 0.24,
     adultWeightKg: 8.5, dailyFoodKgPerAdult: 0.55, dailyWaterNeed: 38,
     maxKillsPerAdultPerDay: 0.42, halfSaturationPreyPer1000M2: 9,
     idealPredatorPreyBiomassRatio: 0.12, minimumViablePreyCount: 4,
@@ -196,6 +216,22 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
       FAUNA_FRUIT_DOVE: 0.12,
       FAUNA_GROUND_FROG: 0.06,
     },
+    aquaticPreyWeights: {
+      AQUATIC_BARRAMUNDI: 1.35,
+      AQUATIC_RIVER_CATFISH: 1.18,
+      AQUATIC_MANGROVE_MULLET: 0.86,
+      AQUATIC_LAGOON_SNAPPER: 0.92,
+      AQUATIC_RIVER_CARP: 0.88,
+      AQUATIC_FRESHWATER_EEL: 0.82,
+      AQUATIC_TILAPIA: 0.62,
+      AQUATIC_PARROTFISH: 0.52,
+      AQUATIC_MUD_CRAB: 0.34,
+      AQUATIC_FORAGE_FISH: 0.16,
+      AQUATIC_FRESHWATER_PRAWN: 0.08,
+    },
+    aquaticCaptureRatePerAdultDay: 1.75,
+    maxAquaticDietShare: 0.7,
+    aquaticForagingReachHops: 2,
     adultWeightKg: 180, dailyFoodKgPerAdult: 1.65, dailyWaterNeed: 90,
     maxKillsPerAdultPerDay: 0.08, halfSaturationPreyPer1000M2: 5,
     idealPredatorPreyBiomassRatio: 0.14, minimumViablePreyCount: 3,

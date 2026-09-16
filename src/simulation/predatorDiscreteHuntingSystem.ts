@@ -11,7 +11,10 @@ import type {
   WorldEcologyState,
 } from '../types/ecologySimulation';
 import type { MainWorldAreaId } from '../data/mainWorldAreas';
+import type { WildAquaticPopulation } from '../types/aquaticEcology';
 import { WILD_FAUNA_SPECIES } from '../data/ecologyFauna';
+import { WILD_AQUATIC_SPECIES } from '../data/ecologyAquatic';
+import { REGION_HYDROLOGY_PROFILES } from '../data/hydrologyProfiles';
 import { WILD_PREDATOR_SPECIES, type WildPredatorSpeciesDefinition } from '../data/ecologyPredators';
 import { ensureRegionWildFauna } from './ecologyFaunaSystem';
 import {
@@ -65,6 +68,9 @@ function equivalentPredatorCount(population: WildPredatorPopulation): number {
 function ensureHuntTelemetry(population: WildPredatorPopulation): PredatorHuntTelemetry {
   population.huntAttemptProgress = Number.isFinite(population.huntAttemptProgress)
     ? Math.max(0, population.huntAttemptProgress || 0)
+    : 0;
+  population.aquaticHuntAttemptProgress = Number.isFinite(population.aquaticHuntAttemptProgress)
+    ? Math.max(0, population.aquaticHuntAttemptProgress || 0)
     : 0;
   population.huntTelemetry ||= {
     attempts: 0,
@@ -185,10 +191,16 @@ function recomputePredatorBiomass(population: WildPredatorPopulation, species: W
 
 function syncCarrionConsumption(system: WorldEcologyState, carcass: WildCarcass, consumedKg: number): void {
   if (consumedKg <= 0 || carcass.mirroredCarrionKg <= 0) return;
-  const subarea = system.subareasById[carcass.subareaId];
-  if (!subarea?.foodWeb) return;
   const mirroredConsumed = Math.min(carcass.mirroredCarrionKg, consumedKg);
-  subarea.foodWeb.carrionBiomassKg = round3(Math.max(0, subarea.foodWeb.carrionBiomassKg - mirroredConsumed));
+  if (carcass.waterNodeId) {
+    const aquatic = system.aquaticFoodWebByNodeId?.[carcass.waterNodeId];
+    if (!aquatic) return;
+    aquatic.carrionKg = round3(Math.max(0, aquatic.carrionKg - mirroredConsumed));
+  } else {
+    const subarea = system.subareasById[carcass.subareaId];
+    if (!subarea?.foodWeb) return;
+    subarea.foodWeb.carrionBiomassKg = round3(Math.max(0, subarea.foodWeb.carrionBiomassKg - mirroredConsumed));
+  }
   carcass.mirroredCarrionKg = round3(Math.max(0, carcass.mirroredCarrionKg - mirroredConsumed));
 }
 
@@ -203,10 +215,16 @@ function consumeCarcass(system: WorldEcologyState, carcass: WildCarcass, request
 }
 
 function mirrorNewCarcass(system: WorldEcologyState, carcass: WildCarcass): void {
-  const subarea = system.subareasById[carcass.subareaId];
-  if (!subarea?.foodWeb) return;
   const mirrored = Math.max(0, carcass.remainingScavengeableKg);
-  subarea.foodWeb.carrionBiomassKg = round3(subarea.foodWeb.carrionBiomassKg + mirrored);
+  if (carcass.waterNodeId) {
+    const aquatic = system.aquaticFoodWebByNodeId?.[carcass.waterNodeId];
+    if (!aquatic) return;
+    aquatic.carrionKg = round3(aquatic.carrionKg + mirrored);
+  } else {
+    const subarea = system.subareasById[carcass.subareaId];
+    if (!subarea?.foodWeb) return;
+    subarea.foodWeb.carrionBiomassKg = round3(subarea.foodWeb.carrionBiomassKg + mirrored);
+  }
   carcass.mirroredCarrionKg = round3(mirrored);
 }
 
@@ -251,9 +269,12 @@ function reduceMirroredCarrion(system: WorldEcologyState, carcass: WildCarcass, 
   const previousMirroredKg = Math.max(0, carcass.mirroredCarrionKg);
   const nextMirroredKg = Math.max(0, Math.min(previousMirroredKg, targetMirroredKg));
   const lostMirroredKg = Math.max(0, previousMirroredKg - nextMirroredKg);
-  const subarea = system.subareasById[carcass.subareaId];
-  if (lostMirroredKg > 0 && subarea?.foodWeb) {
-    subarea.foodWeb.carrionBiomassKg = round3(Math.max(0, subarea.foodWeb.carrionBiomassKg - lostMirroredKg));
+  if (lostMirroredKg > 0 && carcass.waterNodeId) {
+    const aquatic = system.aquaticFoodWebByNodeId?.[carcass.waterNodeId];
+    if (aquatic) aquatic.carrionKg = round3(Math.max(0, aquatic.carrionKg - lostMirroredKg));
+  } else if (lostMirroredKg > 0) {
+    const subarea = system.subareasById[carcass.subareaId];
+    if (subarea?.foodWeb) subarea.foodWeb.carrionBiomassKg = round3(Math.max(0, subarea.foodWeb.carrionBiomassKg - lostMirroredKg));
   }
   carcass.mirroredCarrionKg = round3(nextMirroredKg);
 }
@@ -583,6 +604,244 @@ function removeOnePrey(prey: WildAnimalPopulation, stage: WildAnimalLifeStage): 
   return round3(preySpecies.adultWeightKg * stageMassMultiplier(stage));
 }
 
+interface AquaticHuntTarget {
+  prey: WildAquaticPopulation;
+  preference: number;
+  searchability: number;
+  targetWeight: number;
+  waterNodeId: string;
+}
+
+function aquaticStageMassMultiplier(stage: WildAnimalLifeStage): number {
+  if (stage === 'juvenile') return 0.28;
+  if (stage === 'old') return 0.82;
+  return 1;
+}
+
+function eligibleAquaticStages(
+  prey: WildAquaticPopulation,
+  predator: WildPredatorSpeciesDefinition,
+): Array<{ stage: WildAnimalLifeStage; count: number; bodyMassKg: number; weight: number }> {
+  const preySpecies = WILD_AQUATIC_SPECIES[prey.speciesId];
+  if (!preySpecies) return [];
+  const rows: Array<{ stage: WildAnimalLifeStage; count: number; bodyMassKg: number; weight: number }> = [
+    { stage: 'juvenile', count: prey.juveniles, bodyMassKg: preySpecies.adultWeightKg * 0.28, weight: prey.juveniles * (0.7 + predator.juvenilePreference * 0.8) },
+    { stage: 'adult', count: prey.adults, bodyMassKg: preySpecies.adultWeightKg, weight: prey.adults * (0.95 - predator.juvenilePreference * 0.2) },
+    { stage: 'old', count: prey.old, bodyMassKg: preySpecies.adultWeightKg * 0.82, weight: prey.old * 0.86 },
+  ];
+  return rows.filter(row => row.count >= 1 && row.bodyMassKg <= predator.maxAdultPreyKg);
+}
+
+function aquaticPoiAccess(fromPoi: MainWorldAreaId, toPoi: MainWorldAreaId, maxHops: number): number {
+  if (fromPoi === toPoi) return 1;
+  if (maxHops <= 0) return 0;
+  const visited = new Set<MainWorldAreaId>([fromPoi]);
+  let frontier: MainWorldAreaId[] = [fromPoi];
+  for (let depth = 1; depth <= maxHops; depth += 1) {
+    const next: MainWorldAreaId[] = [];
+    for (const poiId of frontier) {
+      const profile = REGION_HYDROLOGY_PROFILES[poiId];
+      const neighbors = new Set<MainWorldAreaId>(profile?.downstreamPoiIds || []);
+      for (const [candidateId, candidate] of Object.entries(REGION_HYDROLOGY_PROFILES) as Array<[MainWorldAreaId, typeof REGION_HYDROLOGY_PROFILES[MainWorldAreaId]]>) {
+        if (candidate.downstreamPoiIds.includes(poiId)) neighbors.add(candidateId);
+      }
+      for (const neighbor of neighbors) {
+        if (neighbor === toPoi) return Math.pow(0.76, depth);
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          next.push(neighbor);
+        }
+      }
+    }
+    frontier = next;
+    if (!frontier.length) break;
+  }
+  return 0;
+}
+
+function collectAquaticHuntTargets(
+  state: GameState,
+  population: WildPredatorPopulation,
+  species: WildPredatorSpeciesDefinition,
+): AquaticHuntTarget[] {
+  const system = ensureWildPredators(state);
+  const weights = species.aquaticPreyWeights || {};
+  const current = system.subareasById[population.currentSubareaId];
+  const waterAccess = clamp01(((current?.environment.waterAccess || 0) - 20) / 75);
+  if (waterAccess <= 0 || !Object.keys(weights).length) return [];
+  return (system.aquaticPopulations || [])
+    .filter(prey => prey.population > 3 && (weights[prey.speciesId] || 0) > 0)
+    .map(prey => {
+      const preference = weights[prey.speciesId] || 0;
+      const reachHops = Math.max(0, Math.floor(species.aquaticForagingReachHops || 0));
+      const poiAccess = prey.poiIds.reduce((best, preyPoi) => Math.max(best, aquaticPoiAccess(population.poiId, preyPoi, reachHops)), 0);
+      const stages = poiAccess > 0 ? eligibleAquaticStages(prey, species) : [];
+      const stageWeight = stages.reduce((sum, row) => sum + row.weight, 0);
+      const expectedBodyMassKg = stageWeight > 0
+        ? stages.reduce((sum, row) => sum + row.bodyMassKg * row.weight, 0) / stageWeight
+        : 0;
+      const energeticValue = expectedBodyMassKg > 0
+        ? Math.max(0.35, Math.sqrt(expectedBodyMassKg * 0.58 / Math.max(0.05, species.dailyFoodKgPerAdult)))
+        : 0;
+      const abundance = clamp01(prey.population / (prey.population + 12));
+      const condition = clamp01(prey.bodyCondition / 100 * 0.6 + prey.averageHealth / 100 * 0.4);
+      const searchability = clamp01(Math.sqrt(abundance) * (0.55 + waterAccess * 0.45) * (0.78 + condition * 0.22) * poiAccess);
+      const waterNodeId = prey.occupiedNodeIds.find(id => state.hydrologySystem?.nodesById?.[id]?.poiId === population.poiId)
+        || prey.anchorNodeId;
+      return {
+        prey,
+        preference,
+        searchability,
+        waterNodeId,
+        targetWeight: preference * Math.sqrt(Math.max(1, prey.population)) * energeticValue * (0.35 + searchability * 0.65),
+      };
+    })
+    .filter(entry => entry.targetWeight > 0 && Boolean(state.hydrologySystem?.nodesById?.[entry.waterNodeId]));
+}
+
+function removeOneAquaticPrey(prey: WildAquaticPopulation, stage: WildAnimalLifeStage): number {
+  const species = WILD_AQUATIC_SPECIES[prey.speciesId];
+  if (!species) return 0;
+  if (stage === 'juvenile' && prey.juveniles >= 1) prey.juveniles -= 1;
+  else if (stage === 'adult' && prey.adults >= 1) prey.adults -= 1;
+  else if (stage === 'old' && prey.old >= 1) prey.old -= 1;
+  else return 0;
+  prey.population = round3(Math.max(0, prey.juveniles + prey.adults + prey.old));
+  prey.biomassKg = round3(species.adultWeightKg * (prey.juveniles * 0.28 + prey.adults + prey.old * 0.82));
+  return round3(species.adultWeightKg * aquaticStageMassMultiplier(stage));
+}
+
+function createAquaticCarcass(
+  state: GameState,
+  predatorPopulation: WildPredatorPopulation,
+  prey: WildAquaticPopulation,
+  stage: WildAnimalLifeStage,
+  bodyMassKg: number,
+  waterNodeId: string,
+): WildCarcass {
+  const system = ensureWildPredators(state);
+  system.wildCarcasses ||= [];
+  const now = gameMinute(state);
+  const edibleMassKg = round3(bodyMassKg * 0.58);
+  const scavengeableMassKg = round3(bodyMassKg * 0.8);
+  const carcass: WildCarcass = {
+    id: `carcass_aq_${hashString(`${predatorPopulation.id}:${prey.id}:${stage}:${now}:${system.ecologyTickIndex}:${system.wildCarcasses.length}`).toString(36)}`,
+    poiId: state.hydrologySystem?.nodesById?.[waterNodeId]?.poiId || predatorPopulation.poiId,
+    subareaId: predatorPopulation.currentSubareaId,
+    sourceSpeciesId: prey.speciesId,
+    sourceLifeStage: stage,
+    sourceRealm: 'aquatic',
+    waterNodeId,
+    cause: 'predation',
+    killerSpeciesId: predatorPopulation.speciesId,
+    killerPopulationId: predatorPopulation.id,
+    bodyMassKg: round3(bodyMassKg),
+    edibleMassKg,
+    scavengeableMassKg,
+    remainingMassKg: round3(bodyMassKg),
+    remainingEdibleKg: edibleMassKg,
+    remainingScavengeableKg: scavengeableMassKg,
+    mirroredCarrionKg: 0,
+    freshness: 100,
+    createdGameMinute: now,
+    lastUpdatedGameMinute: now,
+  };
+  system.wildCarcasses.push(carcass);
+  return carcass;
+}
+
+function runAquaticHunt(
+  state: GameState,
+  population: WildPredatorPopulation,
+  species: WildPredatorSpeciesDefinition,
+  elapsedDays: number,
+  tickDemandKg: number,
+  currentEdibleKg: number,
+  remainingMealBudgetKg: number,
+  telemetry: PredatorHuntTelemetry,
+): { edibleKg: number; kills: number } {
+  const captureRate = Math.max(0, species.aquaticCaptureRatePerAdultDay || 0);
+  const maxShare = clamp01(species.maxAquaticDietShare || 0);
+  if (captureRate <= 0 || maxShare <= 0 || remainingMealBudgetKg <= 0) return { edibleKg: 0, kills: 0 };
+  const system = ensureWildPredators(state);
+  const current = system.subareasById[population.currentSubareaId];
+  const waterAccess = clamp01(((current?.environment.waterAccess || 0) - 20) / 75);
+  if (waterAccess <= 0) return { edibleKg: 0, kills: 0 };
+
+  const equivalentPredators = equivalentPredatorCount(population);
+  const needDrive = clamp01((tickDemandKg - currentEdibleKg) / Math.max(0.001, tickDemandKg));
+  const hungerDrive = clamp01(population.hungerStress / 100);
+  const huntDrive = clamp01(needDrive * 0.82 + hungerDrive * 0.18) * waterAccess;
+  const aquaticBudgetKg = Math.min(remainingMealBudgetKg, tickDemandKg * maxShare);
+  if (aquaticBudgetKg <= 0.001 || huntDrive <= 0) return { edibleKg: 0, kills: 0 };
+
+  population.aquaticHuntAttemptProgress = Math.max(0, population.aquaticHuntAttemptProgress || 0)
+    + equivalentPredators * captureRate * elapsedDays * huntDrive;
+  const attempts = Math.floor(population.aquaticHuntAttemptProgress);
+  population.aquaticHuntAttemptProgress -= attempts;
+  let consumed = 0;
+  let kills = 0;
+
+  for (let attemptIndex = 0; attemptIndex < attempts; attemptIndex += 1) {
+    if (consumed >= aquaticBudgetKg) break;
+    const ordinal = telemetry.attempts + 1;
+    telemetry.attempts = ordinal;
+    const random = mulberry32(hashString(`${population.id}:${gameMinute(state)}:${system.ecologyTickIndex}:${ordinal}:aquatic-hunt`));
+    const target = weightedPick(collectAquaticHuntTargets(state, population, species), entry => entry.targetWeight, random);
+    if (!target) {
+      telemetry.lastOutcome = 'no_target';
+      continue;
+    }
+    const encounterChance = clamp01(0.12 + target.searchability * 0.82);
+    telemetry.lastTargetSpeciesId = target.prey.speciesId;
+    telemetry.lastEncounterChance = round3(encounterChance);
+    if (random() >= encounterChance) {
+      telemetry.lastOutcome = 'no_encounter';
+      continue;
+    }
+    telemetry.encounters += 1;
+    const preyTelemetry = ensurePreyTelemetry(telemetry, target.prey.speciesId);
+    preyTelemetry.encounters += 1;
+    const stages = eligibleAquaticStages(target.prey, species);
+    const stage = weightedPick(stages, row => row.weight, random);
+    if (!stage || target.prey.population <= 3) {
+      telemetry.lastOutcome = 'no_attack';
+      continue;
+    }
+    telemetry.attacks += 1;
+    preyTelemetry.attacks += 1;
+    telemetry.lastTargetLifeStage = stage.stage;
+    const condition = clamp01(population.bodyCondition / 100 * 0.55 + population.averageHealth / 100 * 0.45);
+    const sizeRatio = clamp01(stage.bodyMassKg / Math.max(0.1, species.maxAdultPreyKg));
+    const sizeFactor = clamp01(1.08 - sizeRatio * 0.48);
+    const stageFactor = stage.stage === 'juvenile' ? 1.1 : stage.stage === 'old' ? 1.03 : 0.92;
+    const preyVigor = 0.82 + (1 - clamp01(target.prey.bodyCondition / 100)) * 0.18;
+    const attackSuccessChance = clamp01((0.4 + condition * 0.4) * sizeFactor * stageFactor * preyVigor * (0.72 + waterAccess * 0.28));
+    telemetry.lastAttackSuccessChance = round3(attackSuccessChance);
+    if (random() >= attackSuccessChance) {
+      telemetry.lastOutcome = 'failed_attack';
+      continue;
+    }
+    const bodyMassKg = removeOneAquaticPrey(target.prey, stage.stage);
+    if (bodyMassKg <= 0) {
+      telemetry.lastOutcome = 'no_attack';
+      continue;
+    }
+    const carcass = createAquaticCarcass(state, population, target.prey, stage.stage, bodyMassKg, target.waterNodeId);
+    const immediateMealKg = consumeCarcass(system, carcass, aquaticBudgetKg - consumed);
+    consumed += immediateMealKg;
+    mirrorNewCarcass(system, carcass);
+    kills += 1;
+    telemetry.successfulKills += 1;
+    telemetry.successfulKillsByLifeStage[stage.stage] = (telemetry.successfulKillsByLifeStage[stage.stage] || 0) + 1;
+    preyTelemetry.successfulKills += 1;
+    telemetry.edibleConsumedKg = round3(telemetry.edibleConsumedKg + immediateMealKg);
+    telemetry.carcassBiomassCreatedKg = round3(telemetry.carcassBiomassCreatedKg + bodyMassKg);
+    telemetry.lastOutcome = 'success';
+  }
+  return { edibleKg: round3(consumed), kills };
+}
+
 function runDiscreteHunt(
   state: GameState,
   population: WildPredatorPopulation,
@@ -613,6 +872,14 @@ function runDiscreteHunt(
   }
 
   const tickDemandKg = Math.max(0.001, dailyDemandKg * elapsedDays);
+  let kills = 0;
+  const aquatic = runAquaticHunt(
+    state, population, species, elapsedDays, tickDemandKg, edibleKg, remainingMealBudgetKg, telemetry,
+  );
+  edibleKg += aquatic.edibleKg;
+  remainingMealBudgetKg = Math.max(0, remainingMealBudgetKg - aquatic.edibleKg);
+  kills += aquatic.kills;
+
   const reserveCapacity = Math.max(0.001, population.maxEnergyReserveKg || 0.001);
   const projectedReserveRatio = clamp01(((population.energyReserveKg || 0) + edibleKg) / reserveCapacity);
   const hungerDrive = clamp01(population.hungerStress / 100);
@@ -647,7 +914,6 @@ function runDiscreteHunt(
     + equivalentPredators * attemptsPerPredatorDay * elapsedDays * huntDrive;
   const attempts = Math.floor(population.huntAttemptProgress);
   population.huntAttemptProgress -= attempts;
-  let kills = 0;
 
   const accessiblePreferredBiomass = collectHuntTargets(state, population, species)
     .reduce((sum, entry) => sum + entry.prey.biomassKg * entry.preference * entry.accessibility, 0);

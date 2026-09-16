@@ -1,0 +1,37 @@
+name: Predator Aquatic Detrital Food Web
+
+on:
+  pull_request:
+    branches:
+      - feature/predator-satiation-aware-hunting
+    paths:
+      - 'src/types/ecologySimulation.ts'
+      - 'src/data/ecologyAquatic.ts'
+      - 'src/data/ecologyPredators.ts'
+      - 'src/simulation/aquaticFoodWebSystem.ts'
+      - 'src/simulation/predatorDiscreteHuntingSystem.ts'
+      - 'scripts/predator-hunt-event-probe.ts'
+      - '.github/workflows/predator-aquatic-detrital-food-web.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Run 90-day aquatic-detrital predator probe
+        run: npx tsx scripts/predator-hunt-event-probe.ts --out=artifacts/predator-aquatic-detrital
+      - name: Upload aquatic-detrital report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predator-aquatic-detrital-report
+          path: artifacts/predator-aquatic-detrital/predator-hunt-event-report.json
+          if-no-files-found: warn

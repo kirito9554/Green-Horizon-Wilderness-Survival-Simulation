@@ -19,6 +19,7 @@ import {
   reconcileTerrestrialEcologyScale,
 } from '../src/simulation/terrestrialEcologyScaleSystem';
 import { finalizeLivingHydrologyState, prepareLivingHydrologyState } from '../src/simulation/livingHydrologyBridge';
+import { tickAquaticEcologyAtEnvironmentalScale } from '../src/simulation/environmentalScaleSystem';
 import { tickLongRunEcosystemBalance, tickWildFaunaWithStableFoodWebClock } from '../src/simulation/longRunEcosystemSystem';
 import { tickWildPredatorsWithPressureResponse } from '../src/simulation/predatorPressureResponseSystem';
 import { collectPredatorHungerTelemetry } from '../src/simulation/predatorHungerTelemetry';
@@ -164,6 +165,7 @@ function tickPipeline(state: GameState, minutes: number): void {
     tickWorldEcology(state, minutes);
     reconcileTerrestrialEcologyScale(state);
     finalizeLivingHydrologyState(state);
+    tickAquaticEcologyAtEnvironmentalScale(state, minutes);
     tickWildFaunaWithStableFoodWebClock(state, minutes);
     reconcileTerrestrialEcologyScale(state);
     tickWildPredatorsWithPressureResponse(state, minutes);
@@ -257,6 +259,30 @@ function faunaSnapshot(state: GameState) {
     .sort((a, b) => a.speciesId.localeCompare(b.speciesId));
 }
 
+function aquaticSnapshot(state: GameState) {
+  const rows = new Map<string, { speciesId: string; population: number; biomassKg: number; populations: number }>();
+  for (const population of state.ecologySystem?.aquaticPopulations || []) {
+    const row = rows.get(population.speciesId) || { speciesId: population.speciesId, population: 0, biomassKg: 0, populations: 0 };
+    row.population += Math.max(0, population.population);
+    row.biomassKg += Math.max(0, population.biomassKg);
+    if (population.population > 0) row.populations += 1;
+    rows.set(population.speciesId, row);
+  }
+  return [...rows.values()].map(row => ({ ...row, population: round3(row.population), biomassKg: round3(row.biomassKg) }))
+    .sort((a, b) => a.speciesId.localeCompare(b.speciesId));
+}
+
+function aquaticFoodWebSnapshot(state: GameState) {
+  const rows = Object.values(state.ecologySystem?.aquaticFoodWebByNodeId || {});
+  return {
+    nodes: rows.length,
+    detritusKg: round3(rows.reduce((sum, row) => sum + row.detritusKg, 0)),
+    benthicInvertebratesKg: round3(rows.reduce((sum, row) => sum + row.benthicInvertebratesKg, 0)),
+    zooplanktonKg: round3(rows.reduce((sum, row) => sum + row.zooplanktonKg, 0)),
+    carrionKg: round3(rows.reduce((sum, row) => sum + row.carrionKg, 0)),
+  };
+}
+
 function main(): void {
   const seed = parseStringArg('seed', DEFAULT_SEED);
   const outputDir = parseStringArg('out', 'artifacts/predator-hunt-events');
@@ -266,6 +292,8 @@ function main(): void {
   const warmupTicks = runWarmup(state);
   const baselinePredators = (state.ecologySystem?.predatorPopulations || []).reduce((sum, population) => sum + Math.max(0, population.population), 0);
   const baselineFauna = faunaSnapshot(state);
+  const baselineAquatic = aquaticSnapshot(state);
+  const baselineAquaticFoodWeb = aquaticFoodWebSnapshot(state);
   const baselineHunts = huntSnapshot(state);
   const energy = new Map<string, EnergyTotals>();
   const validationTicks = runValidation(state, energy);
@@ -316,6 +344,8 @@ function main(): void {
   }, {});
   const currentPredators = species.reduce((sum, row) => sum + row.currentPopulation, 0);
   const currentFauna = faunaSnapshot(state);
+  const currentAquatic = aquaticSnapshot(state);
+  const currentAquaticFoodWeb = aquaticFoodWebSnapshot(state);
   const report = {
     seed,
     warmupDays: WARMUP_DAYS,
@@ -333,6 +363,14 @@ function main(): void {
     currentFaunaPopulation: currentFauna.reduce((sum, row) => sum + row.population, 0),
     baselineFauna,
     currentFauna,
+    baselineAquaticSpecies: baselineAquatic.filter(row => row.population > 0).length,
+    currentAquaticSpecies: currentAquatic.filter(row => row.population > 0).length,
+    baselineAquaticPopulation: round3(baselineAquatic.reduce((sum, row) => sum + row.population, 0)),
+    currentAquaticPopulation: round3(currentAquatic.reduce((sum, row) => sum + row.population, 0)),
+    baselineAquatic,
+    currentAquatic,
+    baselineAquaticFoodWeb,
+    currentAquaticFoodWeb,
     activeCarcasses: carcasses.length,
     remainingCarcassBiomassKg: round3(carcasses.reduce((sum, carcass) => sum + carcass.remainingMassKg, 0)),
     remainingCarcassEdibleKg: round3(carcasses.reduce((sum, carcass) => sum + carcass.remainingEdibleKg, 0)),
