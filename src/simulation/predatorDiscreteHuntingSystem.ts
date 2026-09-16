@@ -560,6 +560,28 @@ function mealTargetValue(expectedEdibleDays: number): number {
   return Math.max(0.15, sizeValue * smallMealPenalty);
 }
 
+function energyAwareLifeStageWeight(
+  row: { stage: WildAnimalLifeStage; bodyMassKg: number; weight: number },
+  predator: WildPredatorSpeciesDefinition,
+  needSeverity: number,
+): number {
+  // P3.5b: life-stage choice should react to energetic need without permanently
+  // overriding species-specific juvenile preference. When food need is low the
+  // historical stage weights dominate; when hunger/intake deficit is high, a
+  // larger adult or old animal becomes worth the additional capture risk.
+  const urgency = clamp01(needSeverity);
+  const edibleDays = row.bodyMassKg * 0.58 / Math.max(0.05, predator.dailyFoodKgPerAdult);
+  const mealValue = mealTargetValue(edibleDays);
+  const energyBias = 0.35 + urgency * 0.55;
+  const payoffMultiplier = Math.max(0.3, 1 + (mealValue - 1) * energyBias);
+  const maturityShift = row.stage === 'juvenile'
+    ? 1 - urgency * 0.18
+    : row.stage === 'old'
+      ? 1 + urgency * 0.16
+      : 1 + urgency * 0.1;
+  return Math.max(0, row.weight * payoffMultiplier * maturityShift);
+}
+
 function energeticTargetValue(prey: WildAnimalPopulation, predator: WildPredatorSpeciesDefinition): number {
   const stages = eligibleStages(prey, predator);
   const totalWeight = stages.reduce((sum, row) => sum + row.weight, 0);
@@ -854,7 +876,15 @@ function runAquaticHunt(
     const preyTelemetry = ensurePreyTelemetry(telemetry, target.prey.speciesId);
     preyTelemetry.encounters += 1;
     const stages = eligibleAquaticStages(target.prey, species);
-    const stage = weightedPick(stages, row => row.weight, random);
+    const stageNeedSeverity = clamp01(Math.max(
+      hungerDrive,
+      (tickDemandKg - (currentEdibleKg + consumed)) / Math.max(0.001, tickDemandKg),
+    ));
+    const stage = weightedPick(
+      stages,
+      row => energyAwareLifeStageWeight(row, species, stageNeedSeverity),
+      random,
+    );
     if (!stage || target.prey.population <= 3) {
       telemetry.lastOutcome = 'no_attack';
       continue;
@@ -997,7 +1027,15 @@ function runDiscreteHunt(
     const preyTelemetry = ensurePreyTelemetry(telemetry, target.prey.speciesId);
     preyTelemetry.encounters += 1;
     const stages = eligibleStages(target.prey, species);
-    const stage = weightedPick(stages, row => row.weight, random);
+    const stageNeedSeverity = clamp01(Math.max(
+      population.hungerStress / 100,
+      1 - edibleKg / Math.max(0.001, tickDemandKg),
+    ));
+    const stage = weightedPick(
+      stages,
+      row => energyAwareLifeStageWeight(row, species, stageNeedSeverity),
+      random,
+    );
     if (!stage || target.prey.population <= 1) {
       telemetry.lastOutcome = 'no_attack';
       continue;
