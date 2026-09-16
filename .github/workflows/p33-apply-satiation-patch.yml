@@ -6,6 +6,7 @@ on:
       - feature/predator-satiation-aware-hunting
     paths:
       - '.github/workflows/p33-apply-satiation-patch.yml'
+      - 'scripts/apply-p33-satiation-patch.py'
 
 permissions:
   contents: write
@@ -25,85 +26,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Apply satiation-aware hunting patch
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('src/simulation/predatorDiscreteHuntingSystem.ts')
-          text = path.read_text()
-
-          old = '''  const reserveCapacity = Math.max(0.001, population.maxEnergyReserveKg || 0.001);
-          const projectedReserveRatio = clamp01(((population.energyReserveKg || 0) + edibleKg) / reserveCapacity);
-          const hungerDrive = clamp01(population.hungerStress / 100);
-          const reserveDrive = 1 - projectedReserveRatio;
-          let huntDrive = clamp01(0.12 + hungerDrive * 0.58 + reserveDrive * 0.55);
-          if (edibleKg >= dailyDemandKg * elapsedDays * 1.1 && projectedReserveRatio >= 0.35) huntDrive *= 0.5;
-
-          const attemptsPerPredatorDay = species.maxKillsPerAdultPerDay / BASE_EXPECTED_ATTEMPT_SUCCESS;
-          population.huntAttemptProgress = Math.max(0, population.huntAttemptProgress || 0)
-            + equivalentPredators * attemptsPerPredatorDay * elapsedDays * huntDrive;
-          const attempts = Math.floor(population.huntAttemptProgress);
-          population.huntAttemptProgress -= attempts;
-          let kills = 0;
-'''
-
-          new = '''  const tickDemandKg = Math.max(0.001, dailyDemandKg * elapsedDays);
-          const reserveCapacity = Math.max(0.001, population.maxEnergyReserveKg || 0.001);
-          const projectedReserveRatio = clamp01(((population.energyReserveKg || 0) + edibleKg) / reserveCapacity);
-          const hungerDrive = clamp01(population.hungerStress / 100);
-          const reserveDrive = 1 - projectedReserveRatio;
-          const intakeCoverage = clamp01(edibleKg / tickDemandKg);
-          const immediateNeed = 1 - intakeCoverage;
-          const starvationOverride = clamp01((population.hungerStress - 55) / 45);
-          const reserveRechargeDrive = reserveDrive * (0.15 + immediateNeed * 0.85);
-
-          // P3.3: current feeding must suppress hunting before reserve refill can
-          // dominate behavior. A fed predator may still opportunistically hunt to
-          // rebuild reserves, but that motive is deliberately secondary to the
-          // current tick's maintenance coverage.
-          let huntDrive = clamp01(
-            immediateNeed * (0.18 + hungerDrive * 0.62)
-              + reserveRechargeDrive * 0.18
-              + starvationOverride * 0.16,
-          );
-          if (intakeCoverage >= 0.95 && population.hungerStress < 35) huntDrive *= 0.08;
-          else if (intakeCoverage >= 0.75 && population.hungerStress < 50) huntDrive *= 0.25;
-          else if (intakeCoverage >= 0.5 && population.hungerStress < 60) huntDrive *= 0.55;
-
-          // A low reserve can justify eating somewhat beyond immediate maintenance,
-          // but not an unlimited chain of kills inside one aggregate population tick.
-          const satiationTargetKg = tickDemandKg * (1 + reserveDrive * 0.35 + hungerDrive * 0.15);
-          if (intakeCoverage >= 0.75 && population.hungerStress < 50) {
-            population.huntAttemptProgress = Math.max(0, population.huntAttemptProgress || 0) * 0.35;
-          }
-
-          const attemptsPerPredatorDay = species.maxKillsPerAdultPerDay / BASE_EXPECTED_ATTEMPT_SUCCESS;
-          population.huntAttemptProgress = Math.max(0, population.huntAttemptProgress || 0)
-            + equivalentPredators * attemptsPerPredatorDay * elapsedDays * huntDrive;
-          const attempts = Math.floor(population.huntAttemptProgress);
-          population.huntAttemptProgress -= attempts;
-          let kills = 0;
-'''
-
-          if old not in text:
-              raise SystemExit('hunt-drive block not found')
-          text = text.replace(old, new, 1)
-
-          old_loop = '''  for (let attemptIndex = 0; attemptIndex < attempts; attemptIndex += 1) {
-            const ordinal = telemetry.attempts + 1;
-'''
-          new_loop = '''  for (let attemptIndex = 0; attemptIndex < attempts; attemptIndex += 1) {
-            // Re-evaluate satiation after every successful meal. Remaining attempts
-            // in this tick are discarded once aggregate intake reaches the bounded
-            // maintenance + reserve-recharge target.
-            if (edibleKg >= satiationTargetKg && population.hungerStress < 85) break;
-            const ordinal = telemetry.attempts + 1;
-'''
-          if old_loop not in text:
-              raise SystemExit('hunt loop block not found')
-          text = text.replace(old_loop, new_loop, 1)
-          path.write_text(text)
-          PY
+        run: python scripts/apply-p33-satiation-patch.py
       - name: Typecheck
         run: npm run lint
       - name: Run deterministic 90-day probe
