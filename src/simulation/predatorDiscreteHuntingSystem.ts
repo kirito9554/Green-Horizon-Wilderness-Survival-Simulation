@@ -6,6 +6,7 @@ import type {
   WildAnimalLifeStage,
   WildAnimalPopulation,
   WildCarcass,
+  WildFoodResource,
   WildPredatorPopulation,
   WorldEcologyState,
 } from '../types/ecologySimulation';
@@ -72,10 +73,14 @@ function ensureHuntTelemetry(population: WildPredatorPopulation): PredatorHuntTe
     successfulKills: 0,
     successfulKillsByLifeStage: {},
     edibleConsumedKg: 0,
+    supplementalConsumedKg: 0,
+    supplementalByResource: {},
     carcassBiomassCreatedKg: 0,
     byPreySpecies: {},
   };
   population.huntTelemetry.successfulKillsByLifeStage ||= {};
+  population.huntTelemetry.supplementalConsumedKg = Math.max(0, population.huntTelemetry.supplementalConsumedKg || 0);
+  population.huntTelemetry.supplementalByResource ||= {};
   population.huntTelemetry.byPreySpecies ||= {};
   return population.huntTelemetry;
 }
@@ -303,6 +308,155 @@ function feedFromOwnedCarcasses(
   return round3(consumed);
 }
 
+function supplementalAvailableKg(
+  state: GameState,
+  population: WildPredatorPopulation,
+  subarea: EcologicalSubarea,
+  resource: WildFoodResource,
+): number {
+  const system = ensureWildPredators(state);
+  if (resource === 'fruit') {
+    if (subarea.materializationState === 'materialized') {
+      return round3(system.plantPopulations
+        .filter(plant => plant.subareaId === subarea.id)
+        .reduce((sum, plant) => sum + Math.max(0, plant.fruitBiomassKg), 0));
+    }
+    const areaFactor = Math.max(0.2, subarea.areaM2 / 100);
+    return round3(Math.max(0, subarea.resources.fruitPotential * areaFactor * 0.035));
+  }
+  if (resource === 'insects') return round3(Math.max(0, subarea.foodWeb?.insectBiomassKg || 0));
+  if (resource === 'carrion') {
+    return round3((system.wildCarcasses || [])
+      .filter(carcass => carcass.subareaId === subarea.id)
+      .filter(carcass => carcass.killerPopulationId !== population.id)
+      .filter(carcass => carcass.freshness >= 5 && carcass.remainingEdibleKg > 0)
+      .reduce((sum, carcass) => sum + carcass.remainingEdibleKg, 0));
+  }
+  return 0;
+}
+
+function consumeSupplementalResource(
+  state: GameState,
+  population: WildPredatorPopulation,
+  subarea: EcologicalSubarea,
+  resource: WildFoodResource,
+  requestedKg: number,
+): number {
+  if (requestedKg <= 0) return 0;
+  const system = ensureWildPredators(state);
+  if (resource === 'fruit') {
+    if (subarea.materializationState === 'materialized') {
+      const plants = system.plantPopulations.filter(plant => plant.subareaId === subarea.id && plant.fruitBiomassKg > 0);
+      const available = plants.reduce((sum, plant) => sum + plant.fruitBiomassKg, 0);
+      const consumed = Math.min(requestedKg, available);
+      if (consumed <= 0 || available <= 0) return 0;
+      for (const plant of plants) {
+        const share = plant.fruitBiomassKg / available;
+        plant.fruitBiomassKg = round3(Math.max(0, plant.fruitBiomassKg - consumed * share));
+      }
+      return round3(consumed);
+    }
+    const areaFactor = Math.max(0.2, subarea.areaM2 / 100);
+    const available = Math.max(0, subarea.resources.fruitPotential * areaFactor * 0.035);
+    const consumed = Math.min(requestedKg, available);
+    if (consumed > 0) subarea.resources.fruitPotential = clamp(subarea.resources.fruitPotential - consumed / areaFactor * 2.8);
+    return round3(consumed);
+  }
+  if (resource === 'insects') {
+    const available = Math.max(0, subarea.foodWeb?.insectBiomassKg || 0);
+    const consumed = Math.min(requestedKg, available);
+    if (consumed > 0 && subarea.foodWeb) subarea.foodWeb.insectBiomassKg = round3(Math.max(0, available - consumed));
+    return round3(consumed);
+  }
+  if (resource === 'carrion') {
+    const carcasses = (system.wildCarcasses || [])
+      .filter(carcass => carcass.subareaId === subarea.id)
+      .filter(carcass => carcass.killerPopulationId !== population.id)
+      .filter(carcass => carcass.freshness >= 5 && carcass.remainingEdibleKg > 0)
+      .sort((a, b) => b.freshness - a.freshness || b.createdGameMinute - a.createdGameMinute);
+    let consumed = 0;
+    for (const carcass of carcasses) {
+      if (consumed >= requestedKg) break;
+      consumed += consumeCarcass(system, carcass, requestedKg - consumed);
+    }
+    return round3(consumed);
+  }
+  return 0;
+}
+
+function forageSupplementalFood(
+  state: GameState,
+  population: WildPredatorPopulation,
+  species: WildPredatorSpeciesDefinition,
+  budgetKg: number,
+  telemetry: PredatorHuntTelemetry,
+): number {
+  const diet = species.supplementalDiet;
+  if (!diet || budgetKg <= 0 || (species.maxSupplementalDietShare || 0) <= 0) return 0;
+  const resources = (Object.entries(diet) as Array<[WildFoodResource, number]>)
+    .filter(([, weight]) => weight > 0);
+  const totalWeight = resources.reduce((sum, [, weight]) => sum + weight, 0);
+  if (totalWeight <= 0) return 0;
+
+  const system = ensureWildPredators(state);
+  const homeRange = new Set(population.homeRangeSubareaIds.length ? population.homeRangeSubareaIds : [population.currentSubareaId]);
+  homeRange.add(population.currentSubareaId);
+  const subareas = [...homeRange]
+    .map(id => system.subareasById[id])
+    .filter((entry): entry is EcologicalSubarea => Boolean(entry))
+    .map(subarea => ({
+      subarea,
+      accessibility: subarea.id === population.currentSubareaId
+        ? 1
+        : getPredatorHuntingAccessibility(system, population, species, subarea.id),
+    }))
+    .filter(entry => entry.accessibility > 0)
+    .sort((a, b) => {
+      const aFood = resources.reduce((sum, [resource, weight]) => sum + supplementalAvailableKg(state, population, a.subarea, resource) * weight, 0);
+      const bFood = resources.reduce((sum, [resource, weight]) => sum + supplementalAvailableKg(state, population, b.subarea, resource) * weight, 0);
+      return bFood * b.accessibility - aFood * a.accessibility;
+    });
+
+  let consumed = 0;
+  const consumeResourceBudget = (resource: WildFoodResource, resourceBudgetKg: number): number => {
+    let resourceConsumed = 0;
+    for (const entry of subareas) {
+      if (resourceConsumed >= resourceBudgetKg) break;
+      const accessibleBudget = (resourceBudgetKg - resourceConsumed) * clamp01(0.55 + entry.accessibility * 0.45);
+      resourceConsumed += consumeSupplementalResource(state, population, entry.subarea, resource, accessibleBudget);
+    }
+    if (resourceConsumed > 0) {
+      telemetry.supplementalByResource[resource] = round3((telemetry.supplementalByResource[resource] || 0) + resourceConsumed);
+    }
+    return round3(resourceConsumed);
+  };
+
+  for (const [resource, weight] of resources) {
+    if (consumed >= budgetKg) break;
+    consumed += consumeResourceBudget(resource, Math.min(budgetKg - consumed, budgetKg * weight / totalWeight));
+  }
+
+  let remaining = Math.max(0, budgetKg - consumed);
+  if (remaining > 0.001) {
+    const ranked = resources
+      .map(([resource, weight]) => ({
+        resource,
+        score: weight * subareas.reduce((sum, entry) => sum + supplementalAvailableKg(state, population, entry.subarea, resource) * entry.accessibility, 0),
+      }))
+      .filter(entry => entry.score > 0)
+      .sort((a, b) => b.score - a.score);
+    for (const entry of ranked) {
+      if (remaining <= 0.001) break;
+      const taken = consumeResourceBudget(entry.resource, remaining);
+      consumed += taken;
+      remaining -= taken;
+    }
+  }
+
+  telemetry.supplementalConsumedKg = round3(telemetry.supplementalConsumedKg + consumed);
+  return round3(consumed);
+}
+
 interface HuntTarget {
   prey: WildAnimalPopulation;
   subarea: EcologicalSubarea;
@@ -369,9 +523,6 @@ function huntSearchability(
   const densityPer1000 = prey.population / Math.max(0.1, subarea.areaM2 / 1000);
   const functionalResponse = typeIIIPredationResponse(densityPer1000, predator.halfSaturationPreyPer1000M2);
   const refugia = preyRefugiaMultiplier(prey.population, predator.minimumViablePreyCount, subarea.environment.canopyCover);
-  // Density determines how likely a predator is to locate prey, while refugia is
-  // deliberately softer here: cover can make search harder without making prey
-  // effectively disappear. The remaining refuge effect is paid during attack.
   const searchability = clamp01(
     Math.sqrt(functionalResponse)
       * accessibility
@@ -400,9 +551,6 @@ function collectHuntTargets(
       const search = subarea && accessibility > 0
         ? huntSearchability(prey, subarea, species, accessibility)
         : { functionalResponse: 0, refugia: 0, searchability: 0 };
-      // Target choice is expected energetic return rather than preference alone.
-      // When a prey population becomes sparse or difficult to locate, predators
-      // naturally switch toward another prey instead of repeating futile hunts.
       const targetWeight = preference > 0 && energeticValue > 0
         ? preference
           * Math.sqrt(Math.max(1, prey.population))
@@ -453,6 +601,16 @@ function runDiscreteHunt(
   let edibleKg = feedFromOwnedCarcasses(state, population, mealBudgetKg);
   const returningCarcassEdibleKg = edibleKg;
   let remainingMealBudgetKg = Math.max(0, mealBudgetKg - edibleKg);
+
+  const supplementalBudgetKg = Math.min(
+    remainingMealBudgetKg,
+    dailyDemandKg * elapsedDays * clamp01(species.maxSupplementalDietShare || 0),
+  );
+  if (supplementalBudgetKg > 0) {
+    const supplementalKg = forageSupplementalFood(state, population, species, supplementalBudgetKg, telemetry);
+    edibleKg += supplementalKg;
+    remainingMealBudgetKg = Math.max(0, remainingMealBudgetKg - supplementalKg);
+  }
 
   const reserveCapacity = Math.max(0.001, population.maxEnergyReserveKg || 0.001);
   const projectedReserveRatio = clamp01(((population.energyReserveKg || 0) + edibleKg) / reserveCapacity);
@@ -686,6 +844,8 @@ export interface PredatorHuntDiagnostic {
   attackSuccessRate: number;
   overallSuccessRate: number;
   edibleConsumedKg: number;
+  supplementalConsumedKg: number;
+  supplementalByResource: Partial<Record<WildFoodResource, number>>;
   carcassBiomassCreatedKg: number;
   activeOwnedCarcasses: number;
   remainingOwnedCarcassKg: number;
@@ -711,6 +871,8 @@ export function getPredatorHuntDiagnostics(state: GameState): PredatorHuntDiagno
       attackSuccessRate: round3(telemetry.attacks > 0 ? telemetry.successfulKills / telemetry.attacks : 0),
       overallSuccessRate: round3(telemetry.attempts > 0 ? telemetry.successfulKills / telemetry.attempts : 0),
       edibleConsumedKg: round3(telemetry.edibleConsumedKg),
+      supplementalConsumedKg: round3(telemetry.supplementalConsumedKg),
+      supplementalByResource: { ...telemetry.supplementalByResource },
       carcassBiomassCreatedKg: round3(telemetry.carcassBiomassCreatedKg),
       activeOwnedCarcasses: ownedCarcasses.length,
       remainingOwnedCarcassKg: round3(ownedCarcasses.reduce((sum, carcass) => sum + carcass.remainingMassKg, 0)),
