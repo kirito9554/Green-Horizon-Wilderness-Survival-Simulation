@@ -30,7 +30,6 @@ import {
 } from './ecologyPredatorSystem';
 import { getPredatorAccessibleWaterRatio, getPredatorFoodSupport, predatorPoiAccess } from './predatorResourceAccess';
 
-const BASE_EXPECTED_ATTEMPT_SUCCESS = 0.22;
 const MIN_CARCASS_FRESHNESS_TO_FEED = 15;
 
 const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, Math.round(value * 1000) / 1000));
@@ -347,6 +346,76 @@ function feedFromOwnedCarcasses(
     consumed += consumeCarcass(system, carcass, mealBudgetKg - consumed);
   }
   return round3(consumed);
+}
+
+function ownedCarcassEdibleKg(
+  state: GameState,
+  population: WildPredatorPopulation,
+  species: WildPredatorSpeciesDefinition,
+): number {
+  const system = ensureWildPredators(state);
+  const homeRange = new Set(population.homeRangeSubareaIds.length ? population.homeRangeSubareaIds : [population.currentSubareaId]);
+  homeRange.add(population.currentSubareaId);
+  return round3((system.wildCarcasses || [])
+    .filter(carcass => carcass.killerPopulationId === population.id)
+    .filter(carcass => carcass.remainingEdibleKg > 0 && carcass.freshness >= MIN_CARCASS_FRESHNESS_TO_FEED)
+    .filter(carcass => {
+      if (homeRange.has(carcass.subareaId)) return true;
+      const subarea = system.subareasById[carcass.subareaId];
+      return Boolean(subarea && riparianForagingAccess(system, population, species, subarea) > 0);
+    })
+    .reduce((sum, carcass) => {
+      // Very stale meat is less reliable as future secured food even before it
+      // reaches the hard feeding cutoff.
+      const freshnessReliability = clamp01((carcass.freshness - MIN_CARCASS_FRESHNESS_TO_FEED) / 70);
+      return sum + carcass.remainingEdibleKg * (0.55 + freshnessReliability * 0.45);
+    }, 0));
+}
+
+function securedFoodCoverageDays(
+  state: GameState,
+  population: WildPredatorPopulation,
+  species: WildPredatorSpeciesDefinition,
+  currentEdibleKg = 0,
+  tickDemandKg = 0,
+): number {
+  const equivalentPredators = equivalentPredatorCount(population);
+  const dailyDemandKg = Math.max(0.001, species.dailyFoodKgPerAdult * equivalentPredators);
+  const storedReserveKg = Math.max(0, population.energyReserveKg || 0);
+  const ownedCarcassKg = ownedCarcassEdibleKg(state, population, species);
+  // Food already eaten for this tick only extends future rest once immediate
+  // maintenance has been covered; otherwise it is current-day fuel, not reserve.
+  const currentSurplusKg = Math.max(0, currentEdibleKg - Math.max(0, tickDemandKg));
+  return Math.max(0, (storedReserveKg + ownedCarcassKg + currentSurplusKg) / dailyDemandKg);
+}
+
+function mealDrivenHuntReadiness(
+  state: GameState,
+  population: WildPredatorPopulation,
+  species: WildPredatorSpeciesDefinition,
+  currentEdibleKg: number,
+  tickDemandKg: number,
+): number {
+  const securedDays = securedFoodCoverageDays(state, population, species, currentEdibleKg, tickDemandKg);
+  // Below ~0.1 secured days the cohort is effectively ready to hunt. Around one
+  // full food-day the normal hunt drive is almost completely suppressed. This
+  // makes a small prey item create only a short pause while a large carcass can
+  // naturally produce multi-day rest through the remaining edible biomass.
+  const normalReadiness = securedDays <= 0.1
+    ? 1
+    : clamp01((1.2 - securedDays) / 1.1);
+  // Severe hunger can override part of the rest signal. This is important for
+  // aggregate populations where one large carcass may not physically feed every
+  // individual even though the cohort owns it.
+  const hungerOverride = clamp01((population.hungerStress - 62) / 38) * 0.82;
+  return Math.max(normalReadiness, hungerOverride);
+}
+
+function activeSearchAttemptsPerAdultDay(species: WildPredatorSpeciesDefinition): number {
+  // Search capacity is activity/roaming driven rather than a desired kill quota.
+  // Failure creates no cooldown, so an unsuccessful predator can keep searching;
+  // successful prey size determines the pause through secured food-days instead.
+  return Math.max(1.2, Math.min(3.4, 1.4 + species.roamingPerDay * 1.6));
 }
 
 function supplementalAvailableKg(
@@ -939,7 +1008,8 @@ function runAquaticHunt(
   const preferredAquaticShare = totalRealmOpportunity > 0 ? aquaticOpportunity / totalRealmOpportunity : 0;
   const effectiveAquaticShare = Math.min(maxShare, preferredAquaticShare);
   const realmDrive = maxShare > 0 ? Math.sqrt(clamp01(effectiveAquaticShare / maxShare)) : 0;
-  const huntDrive = clamp01(needDrive * 0.82 + hungerDrive * 0.18) * waterAccess * realmDrive;
+  const cadenceReadiness = mealDrivenHuntReadiness(state, population, species, currentEdibleKg, tickDemandKg);
+  const huntDrive = clamp01(needDrive * 0.82 + hungerDrive * 0.18) * waterAccess * realmDrive * cadenceReadiness;
   const aquaticBudgetKg = Math.min(remainingMealBudgetKg, tickDemandKg * effectiveAquaticShare);
   if (aquaticBudgetKg <= 0.001 || huntDrive <= 0 || aquaticTargets.length <= 0) return { edibleKg: 0, kills: 0 };
 
@@ -1014,6 +1084,13 @@ function runAquaticHunt(
     telemetry.edibleConsumedKg = round3(telemetry.edibleConsumedKg + immediateMealKg);
     telemetry.carcassBiomassCreatedKg = round3(telemetry.carcassBiomassCreatedKg + bodyMassKg);
     telemetry.lastOutcome = 'success';
+
+    // A successful large meal creates its own cooldown. Small prey normally do
+    // not cross this threshold, so the population can continue searching soon.
+    const securedDaysAfterKill = securedFoodCoverageDays(
+      state, population, species, currentEdibleKg + consumed, tickDemandKg,
+    );
+    if (securedDaysAfterKill >= 0.8 && population.hungerStress < 85) break;
   }
   return { edibleKg: round3(consumed), kills };
 }
@@ -1085,11 +1162,15 @@ function runDiscreteHunt(
     population.huntAttemptProgress = Math.max(0, population.huntAttemptProgress || 0) * 0.35;
   }
 
-  const attemptsPerPredatorDay = species.maxKillsPerAdultPerDay / BASE_EXPECTED_ATTEMPT_SUCCESS;
+  const cadenceReadiness = mealDrivenHuntReadiness(state, population, species, edibleKg, tickDemandKg);
+  const searchAttemptsPerPredatorDay = activeSearchAttemptsPerAdultDay(species);
   population.huntAttemptProgress = Math.max(0, population.huntAttemptProgress || 0)
-    + equivalentPredators * attemptsPerPredatorDay * elapsedDays * huntDrive;
-  const attempts = Math.floor(population.huntAttemptProgress);
-  population.huntAttemptProgress -= attempts;
+    + equivalentPredators * searchAttemptsPerPredatorDay * elapsedDays * huntDrive * cadenceReadiness;
+  // Do not let a long simulation step dump an unbounded backlog of attempts at
+  // once. This is a safety envelope only; it does not prescribe successful kills.
+  const safetyAttemptCap = Math.max(1, Math.ceil(equivalentPredators * elapsedDays * 4));
+  const attempts = Math.min(Math.floor(population.huntAttemptProgress), safetyAttemptCap);
+  population.huntAttemptProgress = Math.max(0, population.huntAttemptProgress - attempts);
 
   const accessiblePreferredBiomass = collectHuntTargets(state, population, species)
     .reduce((sum, entry) => sum + entry.prey.biomassKg * entry.preference * entry.accessibility, 0);
@@ -1180,6 +1261,9 @@ function runDiscreteHunt(
     telemetry.edibleConsumedKg = round3(telemetry.edibleConsumedKg + immediateMealKg);
     telemetry.carcassBiomassCreatedKg = round3(telemetry.carcassBiomassCreatedKg + bodyMassKg);
     telemetry.lastOutcome = 'success';
+
+    const securedDaysAfterKill = securedFoodCoverageDays(state, population, species, edibleKg, tickDemandKg);
+    if (securedDaysAfterKill >= 0.8 && population.hungerStress < 85) break;
   }
 
   telemetry.edibleConsumedKg = round3(telemetry.edibleConsumedKg + returningCarcassEdibleKg);

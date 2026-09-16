@@ -55,14 +55,14 @@ function equivalentPredatorCount(population: WildPredatorPopulation): number {
 }
 
 /**
- * Intermittent feeders can bank a larger fraction of a successful kill. The
- * reserve horizon is derived from the existing kill cadence rather than adding a
- * second per-species tuning table. The cadence multiplier includes room for
- * normal search/refugia gaps so a predator is not forced into daily feeding.
+ * P3.8: reserve horizon is a metabolic/body-size property, not a hidden copy of
+ * hunt cadence. Larger intermittent feeders can bank more food-days from a big
+ * meal, while smaller active predators carry a shorter buffer. Hunt timing is
+ * decided separately from secured food-days in the discrete hunting system.
  */
 export function getPredatorEnergyReserveDays(species: WildPredatorSpeciesDefinition): number {
-  const expectedKillIntervalDays = 1 / Math.max(0.03, species.maxKillsPerAdultPerDay);
-  return round3(Math.max(3, Math.min(24, expectedKillIntervalDays * 1.75)));
+  const metabolicMassDays = species.adultWeightKg / Math.max(0.05, species.dailyFoodKgPerAdult);
+  return round3(Math.max(3, Math.min(24, Math.sqrt(metabolicMassDays) * 1.15)));
 }
 
 function predatorEnergyCapacityKg(population: WildPredatorPopulation, species: WildPredatorSpeciesDefinition): number {
