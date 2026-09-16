@@ -17,6 +17,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Run 90-day hunt-mix probe
+        run: npx tsx scripts/predator-hunt-event-probe.ts --out=artifacts/p5-riparian-probe
+      - name: Upload hunt-mix report
+        uses: actions/upload-artifact@v4
+        with:
+          name: p5-riparian-hunt-probe
+          path: artifacts/p5-riparian-probe/predator-hunt-event-report.json
+
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 8
@@ -38,4 +58,3 @@ jobs:
           name: p5-coupled-fast-report
           path: artifacts/p5-coupled-fast/p5-coupled-fast-report.json
           if-no-files-found: warn
-# retrigger: validate P3.5 riparian foraging on the calibrated coupled gate
