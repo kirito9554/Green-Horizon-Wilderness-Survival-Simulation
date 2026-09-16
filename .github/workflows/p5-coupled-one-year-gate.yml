@@ -1,4 +1,4 @@
-name: P5 Coupled One-Year Gate
+name: P5 Coupled Calibrated Gate
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: p5-coupled-one-year-${{ github.ref }}
+  group: p5-coupled-calibrated-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -29,12 +29,12 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npm run lint
-      - name: Run coupled terrestrial + aquatic one-year gate
-        run: npx tsx scripts/p5-coupled-one-year-gate.ts --out=artifacts/p5-coupled-one-year
-      - name: Upload one-year gate report
+      - name: Run calibrated coupled one-year gate
+        run: npx tsx scripts/p5-coupled-fast-gate.ts --coarse-aquatic-substep=360 --out=artifacts/p5-coupled-fast
+      - name: Upload calibrated gate report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p5-coupled-one-year-report
-          path: artifacts/p5-coupled-one-year/p5-coupled-one-year-report.json
+          name: p5-coupled-fast-report
+          path: artifacts/p5-coupled-fast/p5-coupled-fast-report.json
           if-no-files-found: warn
