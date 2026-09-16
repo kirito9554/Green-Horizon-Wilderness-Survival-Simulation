@@ -84,3 +84,22 @@ export function getMainWorldAreas(): AreaDefinition[] {
 export function isArchivedLegacyAreaId(areaId: string): boolean {
   return Boolean(AREAS_DATABASE[areaId]) && !isMainWorldAreaId(areaId) && !isLegacyMainAreaId(areaId);
 }
+
+export type WorldAreaLifecycle = 'active' | 'redirect-legacy' | 'archived-legacy' | 'unknown';
+
+/** Explicit snapshot of every database area that must not act as an active macro region. */
+export const ARCHIVED_LEGACY_AREA_IDS = Object.freeze(
+  Object.keys(AREAS_DATABASE).filter(isArchivedLegacyAreaId),
+);
+
+export const ALL_LEGACY_AREA_IDS = Object.freeze([
+  ...LEGACY_MAIN_AREA_IDS,
+  ...ARCHIVED_LEGACY_AREA_IDS,
+]);
+
+export function getWorldAreaLifecycle(areaId: string): WorldAreaLifecycle {
+  if (isMainWorldAreaId(areaId)) return 'active';
+  if (isLegacyMainAreaId(areaId)) return 'redirect-legacy';
+  if (isArchivedLegacyAreaId(areaId)) return 'archived-legacy';
+  return 'unknown';
+}
