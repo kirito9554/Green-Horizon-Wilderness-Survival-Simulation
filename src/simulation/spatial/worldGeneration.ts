@@ -15,11 +15,13 @@ import {
   type GeneratedTerrainHydrology,
 } from './terrainHydrology';
 import {
+  generateLocalSitePool,
   generateLocalSites,
   type GeneratedLocalSite,
+  type GeneratedLocalSitePool,
 } from './localSiteGeneration';
 
-export const SPATIAL_WORLD_GENERATION_VERSION = 2;
+export const SPATIAL_WORLD_GENERATION_VERSION = 3;
 
 export interface GeneratedSpatialWorld {
   generationVersion: number;
@@ -28,6 +30,8 @@ export interface GeneratedSpatialWorld {
   habitatPatches: readonly HabitatPatch[];
   routeGraph: SpatialRouteGraph;
   hydrology: GeneratedTerrainHydrology;
+  /** Seed + generated terrain choose a subset of the full site vocabulary for this campaign. */
+  localSitePool: GeneratedLocalSitePool;
   localSites: readonly GeneratedLocalSite[];
 }
 
@@ -44,7 +48,8 @@ export function generateSpatialWorld(worldSeed: string): GeneratedSpatialWorld {
   const habitatPatches = Object.freeze(generateHabitatPatches(worldSeed));
   const routeGraph = buildSpatialRouteGraph(habitatPatches);
   const hydrology = generateTerrainHydrology(habitatPatches, routeGraph);
-  const localSites = Object.freeze(generateLocalSites(worldSeed, habitatPatches, hydrology));
+  const localSitePool = generateLocalSitePool(worldSeed, habitatPatches, hydrology);
+  const localSites = Object.freeze(generateLocalSites(worldSeed, habitatPatches, hydrology, localSitePool));
 
   return Object.freeze({
     generationVersion: SPATIAL_WORLD_GENERATION_VERSION,
@@ -53,6 +58,7 @@ export function generateSpatialWorld(worldSeed: string): GeneratedSpatialWorld {
     habitatPatches,
     routeGraph,
     hydrology,
+    localSitePool,
     localSites,
   });
 }
