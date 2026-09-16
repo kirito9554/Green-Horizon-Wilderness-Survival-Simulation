@@ -58,4 +58,4 @@ jobs:
           name: p5-coupled-fast-report
           path: artifacts/p5-coupled-fast/p5-coupled-fast-report.json
           if-no-files-found: warn
-# retrigger: validate opportunity-based aquatic/terrestrial realm choice
+# retrigger: validate biologically calibrated crocodile maintenance demand
