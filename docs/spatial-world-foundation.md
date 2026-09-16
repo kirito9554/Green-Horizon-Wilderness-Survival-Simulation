@@ -41,7 +41,8 @@ Main Island
   -> Macro Region (10 authored polygons, stable between runs)
     -> Habitat Patch (seeded geometry + terrain)
       -> Drainage / watercourse topology
-      -> Local Site (seeded position and archetype)
+      -> Per-seed Local Site Pool
+        -> Local Site instances (seeded position and properties)
       -> Future trails / crossings / encounter spaces
 ```
 
@@ -74,11 +75,26 @@ Each patch chooses a lower adjacent patch as its downstream receiver when one ex
 
 This is still an abstract patch-scale drainage model, not a final rendered river spline, but it gives later ecology and route generation a causal water topology.
 
-## Procedural local sites
+## Procedural local-site catalog and per-seed pools
 
-`src/simulation/spatial/localSiteGeneration.ts` creates local sites from the generated habitat and drainage state. Site position, type and properties are deterministic for a save seed but differ between runs.
+`src/simulation/spatial/localSiteCatalog.ts` defines a deliberately larger vocabulary than any one campaign should use. The current catalog contains **70 natural local-site archetypes** plus the three required macro identity landmarks.
 
-Current archetypes include freshwater seeps, animal trails, wildlife nests, giant kapok trees, medicinal glades, clay banks, fallen giants, root hollows, rock shelters, fruiting groves, canopy gaps, mud crossings, tidal pools, karst shafts and cascade pools.
+The natural catalog spans six ecological families:
+
+- **water/hydrology** — freshwater seeps, spring heads, forest and seasonal pools, fords, river bends, gravel bars, oxbows, marshes, mangrove channels, reed beds, cascade pools and similar features;
+- **terrain/geology** — rock shelters, karst shafts, ravines, cliffs, boulder fields, landslide scars, sinkholes, limestone pinnacles, hidden cave mouths, talus and erosion features;
+- **vegetation/resource concentrations** — kapok, medicinal glades, fallen giants, root hollows, fruiting groves, bamboo, palms, fern gullies, vine/rattan tangles, strangler figs, moss and epiphyte groves, tuber patches, resin trees and fungal deadwood;
+- **wildlife-use sites** — animal trails, nests, wallows, mineral licks, burrow colonies, nesting cliffs, bat roosts, feeding grounds, termite mounds, bee trees, predator dens, amphibian pools and basking/rooting sites;
+- **coastal sites** — tidal pools, sandbars, driftwood and shell banks, mangrove rookeries, sea caves and beach nesting grounds;
+- **disturbance features** — flood-debris fields, storm blowdowns and fallen-log jams.
+
+`src/simulation/spatial/localSiteGeneration.ts` does **not** make all of those archetypes available in every run. It first measures each archetype against the generated terrain/hydrology and calculates a world-support score from the best matching patches. Unsupported archetypes are excluded entirely.
+
+The remaining supported archetypes compete inside deterministic category quotas. The world seed adds an affinity value to each archetype, while rarity reduces its pool priority. A small set of ecologically broad `core` archetypes survives whenever the terrain actually supports them; the rest are selected into a campaign-specific subset.
+
+The result is a `GeneratedLocalSitePool` with enabled/disabled archetypes and a stable signature. For example, one seed can emphasize wetland channels, marsh pools, wallows and flood debris, while another seed can emphasize karst shafts, talus, bat roosts and mineral licks. A campaign therefore does not need to contain every possible site merely because the macro regions are the same.
+
+After the pool is chosen, individual site instances still require **local patch suitability**. Rare/exceptional archetypes have a higher local suitability threshold, so an archetype being present in the world vocabulary does not mean it can spawn anywhere.
 
 Old center-map concepts such as `Medicinal Glade`, `Kapok Grove`, `Wildlife Nest`, `Clay Pit` and `Jungle Trail` are reused only as local-site concepts. Their legacy area IDs never re-enter active macro geometry.
 
@@ -106,15 +122,17 @@ Fauna and predator populations should migrate from macro-region buckets toward p
 - predator encounter probability and competition based on shared space;
 - refugia emerging from terrain/habitat rather than hard low-population buffs;
 - water-linked animal movement and resource availability;
+- local-site features becoming persistent habitat modifiers rather than decorative POIs;
 - local extirpation and recolonization without treating every disappearance as island-wide extinction.
 
 No fauna/predator balance values are changed by this foundation PR.
 
 ## Reproducibility contract
 
-Procedural generation must obey two rules:
+Procedural generation must obey three rules:
 
-1. **same seed + same generation version = same spatial world**;
-2. **different seed = materially different local terrain/site topology while preserving the authored macro map**.
+1. **same seed + same generation version = same spatial world and same local-site pool**;
+2. **different seed = materially different local terrain/site topology and local-site vocabulary while preserving the authored macro map**;
+3. **a generated local site may spawn only if its archetype is enabled for that world and the local patch satisfies the archetype's terrain requirements**.
 
-The spatial smoke test verifies both sides of that contract, plus 120 km² area conservation, polygon containment, drainage direction and cross-region route connectivity.
+The spatial smoke test verifies these rules, plus 120 km² area conservation, polygon containment, drainage direction and cross-region route connectivity.
