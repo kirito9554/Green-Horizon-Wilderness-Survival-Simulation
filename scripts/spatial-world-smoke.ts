@@ -44,7 +44,7 @@ function testCanonicalMetricGeometry(): void {
     assert.ok(pointInPolygon(region.centroid, region.polygon), `${region.id} centroid must remain on its authored territory`);
   }
 
-  const sourcePoint: readonly [number, number] = [63.25, 42.75];
+  const sourcePoint: [number, number] = [63.25, 42.75];
   const worldPoint = percentPointToWorld(sourcePoint);
   const roundTrip = worldPointToPercent(worldPoint);
   approx(roundTrip[0], sourcePoint[0], 1e-10, 'x percent/world conversion must round-trip');
