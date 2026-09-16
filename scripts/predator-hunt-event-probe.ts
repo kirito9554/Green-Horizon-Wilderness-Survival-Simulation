@@ -54,6 +54,8 @@ interface HuntTotals {
   encounters: number;
   attacks: number;
   successfulKills: number;
+  supplementalConsumedKg: number;
+  supplementalByResource: Record<string, number>;
   carcassBiomassCreatedKg: number;
   activeOwnedCarcasses: number;
   remainingOwnedCarcassKg: number;
@@ -206,6 +208,8 @@ function huntDeltas(state: GameState, baseline: ReturnType<typeof huntSnapshot>)
       encounters: 0,
       attacks: 0,
       successfulKills: 0,
+      supplementalConsumedKg: 0,
+      supplementalByResource: {},
       carcassBiomassCreatedKg: 0,
       activeOwnedCarcasses: 0,
       remainingOwnedCarcassKg: 0,
@@ -216,6 +220,12 @@ function huntDeltas(state: GameState, baseline: ReturnType<typeof huntSnapshot>)
     totals.encounters += Math.max(0, row.encounters - (before?.encounters || 0));
     totals.attacks += Math.max(0, row.attacks - (before?.attacks || 0));
     totals.successfulKills += Math.max(0, row.successfulKills - (before?.successfulKills || 0));
+    totals.supplementalConsumedKg += Math.max(0, row.supplementalConsumedKg - (before?.supplementalConsumedKg || 0));
+    for (const [resource, amount] of Object.entries(row.supplementalByResource as Record<string, number>)) {
+      const beforeResources = (before?.supplementalByResource || {}) as Record<string, number>;
+      const delta = Math.max(0, amount - (beforeResources[resource] || 0));
+      if (delta > 0) totals.supplementalByResource[resource] = (totals.supplementalByResource[resource] || 0) + delta;
+    }
     totals.carcassBiomassCreatedKg += Math.max(0, row.carcassBiomassCreatedKg - (before?.carcassBiomassCreatedKg || 0));
     totals.activeOwnedCarcasses += row.activeOwnedCarcasses;
     totals.remainingOwnedCarcassKg += row.remainingOwnedCarcassKg;
@@ -233,6 +243,20 @@ function huntDeltas(state: GameState, baseline: ReturnType<typeof huntSnapshot>)
   return result;
 }
 
+function faunaSnapshot(state: GameState) {
+  const rows = new Map<string, { speciesId: string; population: number; biomassKg: number; populations: number }>();
+  for (const population of state.ecologySystem?.animalPopulations || []) {
+    const row = rows.get(population.speciesId) || { speciesId: population.speciesId, population: 0, biomassKg: 0, populations: 0 };
+    row.population += Math.max(0, population.population);
+    row.biomassKg += Math.max(0, population.biomassKg);
+    if (population.population > 0) row.populations += 1;
+    rows.set(population.speciesId, row);
+  }
+  return [...rows.values()]
+    .map(row => ({ ...row, biomassKg: round3(row.biomassKg) }))
+    .sort((a, b) => a.speciesId.localeCompare(b.speciesId));
+}
+
 function main(): void {
   const seed = parseStringArg('seed', DEFAULT_SEED);
   const outputDir = parseStringArg('out', 'artifacts/predator-hunt-events');
@@ -241,6 +265,7 @@ function main(): void {
   const state = freshState(seed);
   const warmupTicks = runWarmup(state);
   const baselinePredators = (state.ecologySystem?.predatorPopulations || []).reduce((sum, population) => sum + Math.max(0, population.population), 0);
+  const baselineFauna = faunaSnapshot(state);
   const baselineHunts = huntSnapshot(state);
   const energy = new Map<string, EnergyTotals>();
   const validationTicks = runValidation(state, energy);
@@ -250,7 +275,8 @@ function main(): void {
   const species = speciesIds.map(speciesId => {
     const energyRow = energy.get(speciesId) || { demandKg: 0, intakeKg: 0, populationTicks: 0 };
     const hunt = hunts.get(speciesId) || {
-      attempts: 0, encounters: 0, attacks: 0, successfulKills: 0, carcassBiomassCreatedKg: 0,
+      attempts: 0, encounters: 0, attacks: 0, successfulKills: 0,
+      supplementalConsumedKg: 0, supplementalByResource: {}, carcassBiomassCreatedKg: 0,
       activeOwnedCarcasses: 0, remainingOwnedCarcassKg: 0, killsByPreySpecies: {}, killsByLifeStage: {},
     };
     const hunger = hungerRows.filter(row => row.speciesId === speciesId);
@@ -265,6 +291,9 @@ function main(): void {
       intakeKg: round3(energyRow.intakeKg),
       intakeDemandRatio: round3(energyRow.demandKg > 0 ? energyRow.intakeKg / energyRow.demandKg : 0),
       hunger: round3(weightedHunger),
+      supplementalConsumedKg: round3(hunt.supplementalConsumedKg),
+      supplementalDemandShare: round3(energyRow.demandKg > 0 ? hunt.supplementalConsumedKg / energyRow.demandKg : 0),
+      supplementalByResource: Object.fromEntries(Object.entries(hunt.supplementalByResource).map(([key, value]) => [key, round3(value)])),
       huntAttempts: hunt.attempts,
       huntEncounters: hunt.encounters,
       huntAttacks: hunt.attacks,
@@ -286,6 +315,7 @@ function main(): void {
     return acc;
   }, {});
   const currentPredators = species.reduce((sum, row) => sum + row.currentPopulation, 0);
+  const currentFauna = faunaSnapshot(state);
   const report = {
     seed,
     warmupDays: WARMUP_DAYS,
@@ -297,6 +327,12 @@ function main(): void {
     baselinePredators,
     currentPredators: round3(currentPredators),
     survivalShare: round3(baselinePredators > 0 ? currentPredators / baselinePredators : 0),
+    baselineFaunaSpecies: baselineFauna.filter(row => row.population > 0).length,
+    currentFaunaSpecies: currentFauna.filter(row => row.population > 0).length,
+    baselineFaunaPopulation: baselineFauna.reduce((sum, row) => sum + row.population, 0),
+    currentFaunaPopulation: currentFauna.reduce((sum, row) => sum + row.population, 0),
+    baselineFauna,
+    currentFauna,
     activeCarcasses: carcasses.length,
     remainingCarcassBiomassKg: round3(carcasses.reduce((sum, carcass) => sum + carcass.remainingMassKg, 0)),
     remainingCarcassEdibleKg: round3(carcasses.reduce((sum, carcass) => sum + carcass.remainingEdibleKg, 0)),
