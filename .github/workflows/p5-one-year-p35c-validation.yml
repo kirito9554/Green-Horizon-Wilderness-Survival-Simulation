@@ -41,12 +41,12 @@ jobs:
           s = s.replace(old_exit, "else if (gateFailures.length > 0) process.exitCode = 2;", 1)
           p.write_text(s)
           PY
-      - name: Run calibrated coupled one-year gate
-        run: npx tsx scripts/p5-coupled-fast-gate.ts --coarse-aquatic-substep=360 --out=artifacts/p5-one-year-p35c
+      - name: Run calibrated coupled one-year gate (3h aquatic)
+        run: npx tsx scripts/p5-coupled-fast-gate.ts --coarse-aquatic-substep=180 --out=artifacts/p5-one-year-p35c-3h
       - name: Upload one-year gate report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p5-one-year-p35c-report
-          path: artifacts/p5-one-year-p35c/p5-coupled-fast-report.json
+          name: p5-one-year-p35c-3h-report
+          path: artifacts/p5-one-year-p35c-3h/p5-coupled-fast-report.json
           if-no-files-found: warn
