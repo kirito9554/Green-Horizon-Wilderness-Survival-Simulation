@@ -12,6 +12,7 @@ import { WILD_FAUNA_SPECIES } from '../data/ecologyFauna';
 import { WILD_PREDATOR_SPECIES, type WildPredatorSpeciesDefinition } from '../data/ecologyPredators';
 import { ensureRegionEcology, ensureWorldEcology } from './ecologySystem';
 import { ensureRegionWildFauna, ensureWildFauna } from './ecologyFaunaSystem';
+import { getPredatorAccessibleWaterRatio, getPredatorFoodSupport } from './predatorResourceAccess';
 
 function clamp(value: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, Math.round(value * 1000) / 1000));
@@ -261,8 +262,8 @@ function predatorScore(
   species: WildPredatorSpeciesDefinition,
 ): number {
   const habitat = getPredatorHabitatSuitability(subarea, species);
-  const preyBiomass = preyBiomassForPredator(system, subarea.id, species);
-  const preyScore = clamp01(preyBiomass / Math.max(1.5, species.dailyFoodKgPerAdult * 12));
+  const foodSupport = getPredatorFoodSupport(system, [subarea.id], species, subarea.poiId);
+  const preyScore = clamp01(foodSupport.effectiveFoodBiomassKg / Math.max(1.5, species.dailyFoodKgPerAdult * 12));
   const water = clamp01(subarea.environment.waterAccess / Math.max(20, species.dailyWaterNeed));
   const humanPenalty = Math.max(0, subarea.disturbance.humanPressure - species.disturbanceTolerance) / 125;
   return habitat * 0.48 + preyScore * 0.36 + water * 0.16 - humanPenalty;
@@ -340,9 +341,9 @@ function estimatePredatorCarryingCapacity(
   const areaM2 = subareas.reduce((sum, subarea) => sum + subarea.areaM2, 0);
   const baseK = Math.max(0.25, areaM2 / 1000 * species.baseDensityPer1000M2);
   const habitat = subareas.reduce((sum, subarea) => sum + getPredatorHabitatSuitability(subarea, species), 0) / subareas.length;
-  const preyBiomass = subareas.reduce((sum, subarea) => sum + preyBiomassForPredator(system, subarea.id, species), 0);
-  const preySupport = preyBiomass / Math.max(0.2, species.dailyFoodKgPerAdult * 8);
-  const water = subareas.reduce((sum, subarea) => sum + clamp01(subarea.environment.waterAccess / Math.max(20, species.dailyWaterNeed)), 0) / subareas.length;
+  const foodSupport = getPredatorFoodSupport(system, subareaIds, species, subareas[0].poiId);
+  const preySupport = foodSupport.supportedAdultEquivalents;
+  const water = getPredatorAccessibleWaterRatio(state, system, subareaIds, species, subareas[0].poiId);
   const disturbance = subareas.reduce((sum, subarea) => {
     const excess = Math.max(0, subarea.disturbance.humanPressure - species.disturbanceTolerance);
     return sum + (1 - excess / 125);
@@ -364,7 +365,7 @@ function createPredatorPopulation(
     .map(subarea => ({ subarea, score: predatorScore(system, subarea, species) + random() * 0.07 }))
     .sort((a, b) => b.score - a.score);
   const current = ranked[0]?.subarea;
-  if (!current || preyBiomassForPredator(system, current.id, species) <= 0.15) return undefined;
+  if (!current || getPredatorFoodSupport(system, [current.id], species, poiId).effectiveFoodBiomassKg <= 0.15) return undefined;
 
   const desiredHomeRange = Math.min(
     subareas.length,
@@ -428,7 +429,7 @@ export function ensureRegionWildPredators(state: GameState, poiId: string): Wild
     .map(species => {
       const affinity = species.regionAffinity[region.poiId] || 0;
       const bestHabitat = subareas.reduce((best, subarea) => Math.max(best, getPredatorHabitatSuitability(subarea, species)), 0);
-      const preySupport = subareas.reduce((sum, subarea) => sum + preyBiomassForPredator(system, subarea.id, species), 0);
+      const preySupport = getPredatorFoodSupport(system, region.subareaIds, species, region.poiId).effectiveFoodBiomassKg;
       return { species, affinity, bestHabitat, preySupport, score: affinity * 0.5 + bestHabitat * 0.25 + clamp01(preySupport / 18) * 0.25 };
     })
     .filter(entry => entry.affinity > 0.05 && entry.bestHabitat > 0.08 && entry.preySupport > 0.18)
@@ -621,7 +622,10 @@ function tickPredatorPopulation(state: GameState, population: WildPredatorPopula
   const elapsedDays = elapsedMinutes / 1440;
   const huntResult = hunt(state, population, species, subarea, elapsedDays);
   const energyCoverage = applyPredatorEnergyAccounting(population, species, elapsedDays, huntResult.edibleKg);
-  const waterRatio = clamp01(subarea.environment.waterAccess / Math.max(20, species.dailyWaterNeed));
+  const waterRangeIds = [...new Set([...population.homeRangeSubareaIds, population.currentSubareaId])];
+  const waterRatio = getPredatorAccessibleWaterRatio(
+    state, system, waterRangeIds, species, population.poiId, population.currentSubareaId,
+  );
 
   // Hunger is an acute stress signal, not a second copy of the energy ledger.
   // Partial coverage still raises pressure, but it does so gradually enough for
