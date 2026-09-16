@@ -237,7 +237,7 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     maxAquaticDietShare: 0.7,
     aquaticForagingReachHops: 2,
     riparianForagingReachHops: 2,
-    adultWeightKg: 180, dailyFoodKgPerAdult: 1.05, dailyWaterNeed: 90,
+    adultWeightKg: 180, dailyFoodKgPerAdult: 0.60, dailyWaterNeed: 90,
     maxKillsPerAdultPerDay: 0.08, halfSaturationPreyPer1000M2: 5,
     idealPredatorPreyBiomassRatio: 0.14, minimumViablePreyCount: 3,
     maxAdultPreyKg: 90, juvenilePreference: 0.45,
