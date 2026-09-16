@@ -35,6 +35,9 @@ jobs:
       - name: Spatial world geometry and route smoke test
         run: npm run test:spatial-world
 
+      - name: Metric spatial fauna community smoke test
+        run: npm run test:spatial-fauna
+
       - name: World ecology foundation smoke test
         run: npm run test:ecology
 
