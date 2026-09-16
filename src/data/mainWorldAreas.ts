@@ -45,7 +45,7 @@ export const LEGACY_MAIN_AREA_REDIRECTS: Readonly<Record<string, MainWorldAreaId
 
   AREA_CLAY_PIT: 'AREA_MANGROVE_EDGE',
 
-  // Synthetic/early-prototype areas that were never part of the current map.
+  // Synthetic/early-prototype save aliases that were never part of the current map.
   AREA_COASTAL_SHALLOWS: 'AREA_FISHING_LAGOON',
   AREA_RIVERBANK: 'AREA_WATERFALL_BASIN',
 };
@@ -87,15 +87,15 @@ export function isArchivedLegacyAreaId(areaId: string): boolean {
 
 export type WorldAreaLifecycle = 'active' | 'redirect-legacy' | 'archived-legacy' | 'unknown';
 
-/** Explicit snapshot of every database area that must not act as an active macro region. */
+/** Explicit snapshots used by new world systems; neither list may enter macro geometry. */
 export const ARCHIVED_LEGACY_AREA_IDS = Object.freeze(
   Object.keys(AREAS_DATABASE).filter(isArchivedLegacyAreaId),
 );
 
-export const ALL_LEGACY_AREA_IDS = Object.freeze([
-  ...LEGACY_MAIN_AREA_IDS,
-  ...ARCHIVED_LEGACY_AREA_IDS,
-]);
+/** Every non-canonical entry that actually exists in the current area database. */
+export const ALL_LEGACY_AREA_IDS = Object.freeze(
+  Object.keys(AREAS_DATABASE).filter(areaId => !isMainWorldAreaId(areaId)),
+);
 
 export function getWorldAreaLifecycle(areaId: string): WorldAreaLifecycle {
   if (isMainWorldAreaId(areaId)) return 'active';
