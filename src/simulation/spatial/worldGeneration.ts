@@ -20,8 +20,12 @@ import {
   type GeneratedLocalSite,
   type GeneratedLocalSitePool,
 } from './localSiteGeneration';
+import {
+  aggregateLocalSiteInfluenceByPatch,
+  type LocalSitePatchInfluence,
+} from './localSiteProfiles';
 
-export const SPATIAL_WORLD_GENERATION_VERSION = 3;
+export const SPATIAL_WORLD_GENERATION_VERSION = 4;
 
 export interface GeneratedSpatialWorld {
   generationVersion: number;
@@ -33,6 +37,11 @@ export interface GeneratedSpatialWorld {
   /** Seed + generated terrain choose a subset of the full site vocabulary for this campaign. */
   localSitePool: GeneratedLocalSitePool;
   localSites: readonly GeneratedLocalSite[];
+  /**
+   * Read-only semantic layer derived from spawned local sites. Live fauna/resource
+   * balance does not consume this yet; future systems can use it without hardcoding site names.
+   */
+  localSiteInfluenceByPatchId: Readonly<Record<string, LocalSitePatchInfluence>>;
 }
 
 /**
@@ -50,6 +59,7 @@ export function generateSpatialWorld(worldSeed: string): GeneratedSpatialWorld {
   const hydrology = generateTerrainHydrology(habitatPatches, routeGraph);
   const localSitePool = generateLocalSitePool(worldSeed, habitatPatches, hydrology);
   const localSites = Object.freeze(generateLocalSites(worldSeed, habitatPatches, hydrology, localSitePool));
+  const localSiteInfluenceByPatchId = aggregateLocalSiteInfluenceByPatch(localSites);
 
   return Object.freeze({
     generationVersion: SPATIAL_WORLD_GENERATION_VERSION,
@@ -60,6 +70,7 @@ export function generateSpatialWorld(worldSeed: string): GeneratedSpatialWorld {
     hydrology,
     localSitePool,
     localSites,
+    localSiteInfluenceByPatchId,
   });
 }
 
