@@ -608,6 +608,29 @@ function huntSearchability(
   return { functionalResponse, refugia, searchability };
 }
 
+function adaptivePreyAvailability(
+  populationDensity: number,
+  biomassDensity: number,
+  communityPopulationDensity: number,
+  communityBiomassDensity: number,
+  accessiblePopulation: number,
+  minimumViablePreyCount: number,
+): number {
+  // P3.6: availability is relative to the prey community this predator can
+  // actually reach. Head-count density lets abundant small prey rise in
+  // value; biomass density preserves the benefit of medium/large prey.
+  // Scarcity suppression makes depleted species progressively inefficient
+  // to search for instead of hard-banning them from the diet.
+  const populationShare = clamp01(populationDensity / Math.max(0.001, communityPopulationDensity));
+  const biomassShare = clamp01(biomassDensity / Math.max(0.001, communityBiomassDensity));
+  const densitySignal = Math.pow(populationShare, 0.55) * 0.64
+    + Math.pow(biomassShare, 0.55) * 0.36;
+  const recoveryPopulation = Math.max(12, minimumViablePreyCount * 6);
+  const scarcityRecovery = clamp01(accessiblePopulation / recoveryPopulation);
+  const scarcityMultiplier = 0.08 + scarcityRecovery * 0.92;
+  return Math.max(0.001, densitySignal * scarcityMultiplier);
+}
+
 function collectHuntTargets(
   state: GameState,
   population: WildPredatorPopulation,
@@ -616,7 +639,7 @@ function collectHuntTargets(
   const system = ensureWildPredators(state);
   const homeRange = new Set(population.homeRangeSubareaIds.length ? population.homeRangeSubareaIds : [population.currentSubareaId]);
   homeRange.add(population.currentSubareaId);
-  return (system.animalPopulations || [])
+  const rawTargets = (system.animalPopulations || [])
     .filter(prey => prey.population > 1)
     .map(prey => {
       const preference = species.preyWeights[prey.speciesId] || 0;
@@ -632,24 +655,60 @@ function collectHuntTargets(
       const search = subarea && accessibility > 0
         ? huntSearchability(prey, subarea, species, accessibility)
         : { functionalResponse: 0, refugia: 0, searchability: 0 };
-      const targetWeight = preference > 0 && energeticValue > 0
-        ? preference
-          * Math.pow(Math.max(1, prey.population), 0.35)
-          * energeticValue
-          * (0.3 + search.searchability * 0.7)
-        : 0;
+      const areaPer1000 = Math.max(0.1, (subarea?.areaM2 || 1000) / 1000);
       return {
         prey,
         subarea,
         accessibility,
         preference,
+        energeticValue,
         functionalResponse: search.functionalResponse,
         refugia: search.refugia,
         searchability: search.searchability,
-        targetWeight,
+        accessiblePopulation: prey.population * accessibility,
+        populationDensity: prey.population / areaPer1000 * accessibility,
+        biomassDensity: prey.biomassKg / areaPer1000 * accessibility,
       };
     })
-    .filter((entry): entry is HuntTarget => Boolean(entry.subarea && entry.preference > 0 && entry.accessibility > 0 && entry.targetWeight > 0));
+    .filter(entry => Boolean(entry.subarea && entry.preference > 0 && entry.accessibility > 0 && entry.energeticValue > 0));
+
+  const speciesDensity = new Map<string, { population: number; populationDensity: number; biomassDensity: number }>();
+  for (const entry of rawTargets) {
+    const row = speciesDensity.get(entry.prey.speciesId) || { population: 0, populationDensity: 0, biomassDensity: 0 };
+    row.population += entry.accessiblePopulation;
+    row.populationDensity += entry.populationDensity;
+    row.biomassDensity += entry.biomassDensity;
+    speciesDensity.set(entry.prey.speciesId, row);
+  }
+  const communityPopulationDensity = [...speciesDensity.values()].reduce((sum, row) => sum + row.populationDensity, 0);
+  const communityBiomassDensity = [...speciesDensity.values()].reduce((sum, row) => sum + row.biomassDensity, 0);
+
+  return rawTargets
+    .map(entry => {
+      const density = speciesDensity.get(entry.prey.speciesId)!;
+      const availability = adaptivePreyAvailability(
+        density.populationDensity,
+        density.biomassDensity,
+        communityPopulationDensity,
+        communityBiomassDensity,
+        density.population,
+        species.minimumViablePreyCount,
+      );
+      return {
+        prey: entry.prey,
+        subarea: entry.subarea,
+        accessibility: entry.accessibility,
+        preference: entry.preference,
+        functionalResponse: entry.functionalResponse,
+        refugia: entry.refugia,
+        searchability: entry.searchability,
+        targetWeight: entry.preference
+          * entry.energeticValue
+          * availability
+          * (0.3 + entry.searchability * 0.7),
+      };
+    })
+    .filter((entry): entry is HuntTarget => Boolean(entry.subarea && entry.targetWeight > 0));
 }
 
 function removeOnePrey(prey: WildAnimalPopulation, stage: WildAnimalLifeStage): number {
@@ -729,7 +788,8 @@ function collectAquaticHuntTargets(
   const current = system.subareasById[population.currentSubareaId];
   const waterAccess = clamp01(((current?.environment.waterAccess || 0) - 20) / 75);
   if (waterAccess <= 0 || !Object.keys(weights).length) return [];
-  return (system.aquaticPopulations || [])
+
+  const rawTargets = (system.aquaticPopulations || [])
     .filter(prey => prey.population > 3 && (weights[prey.speciesId] || 0) > 0)
     .map(prey => {
       const preference = weights[prey.speciesId] || 0;
@@ -748,15 +808,52 @@ function collectAquaticHuntTargets(
       const searchability = clamp01(Math.sqrt(abundance) * (0.55 + waterAccess * 0.45) * (0.78 + condition * 0.22) * poiAccess);
       const waterNodeId = prey.occupiedNodeIds.find(id => state.hydrologySystem?.nodesById?.[id]?.poiId === population.poiId)
         || prey.anchorNodeId;
+      const occupiedNodes = Math.max(1, prey.occupiedNodeIds.length);
       return {
         prey,
         preference,
         searchability,
         waterNodeId,
-        targetWeight: preference * Math.pow(Math.max(1, prey.population), 0.35) * energeticValue * (0.35 + searchability * 0.65),
+        energeticValue,
+        accessiblePopulation: prey.population * poiAccess,
+        populationDensity: prey.population / occupiedNodes * poiAccess,
+        biomassDensity: prey.biomassKg / occupiedNodes * poiAccess,
       };
     })
-    .filter(entry => entry.targetWeight > 0 && Boolean(state.hydrologySystem?.nodesById?.[entry.waterNodeId]));
+    .filter(entry => entry.preference > 0 && entry.energeticValue > 0 && entry.searchability > 0 && Boolean(state.hydrologySystem?.nodesById?.[entry.waterNodeId]));
+
+  const speciesDensity = new Map<string, { population: number; populationDensity: number; biomassDensity: number }>();
+  for (const entry of rawTargets) {
+    const row = speciesDensity.get(entry.prey.speciesId) || { population: 0, populationDensity: 0, biomassDensity: 0 };
+    row.population += entry.accessiblePopulation;
+    row.populationDensity += entry.populationDensity;
+    row.biomassDensity += entry.biomassDensity;
+    speciesDensity.set(entry.prey.speciesId, row);
+  }
+  const communityPopulationDensity = [...speciesDensity.values()].reduce((sum, row) => sum + row.populationDensity, 0);
+  const communityBiomassDensity = [...speciesDensity.values()].reduce((sum, row) => sum + row.biomassDensity, 0);
+
+  return rawTargets.map(entry => {
+    const density = speciesDensity.get(entry.prey.speciesId)!;
+    const availability = adaptivePreyAvailability(
+      density.populationDensity,
+      density.biomassDensity,
+      communityPopulationDensity,
+      communityBiomassDensity,
+      density.population,
+      species.minimumViablePreyCount,
+    );
+    return {
+      prey: entry.prey,
+      preference: entry.preference,
+      searchability: entry.searchability,
+      waterNodeId: entry.waterNodeId,
+      targetWeight: entry.preference
+        * entry.energeticValue
+        * availability
+        * (0.35 + entry.searchability * 0.65),
+    };
+  }).filter(entry => entry.targetWeight > 0);
 }
 
 function removeOneAquaticPrey(prey: WildAquaticPopulation, stage: WildAnimalLifeStage): number {
