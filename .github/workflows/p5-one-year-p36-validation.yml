@@ -1,0 +1,51 @@
+name: P5 One-Year P3.6 Validation
+
+on:
+  push:
+    branches:
+      - validation/p5-one-year-p36
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p5-one-year-p36
+  cancel-in-progress: true
+
+jobs:
+  validate-one-year:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Prepare one-year-only diagnostic harness
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/p5-coupled-fast-gate.ts')
+          s = p.read_text()
+          old = "if (calibrationFailures.length === 0 && gateFailures.length === 0) {"
+          if old not in s:
+              raise SystemExit('five-year gate condition not found')
+          s = s.replace(old, "if (false && calibrationFailures.length === 0 && gateFailures.length === 0) {", 1)
+          old_exit = "else if (gateFailures.length > 0 || fiveYearGateFailures.length > 0 || !fiveYear) process.exitCode = 2;"
+          if old_exit not in s:
+              raise SystemExit('gate exit condition not found')
+          s = s.replace(old_exit, "else if (gateFailures.length > 0) process.exitCode = 2;", 1)
+          p.write_text(s)
+          PY
+      - name: Run calibrated coupled one-year gate (3h aquatic)
+        run: npx tsx scripts/p5-coupled-fast-gate.ts --coarse-aquatic-substep=180 --out=artifacts/p5-one-year-p36
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p5-one-year-p36-report
+          path: artifacts/p5-one-year-p36/p5-coupled-fast-report.json
+          if-no-files-found: warn
