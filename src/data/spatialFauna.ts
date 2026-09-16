@@ -76,7 +76,7 @@ function fromLegacy(id: string, overrides: SpatialMetricOverrides): SpatialFauna
     worldPresence: overrides.worldPresence ?? 1,
     minPatchSuitability: overrides.minPatchSuitability ?? .34,
     minIslandCapacity: overrides.minIslandCapacity ?? 4,
-    initialOccupancy: overrides.initialOccupancy ?? [.56, .76],
+    initialOccupancy: overrides.initialOccupancy ?? ([.56, .76] as const),
     maturityDays: source.maturityDays,
     maxAgeDays: source.maxAgeDays,
     offspringPerAdultFemalePerYear: source.offspringPerAdultFemalePerYear,
