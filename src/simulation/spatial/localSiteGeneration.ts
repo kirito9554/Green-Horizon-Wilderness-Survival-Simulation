@@ -3,35 +3,32 @@ import { pointInPolygon, type WorldPointMeters } from '../../data/worldGeometry'
 import type { HabitatPatch, TerrainTag } from './habitatPatches';
 import type { GeneratedTerrainHydrology, PatchHydrologyState } from './terrainHydrology';
 import {
+  NATURAL_SITE_ARCHETYPES,
+  type LocalSiteArchetype,
+  type LocalSiteCategory,
+  type LocalSiteRarity,
+  type LocalSiteType,
+} from './localSiteCatalog';
+import {
   samplePointInPolygon,
   spatialUnitRandom,
   stableSpatialId,
 } from './spatialRandom';
 
-export type LocalSiteType =
-  | 'plane_wreck'
-  | 'limestone_cavern'
-  | 'ruin_complex'
-  | 'freshwater_seep'
-  | 'animal_trail'
-  | 'wildlife_nest'
-  | 'giant_kapok'
-  | 'medicinal_glade'
-  | 'clay_bank'
-  | 'fallen_giant'
-  | 'root_hollow'
-  | 'rock_shelter'
-  | 'fruit_grove'
-  | 'canopy_gap'
-  | 'mud_crossing'
-  | 'tidal_pool'
-  | 'cave_shaft'
-  | 'waterfall_pool';
+export type {
+  LocalSiteCategory,
+  LocalSiteRarity,
+  LocalSiteType,
+  NaturalLocalSiteType,
+  RequiredLocalSiteType,
+} from './localSiteCatalog';
 
 export interface GeneratedLocalSite {
   id: string;
   seed: number;
   type: LocalSiteType;
+  category: LocalSiteCategory;
+  rarity: LocalSiteRarity;
   parentRegionId: MainWorldAreaId;
   patchId: string;
   position: WorldPointMeters;
@@ -46,97 +43,161 @@ export interface GeneratedLocalSite {
   tags: readonly string[];
 }
 
-interface LocalSiteArchetype {
-  type: LocalSiteType;
+export interface LocalSitePoolEntry {
+  type: LocalSiteArchetype['type'];
   label: string;
-  baseWeight: number;
+  category: LocalSiteArchetype['category'];
+  rarity: LocalSiteRarity;
+  worldSupport: number;
+  minWorldSupport: number;
+  seedAffinity: number;
+  enabled: boolean;
+  core: boolean;
+}
+
+export interface GeneratedLocalSitePool {
+  worldSeed: string;
+  /** Stable signature useful for save diagnostics and regression tests. */
+  signature: string;
+  enabledTypes: readonly LocalSiteArchetype['type'][];
+  disabledTypes: readonly LocalSiteArchetype['type'][];
+  entries: readonly LocalSitePoolEntry[];
+  enabledByCategory: Readonly<Record<Exclude<LocalSiteCategory, 'landmark'>, number>>;
+}
+
+interface SitePlacementArchetype {
+  type: LocalSiteType;
+  category: LocalSiteCategory;
+  rarity: LocalSiteRarity;
   radiusRange: readonly [number, number];
   discoveryBase: number;
   legacyConceptId?: string;
   tags: readonly string[];
-  score: (patch: HabitatPatch, hydrology: PatchHydrologyState) => number;
 }
 
 const hasTerrain = (patch: HabitatPatch, tag: TerrainTag): boolean => patch.terrainTags.includes(tag);
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
 
-const NATURAL_SITE_ARCHETYPES: readonly LocalSiteArchetype[] = [
-  {
-    type: 'freshwater_seep', label: 'Freshwater Seep', baseWeight: .7, radiusRange: [18, 55], discoveryBase: 48,
-    tags: ['water', 'freshwater', 'forage'],
-    score: (patch, hydro) => clamp01(hydro.waterIndex * .55 + patch.terrain.wetness * .3 + patch.terrain.drainage * .15),
-  },
-  {
-    type: 'animal_trail', label: 'Animal Trail', baseWeight: 1.3, radiusRange: [35, 110], discoveryBase: 34,
-    legacyConceptId: 'AREA_JUNGLE_TRAIL', tags: ['trail', 'wildlife', 'travel'],
-    score: patch => clamp01(patch.suitability.forage * .4 + patch.suitability.cover * .3 + (1 - patch.suitability.disturbance) * .2 + .1),
-  },
-  {
-    type: 'wildlife_nest', label: 'Wildlife Nest', baseWeight: .78, radiusRange: [18, 60], discoveryBase: 58,
-    legacyConceptId: 'AREA_WILDLIFE_NEST', tags: ['wildlife', 'nest', 'encounter'],
-    score: patch => clamp01(patch.suitability.cover * .45 + patch.suitability.canopy * .25 + patch.suitability.forage * .2 - patch.suitability.disturbance * .25),
-  },
-  {
-    type: 'giant_kapok', label: 'Giant Kapok', baseWeight: .32, radiusRange: [24, 70], discoveryBase: 56,
-    legacyConceptId: 'AREA_KAPOK_GROVE', tags: ['tree', 'landmark', 'canopy'],
-    score: patch => clamp01(patch.suitability.canopy * .65 + patch.suitability.cover * .18 - patch.suitability.disturbance * .35),
-  },
-  {
-    type: 'medicinal_glade', label: 'Medicinal Glade', baseWeight: .48, radiusRange: [25, 75], discoveryBase: 62,
-    legacyConceptId: 'AREA_MEDICINAL_GLADE', tags: ['plants', 'medicine', 'forage'],
-    score: patch => clamp01(patch.suitability.forage * .45 + patch.suitability.moisture * .28 + (1 - patch.suitability.canopy) * .15 + .12),
-  },
-  {
-    type: 'clay_bank', label: 'Clay Bank', baseWeight: .44, radiusRange: [20, 70], discoveryBase: 44,
-    legacyConceptId: 'AREA_CLAY_PIT', tags: ['clay', 'water', 'material'],
-    score: (patch, hydro) => clamp01(patch.terrain.wetness * .4 + hydro.waterIndex * .32 + (hasTerrain(patch, 'rock') ? -.28 : .2)),
-  },
-  {
-    type: 'fallen_giant', label: 'Fallen Giant', baseWeight: .62, radiusRange: [25, 85], discoveryBase: 38,
-    tags: ['tree', 'shelter', 'insects'],
-    score: patch => clamp01(patch.suitability.canopy * .42 + patch.terrain.roughness * .24 + patch.suitability.cover * .26),
-  },
-  {
-    type: 'root_hollow', label: 'Root Hollow', baseWeight: .58, radiusRange: [12, 42], discoveryBase: 66,
-    tags: ['shelter', 'roots', 'wildlife'],
-    score: patch => clamp01(patch.suitability.cover * .45 + patch.suitability.canopy * .3 + patch.terrain.roughness * .18),
-  },
-  {
-    type: 'rock_shelter', label: 'Rock Shelter', baseWeight: .5, radiusRange: [18, 65], discoveryBase: 54,
-    tags: ['rock', 'shelter', 'dry'],
-    score: patch => clamp01((hasTerrain(patch, 'rock') ? .52 : 0) + patch.terrain.roughness * .28 + patch.terrain.drainage * .16),
-  },
-  {
-    type: 'fruit_grove', label: 'Fruiting Grove', baseWeight: .6, radiusRange: [28, 90], discoveryBase: 46,
-    tags: ['food', 'plants', 'wildlife'],
-    score: patch => clamp01(patch.suitability.forage * .62 + patch.suitability.canopy * .2 - patch.suitability.disturbance * .12),
-  },
-  {
-    type: 'canopy_gap', label: 'Canopy Gap', baseWeight: .45, radiusRange: [35, 105], discoveryBase: 28,
-    tags: ['clearing', 'sunlight', 'building'],
-    score: patch => clamp01((1 - patch.suitability.canopy) * .5 + patch.suitability.disturbance * .32 + (hasTerrain(patch, 'open_ground') ? .28 : 0)),
-  },
-  {
-    type: 'mud_crossing', label: 'Mud Crossing', baseWeight: .42, radiusRange: [22, 80], discoveryBase: 32,
-    tags: ['mud', 'crossing', 'travel', 'water'],
-    score: (patch, hydro) => clamp01((hasTerrain(patch, 'mud') ? .42 : 0) + patch.terrain.wetness * .3 + hydro.waterIndex * .28),
-  },
-  {
-    type: 'tidal_pool', label: 'Tidal Pool', baseWeight: .5, radiusRange: [12, 50], discoveryBase: 30,
-    tags: ['coastal', 'tidal', 'aquatic', 'food'],
-    score: patch => clamp01((hasTerrain(patch, 'tidal') ? .55 : 0) + (hasTerrain(patch, 'coastal') ? .25 : 0) + patch.suitability.aquatic * .2),
-  },
-  {
-    type: 'cave_shaft', label: 'Karst Shaft', baseWeight: .28, radiusRange: [10, 45], discoveryBase: 72,
-    tags: ['cave', 'rock', 'hazard'],
-    score: patch => clamp01((patch.habitat === 'karst_forest' || patch.habitat === 'cave_mouth' ? .58 : 0) + (hasTerrain(patch, 'rock') ? .22 : 0) + patch.terrain.roughness * .2),
-  },
-  {
-    type: 'waterfall_pool', label: 'Cascade Pool', baseWeight: .34, radiusRange: [20, 70], discoveryBase: 48,
-    tags: ['water', 'rock', 'freshwater', 'fishing'],
-    score: (patch, hydro) => clamp01((hydro.watercourse === 'river' || hydro.watercourse === 'stream' ? .42 : 0) + patch.terrain.slope * .28 + patch.suitability.aquatic * .3),
-  },
-];
+const CATEGORY_POOL_QUOTAS: Readonly<Record<Exclude<LocalSiteCategory, 'landmark'>, readonly [number, number]>> = {
+  water: [7, 10],
+  terrain: [6, 9],
+  vegetation: [8, 12],
+  wildlife: [8, 12],
+  coastal: [4, 7],
+  disturbance: [2, 4],
+};
+
+const RARITY_POOL_MULTIPLIER: Readonly<Record<LocalSiteRarity, number>> = {
+  common: 1,
+  uncommon: .91,
+  rare: .74,
+  exceptional: .52,
+};
+
+function worldSupportForArchetype(
+  archetype: LocalSiteArchetype,
+  patches: readonly HabitatPatch[],
+  hydrology: GeneratedTerrainHydrology,
+): number {
+  const scores: number[] = [];
+  for (const patch of patches) {
+    const hydro = hydrology.byPatchId[patch.id];
+    if (!hydro) continue;
+    scores.push(clamp01(archetype.score(patch, hydro)));
+  }
+  scores.sort((a, b) => b - a);
+  if (scores.length === 0) return 0;
+
+  // Mean of the best few patches answers "does this world contain a meaningful
+  // niche for this feature?" without allowing one anomalous cell to activate it.
+  const topCount = Math.min(12, Math.max(4, Math.ceil(scores.length * .025)));
+  const top = scores.slice(0, topCount);
+  return top.reduce((sum, value) => sum + value, 0) / top.length;
+}
+
+/**
+ * Select the local-site vocabulary for one campaign. Macro geography is stable,
+ * but terrain support + the world seed choose only a subset of the full catalog.
+ * This makes different runs ecologically distinct instead of forcing every site
+ * archetype to appear on every island.
+ */
+export function generateLocalSitePool(
+  worldSeed: string,
+  patches: readonly HabitatPatch[],
+  hydrology: GeneratedTerrainHydrology,
+): GeneratedLocalSitePool {
+  const candidates = NATURAL_SITE_ARCHETYPES.map(archetype => {
+    const worldSupport = worldSupportForArchetype(archetype, patches, hydrology);
+    const seedAffinity = .66 + spatialUnitRandom(worldSeed, `site-pool-affinity|${archetype.type}`) * .68;
+    return {
+      archetype,
+      worldSupport,
+      seedAffinity,
+      supported: worldSupport >= archetype.pool.minWorldSupport,
+    };
+  });
+
+  const enabled = new Set<LocalSiteArchetype['type']>();
+  for (const category of Object.keys(CATEGORY_POOL_QUOTAS) as Array<Exclude<LocalSiteCategory, 'landmark'>>) {
+    const supported = candidates.filter(candidate => candidate.archetype.category === category && candidate.supported);
+    if (supported.length === 0) continue;
+
+    const [minimum, maximum] = CATEGORY_POOL_QUOTAS[category];
+    const span = Math.max(0, maximum - minimum);
+    const target = Math.min(
+      supported.length,
+      minimum + Math.floor(spatialUnitRandom(worldSeed, `site-pool-quota|${category}`) * (span + 1)),
+    );
+
+    const core = supported.filter(candidate => candidate.archetype.pool.core);
+    for (const candidate of core) enabled.add(candidate.archetype.type);
+
+    const remaining = supported
+      .filter(candidate => !candidate.archetype.pool.core)
+      .sort((a, b) => {
+        const scoreA = a.worldSupport * a.seedAffinity * RARITY_POOL_MULTIPLIER[a.archetype.rarity];
+        const scoreB = b.worldSupport * b.seedAffinity * RARITY_POOL_MULTIPLIER[b.archetype.rarity];
+        if (scoreA !== scoreB) return scoreB - scoreA;
+        return a.archetype.type.localeCompare(b.archetype.type);
+      });
+
+    const desiredNonCore = Math.max(0, target - core.length);
+    for (const candidate of remaining.slice(0, desiredNonCore)) enabled.add(candidate.archetype.type);
+  }
+
+  const entries: LocalSitePoolEntry[] = candidates.map(candidate => Object.freeze({
+    type: candidate.archetype.type,
+    label: candidate.archetype.label,
+    category: candidate.archetype.category,
+    rarity: candidate.archetype.rarity,
+    worldSupport: candidate.worldSupport,
+    minWorldSupport: candidate.archetype.pool.minWorldSupport,
+    seedAffinity: candidate.seedAffinity,
+    enabled: enabled.has(candidate.archetype.type),
+    core: Boolean(candidate.archetype.pool.core),
+  }));
+
+  const enabledTypes = [...enabled].sort();
+  const disabledTypes = entries.filter(entry => !entry.enabled).map(entry => entry.type).sort();
+  const enabledByCategory: Record<Exclude<LocalSiteCategory, 'landmark'>, number> = {
+    water: 0,
+    terrain: 0,
+    vegetation: 0,
+    wildlife: 0,
+    coastal: 0,
+    disturbance: 0,
+  };
+  for (const entry of entries) if (entry.enabled) enabledByCategory[entry.category] += 1;
+
+  return Object.freeze({
+    worldSeed,
+    signature: enabledTypes.join('|'),
+    enabledTypes: Object.freeze(enabledTypes),
+    disabledTypes: Object.freeze(disabledTypes),
+    entries: Object.freeze(entries),
+    enabledByCategory: Object.freeze(enabledByCategory),
+  });
+}
 
 function localSiteCountForPatch(worldSeed: string, patch: HabitatPatch): number {
   const expected = patch.areaKm2 * (
@@ -156,13 +217,24 @@ function chooseArchetype(
   patch: HabitatPatch,
   hydrology: PatchHydrologyState,
   siteIndex: number,
-): LocalSiteArchetype {
-  const weighted = NATURAL_SITE_ARCHETYPES.map(archetype => {
-    const suitability = archetype.score(patch, hydrology);
-    const worldVariation = .72 + spatialUnitRandom(worldSeed, `site-weight|${patch.id}|${siteIndex}|${archetype.type}`) * .56;
-    return { archetype, weight: archetype.baseWeight * worldVariation * Math.pow(Math.max(.04, suitability), 1.7) };
-  });
+  enabledTypes: ReadonlySet<LocalSiteArchetype['type']>,
+): LocalSiteArchetype | undefined {
+  const weighted = NATURAL_SITE_ARCHETYPES
+    .filter(archetype => enabledTypes.has(archetype.type))
+    .map(archetype => {
+      const suitability = clamp01(archetype.score(patch, hydrology));
+      const worldVariation = .72 + spatialUnitRandom(worldSeed, `site-weight|${patch.id}|${siteIndex}|${archetype.type}`) * .56;
+      const localThreshold = archetype.rarity === 'exceptional' ? .34 : archetype.rarity === 'rare' ? .22 : .1;
+      const weight = suitability < localThreshold
+        ? 0
+        : archetype.baseWeight * worldVariation * Math.pow(Math.max(.04, suitability), 1.7);
+      return { archetype, weight };
+    })
+    .filter(item => item.weight > 0);
+
   const total = weighted.reduce((sum, item) => sum + item.weight, 0);
+  if (total <= 0 || weighted.length === 0) return undefined;
+
   let cursor = spatialUnitRandom(worldSeed, `site-pick|${patch.id}|${siteIndex}`) * total;
   for (const item of weighted) {
     cursor -= item.weight;
@@ -188,7 +260,7 @@ function sitePoint(
 function makeSite(
   worldSeed: string,
   patch: HabitatPatch,
-  archetype: LocalSiteArchetype,
+  archetype: SitePlacementArchetype,
   key: string,
   existing: readonly GeneratedLocalSite[],
 ): GeneratedLocalSite {
@@ -199,6 +271,8 @@ function makeSite(
     id: stableSpatialId(`SITE_${archetype.type.toUpperCase()}`, worldSeed, key),
     seed: Math.floor(spatialUnitRandom(worldSeed, `${key}|seed`) * 0x1_0000_0000) >>> 0,
     type: archetype.type,
+    category: archetype.category,
+    rarity: archetype.rarity,
     parentRegionId: patch.parentRegionId,
     patchId: patch.id,
     position: sitePoint(worldSeed, patch, key, existing),
@@ -237,15 +311,14 @@ const REQUIRED_MACRO_SITES: readonly RequiredMacroSiteDefinition[] = [
   },
 ];
 
-function requiredSiteArchetype(definition: RequiredMacroSiteDefinition): LocalSiteArchetype {
+function requiredSiteArchetype(definition: RequiredMacroSiteDefinition): SitePlacementArchetype {
   return {
     type: definition.type,
-    label: definition.type,
-    baseWeight: 1,
+    category: 'landmark',
+    rarity: 'exceptional',
     radiusRange: definition.radiusRange,
     discoveryBase: definition.discoveryBase,
     tags: definition.tags,
-    score: patch => definition.score(patch),
   };
 }
 
@@ -267,8 +340,10 @@ export function generateLocalSites(
   worldSeed: string,
   patches: readonly HabitatPatch[],
   hydrology: GeneratedTerrainHydrology,
+  pool: GeneratedLocalSitePool = generateLocalSitePool(worldSeed, patches, hydrology),
 ): GeneratedLocalSite[] {
   const sites: GeneratedLocalSite[] = [];
+  const enabledTypes = new Set(pool.enabledTypes);
 
   // Macro identity is stable between runs, but the exact patch and metric
   // position of each landmark is chosen from the generated local terrain.
@@ -290,7 +365,8 @@ export function generateLocalSites(
     if (!hydrologyState) continue;
     const count = localSiteCountForPatch(worldSeed, patch);
     for (let siteIndex = 0; siteIndex < count; siteIndex += 1) {
-      const archetype = chooseArchetype(worldSeed, patch, hydrologyState, siteIndex);
+      const archetype = chooseArchetype(worldSeed, patch, hydrologyState, siteIndex, enabledTypes);
+      if (!archetype) continue;
       const key = `natural|${patch.id}|${siteIndex}|${archetype.type}`;
       sites.push(makeSite(worldSeed, patch, archetype, key, sites));
     }
