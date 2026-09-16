@@ -1,0 +1,40 @@
+name: Apply P3.4 Large Aquatic Prey
+
+on:
+  push:
+    branches:
+      - feature/aquatic-detrital-food-web-p34-impl
+    paths:
+      - '.github/workflows/p34-apply-large-aquatic-prey.yml'
+      - 'scripts/apply-p34-large-aquatic-prey.py'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/aquatic-detrital-food-web-p34-impl
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Apply large aquatic prey ladder
+        run: python scripts/apply-p34-large-aquatic-prey.py
+      - name: Typecheck
+        run: npm run lint
+      - name: Run 90-day aquatic predator probe
+        run: npx tsx scripts/predator-hunt-event-probe.ts --out=artifacts/predator-aquatic-detrital
+      - name: Commit large aquatic prey ladder
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/ecologyAquatic.ts src/data/ecologyPredators.ts
+          git commit -m "feat: add medium and large aquatic prey tiers"
+          git push origin HEAD:feature/aquatic-detrital-food-web-p34-impl
