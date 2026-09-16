@@ -19,6 +19,7 @@
     "test:agriculture": "tsx scripts/agriculture-simulation-smoke.ts",
     "test:poi-migration": "tsx scripts/main-world-area-migration-smoke.ts",
     "test:spatial-world": "tsx scripts/spatial-world-smoke.ts",
+    "test:spatial-fauna": "tsx scripts/spatial-fauna-community-smoke.ts",
     "test:ecology": "tsx scripts/ecology-simulation-smoke.ts",
     "test:ecology-fauna": "tsx scripts/ecology-fauna-smoke.ts",
     "test:ecology-predators": "tsx scripts/ecology-predator-smoke.ts",
