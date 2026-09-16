@@ -20,6 +20,7 @@
     "test:poi-migration": "tsx scripts/main-world-area-migration-smoke.ts",
     "test:ecology": "tsx scripts/ecology-simulation-smoke.ts",
     "test:ecology-fauna": "tsx scripts/ecology-fauna-smoke.ts",
+    "test:ecology-demography": "tsx scripts/ecology-breeding-cohort-smoke.ts",
     "test:ecology-predators": "tsx scripts/ecology-predator-smoke.ts",
     "test:ecology-aquatic": "tsx scripts/ecology-aquatic-smoke.ts",
     "test:ecology-aquatic-food": "tsx scripts/aquatic-food-web-smoke.ts",
