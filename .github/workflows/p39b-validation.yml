@@ -29,8 +29,66 @@ jobs:
         run: npm run test:ecology-fauna
       - name: Predator regression
         run: npm run test:ecology-predators
-      - name: Coupled 1y and 5y gate
+      - name: Inject species demography diagnostics into coupled report
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          p = Path('scripts/p5-coupled-fast-gate.ts')
+          s = p.read_text()
+          anchor = "import { advanceTime } from '../src/simulation/timeSystem';"
+          s = s.replace(anchor, "import { collectPopulationDemographyDiagnostics } from '../src/simulation/ecologyDemographyDiagnostics';\n" + anchor, 1)
+          s = s.replace(
+              "  let fiveYearGateFailures: string[] = [];",
+              "  let fiveYearGateFailures: string[] = [];\n  let fiveYearDiagnostics: ReturnType<typeof collectPopulationDemographyDiagnostics> | undefined;",
+              1,
+          )
+          s = s.replace(
+              "      fiveYear = captureCheckpoint(fiveYearCoarseState);",
+              "      fiveYear = captureCheckpoint(fiveYearCoarseState);\n      fiveYearDiagnostics = collectPopulationDemographyDiagnostics(fiveYearCoarseState);",
+              1,
+          )
+          s = s.replace(
+              "    fiveYear,\n    oneYearGatePassed:",
+              "    fiveYear,\n    fiveYearDiagnostics,\n    oneYearGatePassed:",
+              1,
+          )
+          p.write_text(s)
+          PY
+      - name: Coupled 1y and 5y gate with species demography
         run: npx tsx scripts/p5-coupled-fast-gate.ts --coarse-aquatic-substep=360 --out=artifacts/p39b-coupled
+      - name: Print extinct and critical terrestrial cohorts
+        if: always()
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'artifacts/p39b-coupled/p5-coupled-fast-report.json';
+          if (!fs.existsSync(path)) process.exit(0);
+          const report = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const rows = report.fiveYearDiagnostics || [];
+          const bySpecies = new Map();
+          for (const row of rows.filter(r => r.realm === 'fauna')) {
+            const agg = bySpecies.get(row.speciesId) || { speciesId: row.speciesId, population: 0, juveniles: 0, adults: 0, old: 0, effectiveBreedingFemales: 0, breedingEvents: 0, recruits: 0, maturedJuveniles: 0, emigrants: 0, maxDaysSinceRecruitment: 0, maxDaysWithoutBreeder: 0, deathsByCause: {}, predationDeathsByLifeStage: {} };
+            agg.population += row.population;
+            agg.juveniles += row.juveniles;
+            agg.adults += row.adults;
+            agg.old += row.old;
+            agg.effectiveBreedingFemales += row.effectiveBreedingFemales;
+            agg.breedingEvents += row.breedingEvents;
+            agg.recruits += row.recruits;
+            agg.maturedJuveniles += row.maturedJuveniles;
+            agg.emigrants += row.emigrants;
+            agg.maxDaysSinceRecruitment = Math.max(agg.maxDaysSinceRecruitment, row.daysSinceRecruitment);
+            agg.maxDaysWithoutBreeder = Math.max(agg.maxDaysWithoutBreeder, row.daysWithoutBreeder);
+            for (const [k,v] of Object.entries(row.deathsByCause || {})) agg.deathsByCause[k] = (agg.deathsByCause[k] || 0) + v;
+            for (const [k,v] of Object.entries(row.predationDeathsByLifeStage || {})) agg.predationDeathsByLifeStage[k] = (agg.predationDeathsByLifeStage[k] || 0) + v;
+            bySpecies.set(row.speciesId, agg);
+          }
+          const sorted = [...bySpecies.values()].sort((a,b) => a.population-b.population || a.speciesId.localeCompare(b.speciesId));
+          console.log('P3.9b five-year terrestrial demography by species:');
+          console.log(JSON.stringify(sorted, null, 2));
+          NODE
       - name: Upload coupled report
         if: always()
         uses: actions/upload-artifact@v4
