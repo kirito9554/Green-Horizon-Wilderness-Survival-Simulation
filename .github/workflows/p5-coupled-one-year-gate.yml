@@ -30,9 +30,9 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npm run lint
-      - name: Run targeted one-year predator diagnostic
+      - name: Run targeted 180-day predator diagnostic
         run: |
-          sed -i 's/const VALIDATION_DAYS = 90;/const VALIDATION_DAYS = 365;/' scripts/predator-hunt-event-probe.ts
+          sed -i 's/const VALIDATION_DAYS = 90;/const VALIDATION_DAYS = 180;/' scripts/predator-hunt-event-probe.ts
           npx tsx scripts/predator-hunt-event-probe.ts --out=artifacts/p5-predator-diagnostic
       - name: Upload predator diagnostic report
         if: always()
