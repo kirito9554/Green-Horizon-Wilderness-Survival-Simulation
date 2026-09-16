@@ -128,11 +128,23 @@ function validateWorld(seed: string): ReturnType<typeof generateSpatialWorld> {
     }
   }
 
-  assert.ok(world.localSites.length > 80 && world.localSites.length < 350, `${seed}: local-site density should stay gameplay-sized; got ${world.localSites.length}`);
+  const pool = world.localSitePool;
+  const catalogTypes = new Set(pool.entries.map(entry => entry.type));
+  const enabledTypes = new Set(pool.enabledTypes);
+  assert.ok(catalogTypes.size >= 60, `${seed}: expanded natural-site catalog should contain many archetypes; got ${catalogTypes.size}`);
+  assert.ok(enabledTypes.size >= 20, `${seed}: terrain should enable a useful local-site vocabulary; got ${enabledTypes.size}`);
+  assert.ok(enabledTypes.size < catalogTypes.size, `${seed}: one campaign must not enable the entire local-site catalog`);
+  assert.equal(pool.disabledTypes.length > 0, true, `${seed}: some archetypes should remain absent from this seed`);
+
+  assert.ok(world.localSites.length > 70 && world.localSites.length < 350, `${seed}: local-site density should stay gameplay-sized; got ${world.localSites.length}`);
   assert.equal(new Set(world.localSites.map(site => site.id)).size, world.localSites.length, 'local site IDs must be unique');
   assert.equal(validateLocalSiteContainment(world.localSites, patches), true, 'every generated local site must lie in its habitat patch');
   for (const requiredType of ['plane_wreck', 'limestone_cavern', 'ruin_complex'] as const) {
     assert.equal(world.localSites.filter(site => site.type === requiredType).length, 1, `${seed}: ${requiredType} must exist exactly once`);
+  }
+  for (const site of world.localSites) {
+    if (site.category === 'landmark') continue;
+    assert.ok(enabledTypes.has(site.type as never), `${seed}: ${site.type} spawned even though it is absent from this world's site pool`);
   }
 
   const route = estimateSpatialRoute(
@@ -157,9 +169,11 @@ function testSeededWorldSimulation(): void {
   assert.equal(patchFingerprint(alpha), patchFingerprint(alphaAgain), 'same world seed must recreate identical terrain topology');
   assert.equal(siteFingerprint(alpha), siteFingerprint(alphaAgain), 'same world seed must recreate identical local sites');
   assert.deepEqual(alpha.hydrology.streamPatchIds, alphaAgain.hydrology.streamPatchIds, 'same seed must recreate drainage topology');
+  assert.equal(alpha.localSitePool.signature, alphaAgain.localSitePool.signature, 'same seed must recreate the same terrain-driven site pool');
 
   assert.notEqual(patchFingerprint(alpha), patchFingerprint(beta), 'different runs must generate different habitat geometry/terrain');
   assert.notEqual(siteFingerprint(alpha), siteFingerprint(beta), 'different runs must generate different local sites and positions');
+  assert.notEqual(alpha.localSitePool.signature, beta.localSitePool.signature, 'different seeds should select different local-site vocabularies');
   assert.notEqual(alpha.habitatPatches[0].worldSignature, beta.habitatPatches[0].worldSignature, 'different saves must carry distinct spatial signatures');
 }
 
@@ -167,7 +181,7 @@ function main(): void {
   testCanonicalMetricGeometry();
   testLegacyExclusion();
   testSeededWorldSimulation();
-  console.log('Seeded spatial world, terrain hydrology, local-site and route smoke tests passed.');
+  console.log('Seeded spatial world, terrain hydrology, terrain-driven local-site pools and route smoke tests passed.');
 }
 
 main();
