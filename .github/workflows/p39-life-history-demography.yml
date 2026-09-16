@@ -27,14 +27,16 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Apply P3.9 demography patch
-        run: python scripts/p39-apply-life-history-demography.py
+        run: |
+          python scripts/p39-fix-patch-helper.py
+          python scripts/p39-apply-life-history-demography.py
       - name: Typecheck patched source
         run: npm run lint
       - name: Commit validated source
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/data/ecologyDemography.ts src/data/ecologyFauna.ts src/data/ecologyPredators.ts src/simulation/ecologyDemographySystem.ts src/simulation/ecologyFaunaSystem.ts src/simulation/predatorDiscreteHuntingSystem.ts src/simulation/predatorPressureResponseSystem.ts
+          git add src/data/ecologyDemography.ts src/data/ecologyFauna.ts src/data/ecologyPredators.ts src/simulation/ecologyDemographySystem.ts src/simulation/ecologyFaunaSystem.ts src/simulation/ecologyPredatorSystem.ts src/simulation/predatorDiscreteHuntingSystem.ts src/simulation/predatorPressureResponseSystem.ts
           if git diff --cached --quiet; then
             echo "No source changes to commit"
           else
