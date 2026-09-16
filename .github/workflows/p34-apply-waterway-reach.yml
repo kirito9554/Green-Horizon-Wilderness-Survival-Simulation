@@ -1,0 +1,40 @@
+name: Apply P3.4 Waterway Reach
+
+on:
+  push:
+    branches:
+      - feature/aquatic-detrital-food-web-p34-impl
+    paths:
+      - '.github/workflows/p34-apply-waterway-reach.yml'
+      - 'scripts/apply-p34-waterway-reach.py'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/aquatic-detrital-food-web-p34-impl
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Apply waterway reach tuning
+        run: python scripts/apply-p34-waterway-reach.py
+      - name: Typecheck
+        run: npm run lint
+      - name: Run 90-day aquatic predator probe
+        run: npx tsx scripts/predator-hunt-event-probe.ts --out=artifacts/predator-aquatic-detrital
+      - name: Commit waterway reach tuning
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/ecologyPredators.ts src/simulation/predatorDiscreteHuntingSystem.ts
+          git commit -m "fix: let crocodiles forage along connected waterways"
+          git push origin HEAD:feature/aquatic-detrital-food-web-p34-impl
