@@ -43,6 +43,7 @@ Main Island
       -> Drainage / watercourse topology
       -> Per-seed Local Site Pool
         -> Local Site instances (seeded position and properties)
+          -> Gameplay / ecology / resource semantics
       -> Future trails / crossings / encounter spaces
 ```
 
@@ -104,7 +105,33 @@ Three macro identity landmarks are guaranteed exactly once per generated world w
 - Limestone Cavern inside Limestone Cave;
 - Ruin Complex inside Ancient Ruins.
 
-Future phases can add more authored constraints without fixing every local location.
+## Local-site functional semantics
+
+`src/simulation/spatial/localSiteProfiles.ts` gives **every one of the 73 local-site types** an explicit machine-readable role instead of treating sites as decorative map labels.
+
+Each profile defines four layers:
+
+1. **player activities** — for example gather water, forage food/medicine, gather material/fuel, fish, hunt, trap, salvage, shelter, camp, cross, climb, survey or explore cave;
+2. **gameplay effects** — movement impedance, navigation value, shelter quality, camp suitability, hazard and visibility;
+3. **ecology effects** — forage, cover, water, breeding habitat, prey refuge, predator opportunity, aquatic nursery value, decomposition, disturbance sensitivity and affinity for broad fauna guilds;
+4. **resource opportunities** — resource family, relative abundance, renewability, seasonality, extraction impact and optional mappings to item IDs that already exist in the item database.
+
+Resource families are intentionally broader than the current item catalog. Fresh water, fish, insects, honey, tubers and similar ecological resources can therefore exist as simulation resources before every one of them has a dedicated inventory item. Existing material families such as clay, stone, bamboo, resin, timber, driftwood and shell can already point to current item IDs.
+
+Examples of semantic differences:
+
+- `Burrow Colony` is a strong breeding/prey-refuge feature rather than a loot node;
+- `Animal Trail` lowers route cost and raises predator/hunting opportunity but directly yields no resource;
+- `Freshwater Seep` is a water source and wildlife focus whose overuse can damage a sensitive microhabitat;
+- `Fallen Giant` supplies finite deadwood while strongly supporting decomposition, invertebrates and small-animal shelter;
+- `Rock Shelter` is valuable to the player primarily because of shelter/camp quality;
+- `Fruit Grove` is productive but seasonal and concentrates both prey and predators;
+- `Predator Den` represents breeding/territorial habitat and danger rather than a generic harvest point;
+- `Plane Wreck` contains finite salvage and acts as a navigation landmark without pretending to be a natural renewable resource.
+
+`aggregateLocalSiteInfluenceByPatch()` converts all spawned sites in a patch into normalized read-only patch signals. `GeneratedSpatialWorld.localSiteInfluenceByPatchId` therefore exposes site-derived forage, cover, water, breeding habitat, prey refuge, predator opportunity, aquatic nursery value, decomposition, disturbance sensitivity, shelter/camp quality, hazard/navigation and resource richness.
+
+These signals are **not wired into current fauna/resource balance yet**. This keeps the foundation deterministic and testable while giving later ecology, gathering, travel and camp systems a single source of truth instead of adding new site-name conditionals.
 
 ## Travel foundation
 
@@ -120,9 +147,10 @@ Fauna and predator populations should migrate from macro-region buckets toward p
 - habitat-specific carrying capacity;
 - home-range overlap;
 - predator encounter probability and competition based on shared space;
-- refugia emerging from terrain/habitat rather than hard low-population buffs;
+- refugia emerging from terrain/habitat and local-site structure rather than hard low-population buffs;
+- breeding/nesting/wallow/feeding sites influencing local animal distribution;
 - water-linked animal movement and resource availability;
-- local-site features becoming persistent habitat modifiers rather than decorative POIs;
+- extraction pressure degrading sensitive site resources instead of generic timer-only respawn;
 - local extirpation and recolonization without treating every disappearance as island-wide extinction.
 
 No fauna/predator balance values are changed by this foundation PR.
@@ -135,4 +163,4 @@ Procedural generation must obey three rules:
 2. **different seed = materially different local terrain/site topology and local-site vocabulary while preserving the authored macro map**;
 3. **a generated local site may spawn only if its archetype is enabled for that world and the local patch satisfies the archetype's terrain requirements**.
 
-The spatial smoke test verifies these rules, plus 120 km² area conservation, polygon containment, drainage direction and cross-region route connectivity.
+The spatial smoke test verifies these rules, complete local-site functional-profile coverage, item-reference validity, normalized site effects, 120 km² area conservation, polygon containment, drainage direction and cross-region route connectivity.
