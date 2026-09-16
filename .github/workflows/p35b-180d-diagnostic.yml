@@ -1,0 +1,33 @@
+name: P3.5b 180-Day Diagnostic
+
+on:
+  push:
+    branches:
+      - feature/p35-energy-aware-prey-selection
+
+concurrency:
+  group: p35b-180d-diagnostic
+  cancel-in-progress: true
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Set 180-day validation window
+        run: sed -i 's/const VALIDATION_DAYS = 90;/const VALIDATION_DAYS = 180;/' scripts/predator-hunt-event-probe.ts
+      - name: Typecheck
+        run: npm run lint
+      - name: Run 180-day hunt diagnostic
+        run: npx tsx scripts/predator-hunt-event-probe.ts --out=artifacts/p35b-180d
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p35b-180d-report
+          path: artifacts/p35b-180d
