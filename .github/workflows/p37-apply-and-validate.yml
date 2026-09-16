@@ -25,8 +25,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Apply P3.7 source patch
+      - name: Apply P3.7 resource model
         run: python scripts/p37-apply-resource-model.py
+      - name: Apply P3.7 aquatic refugia
+        run: python scripts/p37-apply-aquatic-refugia.py
       - name: Typecheck patched source
         run: npm run lint
       - name: Prepare one-year-only coupled gate
