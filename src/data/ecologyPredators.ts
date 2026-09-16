@@ -19,6 +19,8 @@ export interface WildPredatorSpeciesDefinition {
   aquaticCaptureRatePerAdultDay?: number;
   /** Maximum share of tick maintenance demand intentionally sourced from aquatic prey. */
   maxAquaticDietShare?: number;
+  /** Maximum hydrology-network hops used while searching aquatic prey. Defaults to local POI only. */
+  aquaticForagingReachHops?: number;
   adultWeightKg: number;
   dailyFoodKgPerAdult: number;
   dailyWaterNeed: number;
@@ -224,6 +226,7 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     },
     aquaticCaptureRatePerAdultDay: 1.1,
     maxAquaticDietShare: 0.62,
+    aquaticForagingReachHops: 2,
     adultWeightKg: 180, dailyFoodKgPerAdult: 1.65, dailyWaterNeed: 90,
     maxKillsPerAdultPerDay: 0.08, halfSaturationPreyPer1000M2: 5,
     idealPredatorPreyBiomassRatio: 0.14, minimumViablePreyCount: 3,

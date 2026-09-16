@@ -14,6 +14,7 @@ import type { MainWorldAreaId } from '../data/mainWorldAreas';
 import type { WildAquaticPopulation } from '../types/aquaticEcology';
 import { WILD_FAUNA_SPECIES } from '../data/ecologyFauna';
 import { WILD_AQUATIC_SPECIES } from '../data/ecologyAquatic';
+import { REGION_HYDROLOGY_PROFILES } from '../data/hydrologyProfiles';
 import { WILD_PREDATOR_SPECIES, type WildPredatorSpeciesDefinition } from '../data/ecologyPredators';
 import { ensureRegionWildFauna } from './ecologyFaunaSystem';
 import {
@@ -631,6 +632,33 @@ function eligibleAquaticStages(
   return rows.filter(row => row.count >= 1 && row.bodyMassKg <= predator.maxAdultPreyKg);
 }
 
+function aquaticPoiAccess(fromPoi: MainWorldAreaId, toPoi: MainWorldAreaId, maxHops: number): number {
+  if (fromPoi === toPoi) return 1;
+  if (maxHops <= 0) return 0;
+  const visited = new Set<MainWorldAreaId>([fromPoi]);
+  let frontier: MainWorldAreaId[] = [fromPoi];
+  for (let depth = 1; depth <= maxHops; depth += 1) {
+    const next: MainWorldAreaId[] = [];
+    for (const poiId of frontier) {
+      const profile = REGION_HYDROLOGY_PROFILES[poiId];
+      const neighbors = new Set<MainWorldAreaId>(profile?.downstreamPoiIds || []);
+      for (const [candidateId, candidate] of Object.entries(REGION_HYDROLOGY_PROFILES) as Array<[MainWorldAreaId, typeof REGION_HYDROLOGY_PROFILES[MainWorldAreaId]]>) {
+        if (candidate.downstreamPoiIds.includes(poiId)) neighbors.add(candidateId);
+      }
+      for (const neighbor of neighbors) {
+        if (neighbor === toPoi) return Math.pow(0.76, depth);
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          next.push(neighbor);
+        }
+      }
+    }
+    frontier = next;
+    if (!frontier.length) break;
+  }
+  return 0;
+}
+
 function collectAquaticHuntTargets(
   state: GameState,
   population: WildPredatorPopulation,
@@ -642,10 +670,12 @@ function collectAquaticHuntTargets(
   const waterAccess = clamp01(((current?.environment.waterAccess || 0) - 20) / 75);
   if (waterAccess <= 0 || !Object.keys(weights).length) return [];
   return (system.aquaticPopulations || [])
-    .filter(prey => prey.population > 3 && prey.poiIds.includes(population.poiId) && (weights[prey.speciesId] || 0) > 0)
+    .filter(prey => prey.population > 3 && (weights[prey.speciesId] || 0) > 0)
     .map(prey => {
       const preference = weights[prey.speciesId] || 0;
-      const stages = eligibleAquaticStages(prey, species);
+      const reachHops = Math.max(0, Math.floor(species.aquaticForagingReachHops || 0));
+      const poiAccess = prey.poiIds.reduce((best, preyPoi) => Math.max(best, aquaticPoiAccess(population.poiId, preyPoi, reachHops)), 0);
+      const stages = poiAccess > 0 ? eligibleAquaticStages(prey, species) : [];
       const stageWeight = stages.reduce((sum, row) => sum + row.weight, 0);
       const expectedBodyMassKg = stageWeight > 0
         ? stages.reduce((sum, row) => sum + row.bodyMassKg * row.weight, 0) / stageWeight
@@ -655,7 +685,7 @@ function collectAquaticHuntTargets(
         : 0;
       const abundance = clamp01(prey.population / (prey.population + 12));
       const condition = clamp01(prey.bodyCondition / 100 * 0.6 + prey.averageHealth / 100 * 0.4);
-      const searchability = clamp01(Math.sqrt(abundance) * (0.55 + waterAccess * 0.45) * (0.78 + condition * 0.22));
+      const searchability = clamp01(Math.sqrt(abundance) * (0.55 + waterAccess * 0.45) * (0.78 + condition * 0.22) * poiAccess);
       const waterNodeId = prey.occupiedNodeIds.find(id => state.hydrologySystem?.nodesById?.[id]?.poiId === population.poiId)
         || prey.anchorNodeId;
       return {
@@ -696,7 +726,7 @@ function createAquaticCarcass(
   const scavengeableMassKg = round3(bodyMassKg * 0.8);
   const carcass: WildCarcass = {
     id: `carcass_aq_${hashString(`${predatorPopulation.id}:${prey.id}:${stage}:${now}:${system.ecologyTickIndex}:${system.wildCarcasses.length}`).toString(36)}`,
-    poiId: predatorPopulation.poiId,
+    poiId: state.hydrologySystem?.nodesById?.[waterNodeId]?.poiId || predatorPopulation.poiId,
     subareaId: predatorPopulation.currentSubareaId,
     sourceSpeciesId: prey.speciesId,
     sourceLifeStage: stage,
