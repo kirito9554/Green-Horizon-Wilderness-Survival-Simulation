@@ -30,8 +30,10 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npm run lint
-      - name: Run targeted predator diagnostic
-        run: npx tsx scripts/predator-hunt-event-probe.ts --out=artifacts/p5-predator-diagnostic
+      - name: Run targeted one-year predator diagnostic
+        run: |
+          sed -i 's/const VALIDATION_DAYS = 90;/const VALIDATION_DAYS = 365;/' scripts/predator-hunt-event-probe.ts
+          npx tsx scripts/predator-hunt-event-probe.ts --out=artifacts/p5-predator-diagnostic
       - name: Upload predator diagnostic report
         if: always()
         uses: actions/upload-artifact@v4
