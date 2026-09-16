@@ -41,13 +41,16 @@ import { getCardinalDirection, WEATHER_BASELINES } from '../src/simulation/weath
 
 const DAYS_PER_YEAR = 365;
 const MINUTES_PER_DAY = 1440;
-const OUTER_STEP_MINUTES = 360;
+const FINE_OUTER_STEP_MINUTES = 360;
+const MID_OUTER_STEP_MINUTES = 720;
 const CANONICAL_AQUATIC_SUBSTEP_MINUTES = 60;
+const MID_AQUATIC_SUBSTEP_MINUTES = 720;
 const WEATHER_SAMPLE_MINUTES = 360;
 const WARMUP_DAYS = 30;
 const CALIBRATION_DAYS = 30;
 const VERIFICATION_DAYS = 30;
 const VALIDATION_DAYS = DAYS_PER_YEAR;
+const FIVE_YEAR_VALIDATION_DAYS = DAYS_PER_YEAR * 5;
 const DEFAULT_SEED = 'predator-long-run-p5';
 const DEFAULT_COARSE_AQUATIC_SUBSTEP_MINUTES = 360;
 
@@ -309,12 +312,17 @@ function tickCoupledPipeline(state: GameState, minutes: number, aquaticSubstepMi
   }
 }
 
-function simulateDays(state: GameState, days: number, aquaticSubstepMinutes: number): number {
+function simulateDays(
+  state: GameState,
+  days: number,
+  aquaticSubstepMinutes: number,
+  outerStepMinutes = FINE_OUTER_STEP_MINUTES,
+): number {
   const targetMinutes = days * MINUTES_PER_DAY;
   let elapsed = 0;
   let ticks = 0;
   while (elapsed < targetMinutes) {
-    const step = Math.min(OUTER_STEP_MINUTES, targetMinutes - elapsed);
+    const step = Math.min(outerStepMinutes, targetMinutes - elapsed);
     tickCoupledPipeline(state, step, aquaticSubstepMinutes);
     elapsed += step;
     ticks += 1;
@@ -462,7 +470,7 @@ function evaluateGate(baseline: Checkpoint, current: Checkpoint): string[] {
 function main(): void {
   const seed = parseStringArg('seed', DEFAULT_SEED);
   const outputDir = parseStringArg('out', 'artifacts/p5-coupled-fast');
-  const coarseAquaticSubstepMinutes = Math.max(60, Math.min(OUTER_STEP_MINUTES, parseNumberArg('coarse-aquatic-substep', DEFAULT_COARSE_AQUATIC_SUBSTEP_MINUTES)));
+  const coarseAquaticSubstepMinutes = Math.max(60, Math.min(FINE_OUTER_STEP_MINUTES, parseNumberArg('coarse-aquatic-substep', DEFAULT_COARSE_AQUATIC_SUBSTEP_MINUTES)));
   mkdirSync(outputDir, { recursive: true });
   const startedAt = performance.now();
 
@@ -491,53 +499,111 @@ function main(): void {
     gateFailures = evaluateGate(baseline, current);
   }
 
-  const canonicalAquaticSubsteps = (WARMUP_DAYS + VALIDATION_DAYS) * (MINUTES_PER_DAY / CANONICAL_AQUATIC_SUBSTEP_MINUTES);
-  const actualAquaticSubsteps =
+  // Only attempt the 1y->5y projection if the fully verified one-year gate is healthy.
+  let fiveYearFineCalibrationTicks = 0;
+  let fiveYearCoarseCalibrationTicks = 0;
+  let fiveYearRemainingTicks = 0;
+  let fiveYearVerificationTicks = 0;
+  let fiveYearFineCalibration: Checkpoint | undefined;
+  let fiveYearCoarseCalibration: Checkpoint | undefined;
+  let fiveYearCalibrationFailures: string[] = [];
+  let fiveYear: Checkpoint | undefined;
+  let fiveYearGateFailures: string[] = [];
+  if (calibrationFailures.length === 0 && gateFailures.length === 0) {
+    const fiveYearFineState = cloneState(coarseState);
+    const fiveYearCoarseState = cloneState(coarseState);
+    fiveYearFineCalibrationTicks = simulateDays(
+      fiveYearFineState, CALIBRATION_DAYS, coarseAquaticSubstepMinutes, FINE_OUTER_STEP_MINUTES,
+    );
+    fiveYearCoarseCalibrationTicks = simulateDays(
+      fiveYearCoarseState, CALIBRATION_DAYS, MID_AQUATIC_SUBSTEP_MINUTES, MID_OUTER_STEP_MINUTES,
+    );
+    fiveYearFineCalibration = captureCheckpoint(fiveYearFineState);
+    fiveYearCoarseCalibration = captureCheckpoint(fiveYearCoarseState);
+    fiveYearCalibrationFailures = evaluateCalibration(fiveYearFineCalibration, fiveYearCoarseCalibration);
+    if (fiveYearCalibrationFailures.length === 0) {
+      const remainingFiveYearDays = FIVE_YEAR_VALIDATION_DAYS - VALIDATION_DAYS - CALIBRATION_DAYS - VERIFICATION_DAYS;
+      fiveYearRemainingTicks = simulateDays(
+        fiveYearCoarseState, remainingFiveYearDays, MID_AQUATIC_SUBSTEP_MINUTES, MID_OUTER_STEP_MINUTES,
+      );
+      fiveYearVerificationTicks = simulateDays(
+        fiveYearCoarseState, VERIFICATION_DAYS, CANONICAL_AQUATIC_SUBSTEP_MINUTES, FINE_OUTER_STEP_MINUTES,
+      );
+      fiveYear = captureCheckpoint(fiveYearCoarseState);
+      fiveYearGateFailures = evaluateGate(baseline, fiveYear);
+    }
+  }
+
+  const canonicalAquaticSubsteps = (WARMUP_DAYS + FIVE_YEAR_VALIDATION_DAYS) * (MINUTES_PER_DAY / CANONICAL_AQUATIC_SUBSTEP_MINUTES);
+  const oneYearActualAquaticSubsteps =
     WARMUP_DAYS * (MINUTES_PER_DAY / CANONICAL_AQUATIC_SUBSTEP_MINUTES) +
     CALIBRATION_DAYS * (MINUTES_PER_DAY / CANONICAL_AQUATIC_SUBSTEP_MINUTES) +
     (VALIDATION_DAYS - VERIFICATION_DAYS) * (MINUTES_PER_DAY / coarseAquaticSubstepMinutes) +
     VERIFICATION_DAYS * (MINUTES_PER_DAY / CANONICAL_AQUATIC_SUBSTEP_MINUTES);
+  const fiveYearActualAquaticSubsteps = fiveYear
+    ? CALIBRATION_DAYS * (MINUTES_PER_DAY / coarseAquaticSubstepMinutes) +
+      (FIVE_YEAR_VALIDATION_DAYS - VALIDATION_DAYS - VERIFICATION_DAYS) * (MINUTES_PER_DAY / MID_AQUATIC_SUBSTEP_MINUTES) +
+      VERIFICATION_DAYS * (MINUTES_PER_DAY / CANONICAL_AQUATIC_SUBSTEP_MINUTES)
+    : 0;
+  const actualAquaticSubsteps = oneYearActualAquaticSubsteps + fiveYearActualAquaticSubsteps;
+
+  const overallGatePassed =
+    calibrationFailures.length === 0 && gateFailures.length === 0 &&
+    fiveYearCalibrationFailures.length === 0 && Boolean(fiveYear) && fiveYearGateFailures.length === 0;
 
   const report = {
     seed,
-    profile: 'calibrated-coupled-terrestrial-aquatic-1y-gate',
+    profile: 'calibrated-coupled-terrestrial-aquatic-1y-5y-gate',
     warmupDays: WARMUP_DAYS,
     calibrationDays: CALIBRATION_DAYS,
-    validationDays: VALIDATION_DAYS,
+    validationDays: FIVE_YEAR_VALIDATION_DAYS,
     verificationDays: VERIFICATION_DAYS,
-    outerStepMinutes: OUTER_STEP_MINUTES,
+    fineOuterStepMinutes: FINE_OUTER_STEP_MINUTES,
+    midOuterStepMinutes: MID_OUTER_STEP_MINUTES,
     canonicalAquaticSubstepMinutes: CANONICAL_AQUATIC_SUBSTEP_MINUTES,
     coarseAquaticSubstepMinutes,
+    midAquaticSubstepMinutes: MID_AQUATIC_SUBSTEP_MINUTES,
     warmupTicks,
     canonicalCalibrationTicks,
     coarseCalibrationTicks,
     remainingCoarseTicks,
     verificationTicks,
+    fiveYearFineCalibrationTicks,
+    fiveYearCoarseCalibrationTicks,
+    fiveYearRemainingTicks,
+    fiveYearVerificationTicks,
     canonicalAquaticSubsteps,
     estimatedActualAquaticSubsteps: actualAquaticSubsteps,
     aquaticSubstepReductionRatio: round3(1 - actualAquaticSubsteps / canonicalAquaticSubsteps),
     elapsedMs: round3(performance.now() - startedAt),
-    calibration: {
+    oneYearCalibration: {
       canonical: canonicalCalibration,
       coarse: coarseCalibration,
       passed: calibrationFailures.length === 0,
       failures: calibrationFailures,
     },
+    fiveYearCalibration: {
+      fine: fiveYearFineCalibration,
+      coarse: fiveYearCoarseCalibration,
+      passed: fiveYearCalibrationFailures.length === 0 && Boolean(fiveYearFineCalibration),
+      failures: fiveYearCalibrationFailures,
+    },
     baseline,
-    current,
-    predatorSurvivalShare: round3(current.predatorPopulation / baseline.predatorPopulation),
-    faunaPopulationRatio: round3(current.faunaPopulation / baseline.faunaPopulation),
-    aquaticPopulationRatio: round3(baseline.aquaticPopulation > 0 ? current.aquaticPopulation / baseline.aquaticPopulation : 1),
-    gatePassed: calibrationFailures.length === 0 && gateFailures.length === 0,
-    gateFailures,
+    oneYear: current,
+    fiveYear,
+    oneYearGatePassed: calibrationFailures.length === 0 && gateFailures.length === 0,
+    oneYearGateFailures: gateFailures,
+    fiveYearGatePassed: Boolean(fiveYear) && fiveYearGateFailures.length === 0,
+    fiveYearGateFailures,
+    gatePassed: overallGatePassed,
   };
 
   const path = join(outputDir, 'p5-coupled-fast-report.json');
   writeFileSync(path, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
   console.log(`P5 coupled fast report written to ${path}`);
-  if (calibrationFailures.length > 0) process.exitCode = 3;
-  else if (gateFailures.length > 0) process.exitCode = 2;
+  if (calibrationFailures.length > 0 || fiveYearCalibrationFailures.length > 0) process.exitCode = 3;
+  else if (gateFailures.length > 0 || fiveYearGateFailures.length > 0 || !fiveYear) process.exitCode = 2;
 }
 
 main();
