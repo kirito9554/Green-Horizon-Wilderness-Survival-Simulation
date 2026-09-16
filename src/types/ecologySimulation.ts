@@ -227,8 +227,10 @@ export interface WildPredatorPopulation {
   movementProgress: number;
   /** Legacy expected-kill accumulator retained for save compatibility. */
   predationProgressByPreySpecies: Record<string, number>;
-  /** Fractional progress toward the next discrete hunt attempt. */
+  /** Fractional progress toward the next discrete terrestrial hunt attempt. */
   huntAttemptProgress?: number;
+  /** Fractional progress toward the next discrete aquatic hunt attempt. */
+  aquaticHuntAttemptProgress?: number;
   /** Cumulative discrete hunting diagnostics for this population. */
   huntTelemetry?: PredatorHuntTelemetry;
   /** Stored edible-energy buffer. Optional for backward-compatible save migration. */
@@ -249,6 +251,10 @@ export interface WildCarcass {
   subareaId: string;
   sourceSpeciesId: string;
   sourceLifeStage: WildAnimalLifeStage;
+  /** Missing on legacy saves means terrestrial. */
+  sourceRealm?: 'terrestrial' | 'aquatic';
+  /** Hydrology node for aquatic kills; terrestrial carcasses leave this undefined. */
+  waterNodeId?: string;
   cause: 'predation' | 'natural';
   killerSpeciesId?: string;
   killerPopulationId?: string;

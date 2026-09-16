@@ -146,6 +146,20 @@ function logisticGrowth(current: number, capacity: number, ratePerDay: number, d
   return Math.max(0, current + current * ratePerDay * days * room * fitness);
 }
 
+function riparianDetritusInputKg(state: GameState, food: AquaticFoodWebNodeState, detritusCapacityKg: number, days: number): number {
+  const riparian = Object.values(state.ecologySystem?.subareasById || {})
+    .filter(subarea => subarea.poiId === food.poiId && subarea.materializationState === 'materialized' && subarea.environment.waterAccess >= 35);
+  if (!riparian.length || days <= 0) return 0;
+  const litterIndex = riparian.reduce((sum, subarea) => {
+    const biomass = clamp01(subarea.ecology.biomass / 100);
+    const canopy = clamp01(subarea.environment.canopyCover / 100);
+    const water = clamp01(subarea.environment.waterAccess / 100);
+    const decomposition = clamp01(subarea.ecology.decompositionRate / 100);
+    return sum + biomass * 0.34 + canopy * 0.28 + water * 0.2 + decomposition * 0.18;
+  }, 0) / riparian.length;
+  return Math.max(0, detritusCapacityKg * 0.022 * days * litterIndex);
+}
+
 function tickNodeResources(state: GameState, food: AquaticFoodWebNodeState, now: number): void {
   const node = state.hydrologySystem?.nodesById?.[food.nodeId];
   if (!node) return;
@@ -157,6 +171,8 @@ function tickNodeResources(state: GameState, food: AquaticFoodWebNodeState, now:
   const oxygenFactor = clamp01(((node.dissolvedOxygenMgL ?? 7) - 1) / 6);
   const turbidityFactor = clamp01(1 - (node.turbidity ?? 0) / 120);
   const contaminationFactor = clamp01(1 - (node.contamination ?? 0) / 100);
+  const riparianDetritusKg = riparianDetritusInputKg(state, food, caps.detritus, days);
+  food.detritusKg += riparianDetritusKg;
   const nutrientFactor = clamp01(0.45 + food.detritusKg / Math.max(0.1, caps.detritus) * 0.55);
 
   const carrionDecay = Math.min(food.carrionKg, food.carrionKg * (1 - Math.exp(-0.16 * days)));
