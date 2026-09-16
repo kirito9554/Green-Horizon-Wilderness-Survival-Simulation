@@ -1,0 +1,39 @@
+name: Predator Satiation-Aware Hunting
+
+on:
+  pull_request:
+    branches:
+      - feature/food-web-expansion-p32
+    paths:
+      - 'src/simulation/predatorDiscreteHuntingSystem.ts'
+      - 'src/simulation/ecologyPredatorSystem.ts'
+      - 'src/data/ecologyPredators.ts'
+      - 'scripts/predator-hunt-event-probe.ts'
+      - '.github/workflows/predator-satiation-aware-hunting.yml'
+
+concurrency:
+  group: predator-satiation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Run 90-day satiation probe
+        run: npx tsx scripts/predator-hunt-event-probe.ts --out=artifacts/predator-satiation
+      - name: Upload satiation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predator-satiation-report
+          path: artifacts/predator-satiation/predator-hunt-event-report.json
+          if-no-files-found: warn
