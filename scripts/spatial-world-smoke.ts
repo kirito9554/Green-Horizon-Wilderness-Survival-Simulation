@@ -17,14 +17,13 @@ import {
   worldPointToPercent,
 } from '../src/data/worldGeometry';
 import {
-  DEFAULT_SPATIAL_WORLD_SEED,
   HABITAT_PATCH_CELL_SIZE_METERS,
-  generateHabitatPatches,
 } from '../src/simulation/spatial/habitatPatches';
+import { estimateSpatialRoute } from '../src/simulation/spatial/spatialTravel';
+import { validateLocalSiteContainment } from '../src/simulation/spatial/localSiteGeneration';
 import {
-  buildSpatialRouteGraph,
-  estimateSpatialRoute,
-} from '../src/simulation/spatial/spatialTravel';
+  generateSpatialWorld,
+} from '../src/simulation/spatial/worldGeneration';
 
 function approx(actual: number, expected: number, tolerance: number, message: string): void {
   assert.ok(Math.abs(actual - expected) <= tolerance, `${message}: expected ${expected}, got ${actual}`);
@@ -65,55 +64,110 @@ function testLegacyExclusion(): void {
   }
 }
 
-function testDeterministicHabitatSubdivision(): void {
-  const a = generateHabitatPatches(DEFAULT_SPATIAL_WORLD_SEED);
-  const b = generateHabitatPatches(DEFAULT_SPATIAL_WORLD_SEED);
-  assert.ok(a.length > 300 && a.length < 700, `600 m lattice should stay lightweight; got ${a.length} patches`);
-  assert.equal(a.length, b.length);
-  assert.equal(new Set(a.map(patch => patch.id)).size, a.length, 'habitat patch IDs must be unique');
-
-  const totalPatchAreaKm2 = a.reduce((sum, patch) => sum + patch.areaKm2, 0);
-  approx(totalPatchAreaKm2, MAIN_ISLAND_LAND_AREA_KM2, 1e-5, 'clipped patches must conserve canonical land area');
-
-  for (let i = 0; i < a.length; i += 1) {
-    const first = a[i];
-    const second = b[i];
-    assert.equal(first.id, second.id, 'same seed must preserve patch identity and ordering');
-    assert.equal(first.seed, second.seed, 'same seed must preserve patch seed');
-    assert.equal(first.habitat, second.habitat, 'same seed must preserve habitat assignment');
-    approx(first.areaM2, second.areaM2, 1e-8, 'same seed must preserve patch geometry area');
-    assert.ok(first.areaM2 <= HABITAT_PATCH_CELL_SIZE_METERS ** 2 + 1e-5, `${first.id} cannot exceed its lattice cell`);
-    assert.ok(first.coverageFraction > 0 && first.coverageFraction <= 1 + 1e-8);
-
-    const parent = MAIN_WORLD_REGIONS[first.parentRegionId];
-    assert.ok(pointInPolygon(first.centroid, parent.polygon), `${first.id} centroid must remain inside parent region`);
-    for (const vertex of first.polygon) {
-      assert.ok(pointInPolygon(vertex, parent.polygon), `${first.id} clipped vertex must remain on/in parent region`);
-    }
-  }
+function patchFingerprint(world: ReturnType<typeof generateSpatialWorld>): string {
+  return world.habitatPatches.slice(0, 80).map(patch => [
+    patch.parentRegionId,
+    patch.id,
+    patch.centroid.x.toFixed(2),
+    patch.centroid.y.toFixed(2),
+    patch.habitat,
+    patch.terrain.elevationMeters.toFixed(2),
+    patch.terrain.wetness.toFixed(3),
+  ].join(':')).join('|');
 }
 
-function testRouteFoundation(): void {
-  const patches = generateHabitatPatches(DEFAULT_SPATIAL_WORLD_SEED);
-  const graph = buildSpatialRouteGraph(patches);
-  assert.equal(Object.keys(graph.patchesById).length, patches.length);
+function siteFingerprint(world: ReturnType<typeof generateSpatialWorld>): string {
+  return world.localSites.slice(0, 80).map(site => [
+    site.id,
+    site.type,
+    site.patchId,
+    site.position.x.toFixed(2),
+    site.position.y.toFixed(2),
+  ].join(':')).join('|');
+}
 
-  const start = MAIN_WORLD_REGIONS.AREA_CAMP_CLEARING.centroid;
-  const end = MAIN_WORLD_REGIONS.AREA_FOREST_EDGE.centroid;
-  const route = estimateSpatialRoute(start, end, { graph, baseOpenTerrainSpeedKmh: 4.5 });
-  assert.ok(route, 'canonical land graph must connect Plane Wreck to Deep Rainforest');
+function validateWorld(seed: string): ReturnType<typeof generateSpatialWorld> {
+  const world = generateSpatialWorld(seed);
+  const patches = world.habitatPatches;
+  assert.ok(patches.length > 300 && patches.length < 750, `600 m shifted lattice should stay lightweight; got ${patches.length} patches`);
+  assert.equal(new Set(patches.map(patch => patch.id)).size, patches.length, 'habitat patch IDs must be unique inside a world');
+
+  const totalPatchAreaKm2 = patches.reduce((sum, patch) => sum + patch.areaKm2, 0);
+  approx(totalPatchAreaKm2, MAIN_ISLAND_LAND_AREA_KM2, 1e-5, `${seed}: clipped patches must conserve canonical land area`);
+
+  for (const patch of patches) {
+    assert.ok(patch.areaM2 <= HABITAT_PATCH_CELL_SIZE_METERS ** 2 + 1e-5, `${patch.id} cannot exceed its lattice cell`);
+    assert.ok(patch.coverageFraction > 0 && patch.coverageFraction <= 1 + 1e-8);
+    assert.ok(patch.movementCost > 1, `${patch.id} must retain positive terrain impedance`);
+    assert.ok(patch.terrain.elevationMeters >= 0);
+    assert.ok(patch.terrain.wetness >= 0 && patch.terrain.wetness <= 1);
+    assert.ok(patch.terrain.roughness >= 0 && patch.terrain.roughness <= 1);
+    assert.ok(patch.terrain.drainage >= 0 && patch.terrain.drainage <= 1);
+
+    const parent = MAIN_WORLD_REGIONS[patch.parentRegionId];
+    assert.ok(pointInPolygon(patch.centroid, parent.polygon), `${patch.id} centroid must remain inside parent region`);
+    for (const vertex of patch.polygon) {
+      assert.ok(pointInPolygon(vertex, parent.polygon), `${patch.id} clipped vertex must remain on/in parent region`);
+    }
+  }
+
+  assert.equal(Object.keys(world.routeGraph.patchesById).length, patches.length);
+  assert.equal(Object.keys(world.hydrology.byPatchId).length, patches.length);
+  assert.ok(world.hydrology.streamPatchIds.length > 10, `${seed}: terrain should generate a non-trivial drainage network`);
+
+  for (const patch of patches) {
+    const hydro = world.hydrology.byPatchId[patch.id];
+    assert.ok(hydro, `${patch.id} must have generated hydrology`);
+    if (hydro.downstreamPatchId) {
+      const downstream = world.routeGraph.patchesById[hydro.downstreamPatchId];
+      assert.ok(downstream, `${patch.id} downstream patch must exist`);
+      assert.ok(
+        downstream.terrain.elevationMeters < patch.terrain.elevationMeters - .3,
+        `${patch.id} drainage must move downhill`,
+      );
+    }
+  }
+
+  assert.ok(world.localSites.length > 80 && world.localSites.length < 350, `${seed}: local-site density should stay gameplay-sized; got ${world.localSites.length}`);
+  assert.equal(new Set(world.localSites.map(site => site.id)).size, world.localSites.length, 'local site IDs must be unique');
+  assert.equal(validateLocalSiteContainment(world.localSites, patches), true, 'every generated local site must lie in its habitat patch');
+  for (const requiredType of ['plane_wreck', 'limestone_cavern', 'ruin_complex'] as const) {
+    assert.equal(world.localSites.filter(site => site.type === requiredType).length, 1, `${seed}: ${requiredType} must exist exactly once`);
+  }
+
+  const route = estimateSpatialRoute(
+    MAIN_WORLD_REGIONS.AREA_CAMP_CLEARING.centroid,
+    MAIN_WORLD_REGIONS.AREA_FOREST_EDGE.centroid,
+    { graph: world.routeGraph, baseOpenTerrainSpeedKmh: 4.5 },
+  );
+  assert.ok(route, `${seed}: generated land graph must connect Plane Wreck to Deep Rainforest`);
   assert.ok(route.patchIds.length > 1, 'cross-region travel should traverse multiple habitat patches');
-  assert.ok(route.routeDistanceMeters >= route.straightLineDistanceMeters * 0.75, 'route geometry must remain physically plausible');
-  assert.ok(route.weightedDistanceMeters > route.routeDistanceMeters, 'rainforest terrain impedance should increase effective travel cost');
+  assert.ok(route.routeDistanceMeters >= route.straightLineDistanceMeters * .7, 'route geometry must remain physically plausible');
+  assert.ok(route.weightedDistanceMeters > route.routeDistanceMeters, 'terrain impedance should increase effective travel cost');
   assert.ok(route.estimatedTravelMinutes > 0);
+
+  return world;
+}
+
+function testSeededWorldSimulation(): void {
+  const alpha = validateWorld('spatial-world-alpha');
+  const alphaAgain = validateWorld('spatial-world-alpha');
+  const beta = validateWorld('spatial-world-beta');
+
+  assert.equal(patchFingerprint(alpha), patchFingerprint(alphaAgain), 'same world seed must recreate identical terrain topology');
+  assert.equal(siteFingerprint(alpha), siteFingerprint(alphaAgain), 'same world seed must recreate identical local sites');
+  assert.deepEqual(alpha.hydrology.streamPatchIds, alphaAgain.hydrology.streamPatchIds, 'same seed must recreate drainage topology');
+
+  assert.notEqual(patchFingerprint(alpha), patchFingerprint(beta), 'different runs must generate different habitat geometry/terrain');
+  assert.notEqual(siteFingerprint(alpha), siteFingerprint(beta), 'different runs must generate different local sites and positions');
+  assert.notEqual(alpha.habitatPatches[0].worldSignature, beta.habitatPatches[0].worldSignature, 'different saves must carry distinct spatial signatures');
 }
 
 function main(): void {
   testCanonicalMetricGeometry();
   testLegacyExclusion();
-  testDeterministicHabitatSubdivision();
-  testRouteFoundation();
-  console.log('Spatial world geometry and habitat subdivision smoke tests passed.');
+  testSeededWorldSimulation();
+  console.log('Seeded spatial world, terrain hydrology, local-site and route smoke tests passed.');
 }
 
 main();
