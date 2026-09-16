@@ -32,6 +32,9 @@ jobs:
       - name: Canonical main-world POI migration smoke test
         run: npm run test:poi-migration
 
+      - name: Spatial world geometry and route smoke test
+        run: npm run test:spatial-world
+
       - name: World ecology foundation smoke test
         run: npm run test:ecology
 
