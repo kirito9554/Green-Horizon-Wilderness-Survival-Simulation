@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { AREAS_DATABASE } from '../src/data/areas';
+import { ITEMS_DATABASE } from '../src/data/items';
 import {
   ALL_LEGACY_AREA_IDS,
   MAIN_WORLD_AREA_IDS,
@@ -21,6 +22,11 @@ import {
 } from '../src/simulation/spatial/habitatPatches';
 import { estimateSpatialRoute } from '../src/simulation/spatial/spatialTravel';
 import { validateLocalSiteContainment } from '../src/simulation/spatial/localSiteGeneration';
+import {
+  ALL_LOCAL_SITE_TYPES,
+  LOCAL_SITE_FUNCTIONAL_PROFILES,
+  getLocalSiteFunctionalProfile,
+} from '../src/simulation/spatial/localSiteProfiles';
 import {
   generateSpatialWorld,
 } from '../src/simulation/spatial/worldGeneration';
@@ -62,6 +68,55 @@ function testLegacyExclusion(): void {
   for (const legacyId of ALL_LEGACY_AREA_IDS) {
     assert.notEqual(getWorldAreaLifecycle(legacyId), 'active', `${legacyId} must never enter active macro geometry`);
   }
+}
+
+function testLocalSiteFunctionalProfiles(): void {
+  const uniqueTypes = new Set(ALL_LOCAL_SITE_TYPES);
+  assert.equal(uniqueTypes.size, ALL_LOCAL_SITE_TYPES.length, 'local-site type registry must not contain duplicates');
+  assert.equal(
+    Object.keys(LOCAL_SITE_FUNCTIONAL_PROFILES).length,
+    ALL_LOCAL_SITE_TYPES.length,
+    'every local-site type must have exactly one functional profile',
+  );
+
+  for (const type of ALL_LOCAL_SITE_TYPES) {
+    const profile = getLocalSiteFunctionalProfile(type);
+    assert.equal(profile.type, type, `${type}: functional profile key/type mismatch`);
+    assert.ok(profile.activities.length > 0, `${type}: every site needs at least one player-facing activity`);
+    assert.ok(profile.roleTags.length > 0, `${type}: every site needs machine-readable role tags`);
+    assert.ok(profile.gameplay.movementCostMultiplier > 0 && profile.gameplay.movementCostMultiplier <= 3, `${type}: invalid movement cost`);
+
+    for (const [name, value] of Object.entries(profile.gameplay)) {
+      if (name === 'movementCostMultiplier') continue;
+      assert.ok(value >= 0 && value <= 1, `${type}: gameplay ${name} must be normalized`);
+    }
+    for (const [name, value] of Object.entries(profile.ecology)) {
+      if (name === 'guildAffinity') continue;
+      assert.ok(typeof value === 'number' && value >= 0 && value <= 1, `${type}: ecology ${name} must be normalized`);
+    }
+    for (const [guild, affinity] of Object.entries(profile.ecology.guildAffinity)) {
+      assert.ok((affinity ?? 0) >= -1 && (affinity ?? 0) <= 1, `${type}: guild ${guild} affinity must be -1..1`);
+    }
+    for (const resource of profile.resources) {
+      assert.ok(resource.abundance >= 0 && resource.abundance <= 1, `${type}: ${resource.kind} abundance must be normalized`);
+      assert.ok(resource.extractionImpact >= 0 && resource.extractionImpact <= 1, `${type}: ${resource.kind} extraction impact must be normalized`);
+      for (const itemId of resource.itemIds ?? []) {
+        assert.ok(ITEMS_DATABASE[itemId], `${type}: resource ${resource.kind} references missing item ${itemId}`);
+      }
+    }
+  }
+
+  const hasResource = (type: (typeof ALL_LOCAL_SITE_TYPES)[number], kind: string): boolean =>
+    getLocalSiteFunctionalProfile(type).resources.some(resource => resource.kind === kind);
+
+  assert.equal(hasResource('freshwater_seep', 'fresh_water'), true, 'freshwater seep must provide water');
+  assert.equal(hasResource('clay_bank', 'clay'), true, 'clay bank must provide clay');
+  assert.equal(hasResource('fallen_giant', 'timber'), true, 'fallen giant must provide timber/deadwood');
+  assert.equal(hasResource('plane_wreck', 'salvage'), true, 'plane wreck must provide finite salvage');
+  assert.ok(getLocalSiteFunctionalProfile('rock_shelter').gameplay.shelterQuality >= .8, 'rock shelter must be a strong shelter site');
+  assert.ok(getLocalSiteFunctionalProfile('predator_den').ecology.guildAffinity.predator! >= .8, 'predator den must strongly favor predators');
+  assert.ok(getLocalSiteFunctionalProfile('burrow_colony').ecology.preyRefuge >= .9, 'burrow colony must act as strong prey refuge');
+  assert.ok(getLocalSiteFunctionalProfile('animal_trail').ecology.predatorOpportunity >= .7, 'animal trail must create hunting opportunity');
 }
 
 function patchFingerprint(world: ReturnType<typeof generateSpatialWorld>): string {
@@ -143,8 +198,25 @@ function validateWorld(seed: string): ReturnType<typeof generateSpatialWorld> {
     assert.equal(world.localSites.filter(site => site.type === requiredType).length, 1, `${seed}: ${requiredType} must exist exactly once`);
   }
   for (const site of world.localSites) {
-    if (site.category === 'landmark') continue;
-    assert.ok(enabledTypes.has(site.type as never), `${seed}: ${site.type} spawned even though it is absent from this world's site pool`);
+    if (site.category !== 'landmark') {
+      assert.ok(enabledTypes.has(site.type as never), `${seed}: ${site.type} spawned even though it is absent from this world's site pool`);
+    }
+    assert.ok(getLocalSiteFunctionalProfile(site.type), `${seed}: ${site.type} must have functional semantics`);
+    assert.ok(world.localSiteInfluenceByPatchId[site.patchId], `${seed}: spawned site patch must expose aggregated site influence`);
+  }
+
+  for (const influence of Object.values(world.localSiteInfluenceByPatchId)) {
+    assert.ok(influence.siteCount > 0);
+    for (const key of [
+      'forage', 'cover', 'water', 'breedingHabitat', 'preyRefuge', 'predatorOpportunity',
+      'aquaticNursery', 'decomposition', 'disturbanceSensitivity', 'shelterQuality',
+      'campSuitability', 'hazard', 'navigationValue',
+    ] as const) {
+      assert.ok(influence[key] >= 0 && influence[key] <= 1, `${seed}: patch influence ${key} must be normalized`);
+    }
+    for (const value of Object.values(influence.resourcePotential)) {
+      assert.ok((value ?? 0) >= 0 && (value ?? 0) <= 1, `${seed}: patch resource signal must be normalized`);
+    }
   }
 
   const route = estimateSpatialRoute(
@@ -170,6 +242,7 @@ function testSeededWorldSimulation(): void {
   assert.equal(siteFingerprint(alpha), siteFingerprint(alphaAgain), 'same world seed must recreate identical local sites');
   assert.deepEqual(alpha.hydrology.streamPatchIds, alphaAgain.hydrology.streamPatchIds, 'same seed must recreate drainage topology');
   assert.equal(alpha.localSitePool.signature, alphaAgain.localSitePool.signature, 'same seed must recreate the same terrain-driven site pool');
+  assert.deepEqual(alpha.localSiteInfluenceByPatchId, alphaAgain.localSiteInfluenceByPatchId, 'same seed must recreate identical site ecology/resource signals');
 
   assert.notEqual(patchFingerprint(alpha), patchFingerprint(beta), 'different runs must generate different habitat geometry/terrain');
   assert.notEqual(siteFingerprint(alpha), siteFingerprint(beta), 'different runs must generate different local sites and positions');
@@ -180,8 +253,9 @@ function testSeededWorldSimulation(): void {
 function main(): void {
   testCanonicalMetricGeometry();
   testLegacyExclusion();
+  testLocalSiteFunctionalProfiles();
   testSeededWorldSimulation();
-  console.log('Seeded spatial world, terrain hydrology, terrain-driven local-site pools and route smoke tests passed.');
+  console.log('Seeded spatial world, local-site functions/ecology/resources, hydrology and route smoke tests passed.');
 }
 
 main();
