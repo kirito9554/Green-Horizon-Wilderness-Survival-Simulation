@@ -36,6 +36,7 @@ Main Island
         -> Local Site instances (seeded position and properties)
           -> Gameplay / ecology / resource semantics
           -> Dynamic local resource state
+      -> Metric fauna community census
       -> Future trails / crossings / encounter spaces
 ```
 
@@ -133,23 +134,43 @@ All six families therefore have a non-zero restock path, but their timescales an
 
 The resource state is not yet wired into legacy gathering UI/actions. That migration is intentionally separate so this PR cannot silently rebalance the existing game loop.
 
+## Metric spatial fauna community
+
+`src/data/spatialFauna.ts` and `src/simulation/spatial/spatialFaunaCommunity.ts` add the first whole-island fauna census based on the metric patch world.
+
+The tracked terrestrial catalog now contains **24 species**: all seven legacy herbivore/omnivore species plus seventeen additional mammals, birds, bats, reptiles, amphibians and large invertebrates. Each species has a prime-habitat `densityPerKm2`, region affinity, habitat target profile, minimum patch suitability and starting occupancy range.
+
+Carrying capacity is derived from actual patch area and generated habitat quality rather than the legacy sample-grid `maxInitialPopulation` caps. Local Site ecology signals also contribute to patch suitability, so breeding/refuge/feeding/water features influence the spatial census without hardcoding site names.
+
+Counts remain aggregate cohort counts rather than one runtime object per animal. A campaign can therefore support tens of thousands of tracked individuals without materializing every animal.
+
+The current deterministic CI census produces:
+
+- `spatial-fauna-alpha`: **23/24 species, 49,347 initial individuals, K 66,193**;
+- `spatial-fauna-beta`: **23/24 species, 46,438 initial individuals, K 65,472**.
+
+These counts exclude aquatic populations, predators and untracked background insects/microfauna. See `docs/spatial-fauna-community.md` for the full design and compatibility boundary.
+
+The old seven-species `ecologyFaunaSystem` still owns live feeding/reproduction/movement until that runtime is migrated coherently to patch-scale food and water. The new census is deliberately not injected into the old food-web loop, because doing only the population increase would multiply demand while retaining sample-grid resource assumptions.
+
 ## Travel foundation
 
 `src/simulation/spatial/spatialTravel.ts` builds a lightweight adjacency graph from generated habitat patches and exposes a read-only Dijkstra route estimator. Existing `distanceKm` and `baseTravelMinutes` remain live gameplay data until generated trails, slope barriers, river crossings, weather/load/fatigue effects and route validation are added.
 
 ## Ecology integration plan
 
-Fauna and predator populations should later migrate from macro-region buckets toward patch-aware populations. The spatial layer is intended to support local density, habitat-specific carrying capacity, home-range overlap, spatial predator competition, terrain/site refugia, breeding/nesting/wallow/feeding-site effects, water-linked movement, extraction-driven degradation and local extirpation/recolonization.
+Fauna and predator populations should now migrate from macro-region/subarea compatibility buckets toward patch-aware cohorts. The spatial layer is intended to support local density, habitat-specific carrying capacity, home-range overlap, spatial predator competition, terrain/site refugia, breeding/nesting/wallow/feeding-site effects, water-linked movement, extraction-driven degradation and local extirpation/recolonization.
 
-No fauna/predator balance values are changed by this foundation PR.
+The metric census is the population baseline for that migration; it does not yet replace legacy live fauna/predator balance.
 
 ## Reproducibility contract
 
 Procedural generation must obey:
 
-1. **same seed + same generation version = same spatial world and same local-site pool**;
-2. **different seed = materially different local terrain/site topology and vocabulary while preserving the macro map**;
+1. **same seed + same generation version = same spatial world, Local Site pool and fauna census**;
+2. **different seed = materially different local terrain/site topology, vocabulary and fauna spatial distribution while preserving the macro map**;
 3. **a natural local site may spawn only if its archetype is enabled for that world and its patch satisfies local requirements**;
-4. **repeatable local resources may be locally devastated but may never cross the ecological reserve floor**.
+4. **repeatable local resources may be locally devastated but may never cross the ecological reserve floor**;
+5. **fauna patch and region allocations must exactly conserve island carrying capacity and headcount**.
 
-The spatial smoke test verifies those rules plus complete local-site profile coverage, valid item references, critical depletion/hysteresis, recovery-family behavior, exact 120 km² area conservation, polygon containment, drainage direction and cross-region route connectivity.
+The spatial and fauna smoke tests verify those rules plus complete local-site profile coverage, valid item references, critical depletion/hysteresis, recovery-family behavior, exact 120 km² area conservation, polygon containment, drainage direction, patch-fauna suitability and cross-region route connectivity.
