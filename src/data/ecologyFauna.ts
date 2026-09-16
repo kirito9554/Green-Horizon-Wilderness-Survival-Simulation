@@ -3,11 +3,12 @@ import type { EcologyTargetProfile } from './ecologyProfiles';
 import type { WildFoodResource } from '../types/ecologySimulation';
 
 export type WildAnimalSocialMode = 'solitary' | 'pair' | 'flock' | 'herd' | 'sounder';
+export type WildAnimalTrophicRole = 'herbivore' | 'omnivore' | 'frugivore' | 'insectivore' | 'detritivore';
 
 export interface WildFaunaSpeciesDefinition {
   id: string;
   name: string;
-  trophicRole: 'herbivore' | 'omnivore';
+  trophicRole: WildAnimalTrophicRole;
   socialMode: WildAnimalSocialMode;
   targets: EcologyTargetProfile;
   tolerance: number;
@@ -84,6 +85,24 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     disturbanceTolerance: 28, roamingPerDay: 0.88,
   },
 
+  FAUNA_LARGE_FOREST_RODENT: {
+    id: 'FAUNA_LARGE_FOREST_RODENT', name: 'Large Forest Rodent', trophicRole: 'herbivore', socialMode: 'pair',
+    targets: { canopy: 76, moisture: 62, waterAccess: 42, slope: 8, vegetation: 80 }, tolerance: 36,
+    regionAffinity: {
+      AREA_FOREST_EDGE: 1,
+      AREA_BAMBOO_GROVE: 0.82,
+      AREA_WATERFALL_BASIN: 0.68,
+      AREA_SWAMP_CROSSING: 0.50,
+      AREA_ANCIENT_RUINS: 0.42,
+      AREA_MANGROVE_EDGE: 0.24,
+    },
+    diet: { fruit: 0.40, seeds: 0.34, roots_tubers: 0.16, browse: 0.06, ground_vegetation: 0.04 },
+    adultWeightKg: 9, dailyFoodKgPerAdult: 0.52, dailyWaterNeed: 40,
+    baseDensityPer1000M2: 4.6, maxInitialPopulation: 10, homeRangeMin: 2, homeRangeMax: 5,
+    maturityDays: 260, maxAgeDays: 2920, offspringPerAdultFemalePerYear: 2.4,
+    disturbanceTolerance: 24, roamingPerDay: 0.62,
+  },
+
   FAUNA_WILD_RABBIT: {
     id: 'FAUNA_WILD_RABBIT', name: 'Wild Rabbit', trophicRole: 'herbivore', socialMode: 'pair',
     targets: { canopy: 26, moisture: 44, slope: 12, sunlight: 62, vegetation: 68 }, tolerance: 46,
@@ -100,6 +119,42 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     baseDensityPer1000M2: 16, maxInitialPopulation: 30, homeRangeMin: 2, homeRangeMax: 4,
     maturityDays: 120, maxAgeDays: 1825, offspringPerAdultFemalePerYear: 8.5,
     disturbanceTolerance: 38, roamingPerDay: 1.05,
+  },
+
+  FAUNA_FLYING_FOX: {
+    id: 'FAUNA_FLYING_FOX', name: 'Flying Fox', trophicRole: 'frugivore', socialMode: 'flock',
+    targets: { canopy: 82, moisture: 58, waterAccess: 38, slope: 8, vegetation: 74 }, tolerance: 42,
+    regionAffinity: {
+      AREA_FOREST_EDGE: 1,
+      AREA_BAMBOO_GROVE: 0.78,
+      AREA_WATERFALL_BASIN: 0.72,
+      AREA_ANCIENT_RUINS: 0.58,
+      AREA_MANGROVE_EDGE: 0.48,
+      AREA_CAMP_CLEARING: 0.28,
+    },
+    diet: { fruit: 0.84, seeds: 0.08, insects: 0.08 },
+    adultWeightKg: 0.72, dailyFoodKgPerAdult: 0.08, dailyWaterNeed: 20,
+    baseDensityPer1000M2: 18, maxInitialPopulation: 34, homeRangeMin: 3, homeRangeMax: 7,
+    maturityDays: 260, maxAgeDays: 3650, offspringPerAdultFemalePerYear: 1.2,
+    disturbanceTolerance: 32, roamingPerDay: 1.15,
+  },
+
+  FAUNA_FRUIT_DOVE: {
+    id: 'FAUNA_FRUIT_DOVE', name: 'Fruit Dove', trophicRole: 'frugivore', socialMode: 'flock',
+    targets: { canopy: 76, moisture: 56, sunlight: 42, vegetation: 70, slope: 8 }, tolerance: 44,
+    regionAffinity: {
+      AREA_FOREST_EDGE: 1,
+      AREA_BAMBOO_GROVE: 0.86,
+      AREA_WATERFALL_BASIN: 0.76,
+      AREA_ANCIENT_RUINS: 0.46,
+      AREA_MANGROVE_EDGE: 0.42,
+      AREA_CAMP_CLEARING: 0.24,
+    },
+    diet: { fruit: 0.68, seeds: 0.28, insects: 0.04 },
+    adultWeightKg: 0.36, dailyFoodKgPerAdult: 0.045, dailyWaterNeed: 18,
+    baseDensityPer1000M2: 22, maxInitialPopulation: 38, homeRangeMin: 2, homeRangeMax: 6,
+    maturityDays: 150, maxAgeDays: 2190, offspringPerAdultFemalePerYear: 3.2,
+    disturbanceTolerance: 34, roamingPerDay: 1.0,
   },
 
   FAUNA_FERAL_CHICKEN: {
@@ -134,6 +189,59 @@ export const WILD_FAUNA_SPECIES: Record<string, WildFaunaSpeciesDefinition> = {
     baseDensityPer1000M2: 12, maxInitialPopulation: 24, homeRangeMin: 2, homeRangeMax: 5,
     maturityDays: 180, maxAgeDays: 2555, offspringPerAdultFemalePerYear: 6.2,
     disturbanceTolerance: 48, roamingPerDay: 1.0,
+  },
+
+  FAUNA_GROUND_FROG: {
+    id: 'FAUNA_GROUND_FROG', name: 'Rainforest Ground Frog', trophicRole: 'insectivore', socialMode: 'pair',
+    targets: { canopy: 78, moisture: 92, waterAccess: 76, floodRisk: 38, sunlight: 24, vegetation: 82 }, tolerance: 34,
+    regionAffinity: {
+      AREA_SWAMP_CROSSING: 1,
+      AREA_WATERFALL_BASIN: 0.96,
+      AREA_MANGROVE_EDGE: 0.78,
+      AREA_FOREST_EDGE: 0.74,
+      AREA_BAMBOO_GROVE: 0.52,
+      AREA_ANCIENT_RUINS: 0.28,
+    },
+    diet: { insects: 0.94, carrion: 0.03, aquatic_plants: 0.03 },
+    adultWeightKg: 0.085, dailyFoodKgPerAdult: 0.012, dailyWaterNeed: 70,
+    baseDensityPer1000M2: 42, maxInitialPopulation: 70, homeRangeMin: 1, homeRangeMax: 3,
+    maturityDays: 120, maxAgeDays: 1460, offspringPerAdultFemalePerYear: 18,
+    disturbanceTolerance: 18, roamingPerDay: 0.72,
+  },
+
+  FAUNA_FOREST_GECKO: {
+    id: 'FAUNA_FOREST_GECKO', name: 'Forest Gecko', trophicRole: 'insectivore', socialMode: 'solitary',
+    targets: { canopy: 64, moisture: 60, sunlight: 42, rocks: 44, vegetation: 62 }, tolerance: 44,
+    regionAffinity: {
+      AREA_ANCIENT_RUINS: 1,
+      AREA_FOREST_EDGE: 0.92,
+      AREA_BAMBOO_GROVE: 0.78,
+      AREA_CAMP_CLEARING: 0.68,
+      AREA_STONE_RIDGE: 0.52,
+      AREA_WATERFALL_BASIN: 0.46,
+      AREA_MANGROVE_EDGE: 0.32,
+    },
+    diet: { insects: 0.96, carrion: 0.04 },
+    adultWeightKg: 0.14, dailyFoodKgPerAdult: 0.018, dailyWaterNeed: 24,
+    baseDensityPer1000M2: 34, maxInitialPopulation: 58, homeRangeMin: 1, homeRangeMax: 3,
+    maturityDays: 150, maxAgeDays: 1825, offspringPerAdultFemalePerYear: 4.8,
+    disturbanceTolerance: 54, roamingPerDay: 0.76,
+  },
+
+  FAUNA_MUD_CRAB: {
+    id: 'FAUNA_MUD_CRAB', name: 'Mangrove Mud Crab', trophicRole: 'detritivore', socialMode: 'solitary',
+    targets: { canopy: 34, moisture: 94, waterAccess: 96, floodRisk: 86, sunlight: 48, vegetation: 42 }, tolerance: 30,
+    regionAffinity: {
+      AREA_MANGROVE_EDGE: 1,
+      AREA_SWAMP_CROSSING: 0.94,
+      AREA_FISHING_LAGOON: 0.76,
+      AREA_WATERFALL_BASIN: 0.34,
+    },
+    diet: { carrion: 0.34, aquatic_plants: 0.30, insects: 0.20, ground_vegetation: 0.16 },
+    adultWeightKg: 0.46, dailyFoodKgPerAdult: 0.035, dailyWaterNeed: 96,
+    baseDensityPer1000M2: 26, maxInitialPopulation: 48, homeRangeMin: 1, homeRangeMax: 3,
+    maturityDays: 210, maxAgeDays: 1825, offspringPerAdultFemalePerYear: 12,
+    disturbanceTolerance: 44, roamingPerDay: 0.62,
   },
 
   FAUNA_TREE_RAT: {

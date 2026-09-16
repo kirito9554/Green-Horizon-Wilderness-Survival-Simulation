@@ -1,5 +1,6 @@
 import type { MainWorldAreaId } from './mainWorldAreas';
 import type { EcologyTargetProfile } from './ecologyProfiles';
+import type { WildFoodResource } from '../types/ecologySimulation';
 
 export interface WildPredatorSpeciesDefinition {
   id: string;
@@ -8,6 +9,10 @@ export interface WildPredatorSpeciesDefinition {
   tolerance: number;
   regionAffinity: Partial<Record<MainWorldAreaId, number>>;
   preyWeights: Partial<Record<string, number>>;
+  /** Opportunistic non-kill foods consumed before initiating a hunt. */
+  supplementalDiet?: Partial<Record<WildFoodResource, number>>;
+  /** Upper share of daily maintenance demand that supplemental foraging may cover. */
+  maxSupplementalDietShare?: number;
   adultWeightKg: number;
   dailyFoodKgPerAdult: number;
   dailyWaterNeed: number;
@@ -48,12 +53,20 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
       AREA_BAMBOO_GROVE: 0.34,
     },
     preyWeights: {
-      FAUNA_TREE_RAT: 1,
-      FAUNA_FERAL_CHICKEN: 0.9,
-      FAUNA_WILD_RABBIT: 0.68,
-      FAUNA_FERAL_DUCK: 0.5,
-      FAUNA_AGOUTI: 0.42,
+      FAUNA_WILD_RABBIT: 1,
+      FAUNA_FERAL_CHICKEN: 0.94,
+      FAUNA_MUD_CRAB: 0.82,
+      FAUNA_FERAL_DUCK: 0.78,
+      FAUNA_AGOUTI: 0.62,
+      FAUNA_TREE_RAT: 0.52,
+      FAUNA_LARGE_FOREST_RODENT: 0.42,
+      FAUNA_FLYING_FOX: 0.40,
+      FAUNA_FRUIT_DOVE: 0.36,
+      FAUNA_FOREST_GECKO: 0.28,
+      FAUNA_GROUND_FROG: 0.24,
     },
+    supplementalDiet: { insects: 0.86, carrion: 0.14 },
+    maxSupplementalDietShare: 0.55,
     adultWeightKg: 8.5, dailyFoodKgPerAdult: 0.55, dailyWaterNeed: 38,
     maxKillsPerAdultPerDay: 0.42, halfSaturationPreyPer1000M2: 9,
     idealPredatorPreyBiomassRatio: 0.12, minimumViablePreyCount: 4,
@@ -75,17 +88,23 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
       AREA_ANCIENT_RUINS: 0.42,
     },
     preyWeights: {
-      FAUNA_WILD_RABBIT: 1,
-      FAUNA_AGOUTI: 0.94,
-      FAUNA_TREE_RAT: 0.82,
-      FAUNA_FERAL_CHICKEN: 0.78,
-      FAUNA_FERAL_DUCK: 0.58,
-      FAUNA_WILD_BOAR: 0.18,
+      FAUNA_LARGE_FOREST_RODENT: 1,
+      FAUNA_WILD_BOAR: 0.90,
+      FAUNA_FERAL_GOAT: 0.82,
+      FAUNA_AGOUTI: 0.42,
+      FAUNA_WILD_RABBIT: 0.22,
+      FAUNA_FERAL_DUCK: 0.18,
+      FAUNA_FLYING_FOX: 0.10,
+      FAUNA_FERAL_CHICKEN: 0.08,
+      FAUNA_FRUIT_DOVE: 0.06,
+      FAUNA_TREE_RAT: 0.05,
+      FAUNA_FOREST_GECKO: 0.02,
+      FAUNA_GROUND_FROG: 0.01,
     },
     adultWeightKg: 24, dailyFoodKgPerAdult: 0.72, dailyWaterNeed: 32,
     maxKillsPerAdultPerDay: 0.16, halfSaturationPreyPer1000M2: 7,
     idealPredatorPreyBiomassRatio: 0.1, minimumViablePreyCount: 4,
-    maxAdultPreyKg: 16, juvenilePreference: 0.62,
+    maxAdultPreyKg: 30, juvenilePreference: 0.72,
     baseDensityPer1000M2: 1.25, maxInitialPopulation: 3, homeRangeMin: 3, homeRangeMax: 6,
     maturityDays: 900, maxAgeDays: 7300, offspringPerAdultFemalePerYear: 1.1,
     disturbanceTolerance: 24, roamingPerDay: 0.32,
@@ -105,12 +124,17 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
     },
     preyWeights: {
       FAUNA_WILD_RABBIT: 1,
-      FAUNA_FERAL_CHICKEN: 0.94,
-      FAUNA_TREE_RAT: 0.82,
-      FAUNA_AGOUTI: 0.72,
-      FAUNA_FERAL_DUCK: 0.62,
+      FAUNA_FERAL_CHICKEN: 0.96,
+      FAUNA_FERAL_DUCK: 0.82,
+      FAUNA_AGOUTI: 0.48,
+      FAUNA_FLYING_FOX: 0.38,
+      FAUNA_FRUIT_DOVE: 0.34,
+      FAUNA_TREE_RAT: 0.30,
+      FAUNA_FOREST_GECKO: 0.12,
+      FAUNA_GROUND_FROG: 0.08,
+      FAUNA_LARGE_FOREST_RODENT: 0.08,
     },
-    adultWeightKg: 4.8, dailyFoodKgPerAdult: 0.42, dailyWaterNeed: 20,
+    adultWeightKg: 4.8, dailyFoodKgPerAdult: 0.32, dailyWaterNeed: 20,
     maxKillsPerAdultPerDay: 0.34, halfSaturationPreyPer1000M2: 8,
     idealPredatorPreyBiomassRatio: 0.08, minimumViablePreyCount: 4,
     maxAdultPreyKg: 4.2, juvenilePreference: 0.52,
@@ -131,11 +155,18 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
       AREA_SWAMP_CROSSING: 0.38,
     },
     preyWeights: {
-      FAUNA_TREE_RAT: 1,
-      FAUNA_FERAL_CHICKEN: 0.82,
-      FAUNA_WILD_RABBIT: 0.56,
-      FAUNA_AGOUTI: 0.36,
+      FAUNA_WILD_RABBIT: 0.82,
+      FAUNA_FERAL_CHICKEN: 0.76,
+      FAUNA_TREE_RAT: 0.48,
+      FAUNA_MUD_CRAB: 0.46,
+      FAUNA_FLYING_FOX: 0.40,
+      FAUNA_FRUIT_DOVE: 0.38,
+      FAUNA_AGOUTI: 0.32,
+      FAUNA_FOREST_GECKO: 0.22,
+      FAUNA_GROUND_FROG: 0.18,
     },
+    supplementalDiet: { fruit: 0.58, insects: 0.42 },
+    maxSupplementalDietShare: 0.72,
     adultWeightKg: 5.4, dailyFoodKgPerAdult: 0.38, dailyWaterNeed: 30,
     maxKillsPerAdultPerDay: 0.3, halfSaturationPreyPer1000M2: 10,
     idealPredatorPreyBiomassRatio: 0.11, minimumViablePreyCount: 4,
@@ -154,11 +185,16 @@ export const WILD_PREDATOR_SPECIES: Record<string, WildPredatorSpeciesDefinition
       AREA_WATERFALL_BASIN: 0.48,
     },
     preyWeights: {
-      FAUNA_FERAL_DUCK: 1,
-      FAUNA_WILD_BOAR: 0.62,
-      FAUNA_FERAL_GOAT: 0.44,
+      FAUNA_WILD_BOAR: 1,
+      FAUNA_FERAL_GOAT: 0.82,
+      FAUNA_LARGE_FOREST_RODENT: 0.62,
+      FAUNA_FERAL_DUCK: 0.42,
       FAUNA_AGOUTI: 0.34,
-      FAUNA_WILD_RABBIT: 0.26,
+      FAUNA_MUD_CRAB: 0.24,
+      FAUNA_FLYING_FOX: 0.20,
+      FAUNA_WILD_RABBIT: 0.18,
+      FAUNA_FRUIT_DOVE: 0.12,
+      FAUNA_GROUND_FROG: 0.06,
     },
     adultWeightKg: 180, dailyFoodKgPerAdult: 1.65, dailyWaterNeed: 90,
     maxKillsPerAdultPerDay: 0.08, halfSaturationPreyPer1000M2: 5,
