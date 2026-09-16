@@ -1,0 +1,36 @@
+name: P3.8 Five-Year Coupled Validation
+
+on:
+  push:
+    branches:
+      - validation/p38-five-year-meal-cadence
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p38-five-year-validation
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Run calibrated coupled one-year and five-year gate
+        run: npx tsx scripts/p5-coupled-fast-gate.ts --coarse-aquatic-substep=360 --out=artifacts/p38-five-year
+      - name: Upload five-year gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p38-five-year-report
+          path: artifacts/p38-five-year/p5-coupled-fast-report.json
+          if-no-files-found: warn
