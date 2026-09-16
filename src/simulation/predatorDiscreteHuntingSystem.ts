@@ -795,9 +795,22 @@ function runAquaticHunt(
   const equivalentPredators = equivalentPredatorCount(population);
   const needDrive = clamp01((tickDemandKg - currentEdibleKg) / Math.max(0.001, tickDemandKg));
   const hungerDrive = clamp01(population.hungerStress / 100);
-  const huntDrive = clamp01(needDrive * 0.82 + hungerDrive * 0.18) * waterAccess;
-  const aquaticBudgetKg = Math.min(remainingMealBudgetKg, tickDemandKg * maxShare);
-  if (aquaticBudgetKg <= 0.001 || huntDrive <= 0) return { edibleKg: 0, kills: 0 };
+
+  // Aquatic and terrestrial prey compete for the same feeding decision.
+  // maxAquaticDietShare is a ceiling, not a fish-first quota. Using the best
+  // currently reachable target in each realm lets a crocodile prefer a large
+  // riparian boar when that meal is more valuable than another small fish.
+  const aquaticTargets = collectAquaticHuntTargets(state, population, species);
+  const terrestrialTargets = collectHuntTargets(state, population, species);
+  const aquaticOpportunity = aquaticTargets.reduce((best, target) => Math.max(best, target.targetWeight), 0);
+  const terrestrialOpportunity = terrestrialTargets.reduce((best, target) => Math.max(best, target.targetWeight), 0);
+  const totalRealmOpportunity = aquaticOpportunity + terrestrialOpportunity;
+  const preferredAquaticShare = totalRealmOpportunity > 0 ? aquaticOpportunity / totalRealmOpportunity : 0;
+  const effectiveAquaticShare = Math.min(maxShare, preferredAquaticShare);
+  const realmDrive = maxShare > 0 ? Math.sqrt(clamp01(effectiveAquaticShare / maxShare)) : 0;
+  const huntDrive = clamp01(needDrive * 0.82 + hungerDrive * 0.18) * waterAccess * realmDrive;
+  const aquaticBudgetKg = Math.min(remainingMealBudgetKg, tickDemandKg * effectiveAquaticShare);
+  if (aquaticBudgetKg <= 0.001 || huntDrive <= 0 || aquaticTargets.length <= 0) return { edibleKg: 0, kills: 0 };
 
   population.aquaticHuntAttemptProgress = Math.max(0, population.aquaticHuntAttemptProgress || 0)
     + equivalentPredators * captureRate * elapsedDays * huntDrive;
