@@ -1,0 +1,48 @@
+name: P3.9 Five-Year Species Snapshot
+
+on:
+  push:
+    branches:
+      - validation/p39-five-year-species-snapshot
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Add terrestrial species diagnostics to gate report
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/p5-coupled-fast-gate.ts')
+          s = p.read_text()
+          s = s.replace(
+          '''interface AquaticSpeciesDiagnostics {\n  speciesId: string;\n  population: number;\n  biomassKg: number;\n}\n''',
+          '''interface AquaticSpeciesDiagnostics {\n  speciesId: string;\n  population: number;\n  biomassKg: number;\n}\n\ninterface FaunaSpeciesDiagnostics {\n  speciesId: string;\n  population: number;\n  biomassKg: number;\n  juveniles: number;\n  adults: number;\n  old: number;\n}\n''', 1)
+          s = s.replace(
+          '''  species: SpeciesDiagnostics[];\n  aquatic: AquaticSpeciesDiagnostics[];\n''',
+          '''  species: SpeciesDiagnostics[];\n  fauna: FaunaSpeciesDiagnostics[];\n  aquatic: AquaticSpeciesDiagnostics[];\n''', 1)
+          s = s.replace(
+          '''  const fauna = (system.animalPopulations || []).filter(population => population.population > 0);\n  const aquatic = aquaticSnapshot(state);\n''',
+          '''  const fauna = (system.animalPopulations || []).filter(population => population.population > 0);\n  const faunaRows = new Map<string, FaunaSpeciesDiagnostics>();\n  for (const population of fauna) {\n    const row = faunaRows.get(population.speciesId) || { speciesId: population.speciesId, population: 0, biomassKg: 0, juveniles: 0, adults: 0, old: 0 };\n    row.population += population.population;\n    row.biomassKg += population.biomassKg;\n    row.juveniles += population.juveniles;\n    row.adults += population.adults;\n    row.old += population.old;\n    faunaRows.set(population.speciesId, row);\n  }\n  const faunaDiagnostics = [...faunaRows.values()]\n    .map(row => ({ ...row, population: round3(row.population), biomassKg: round3(row.biomassKg), juveniles: round3(row.juveniles), adults: round3(row.adults), old: round3(row.old) }))\n    .sort((a, b) => a.speciesId.localeCompare(b.speciesId));\n  const aquatic = aquaticSnapshot(state);\n''', 1)
+          s = s.replace(
+          '''    species,\n    aquatic,\n''',
+          '''    species,\n    fauna: faunaDiagnostics,\n    aquatic,\n''', 1)
+          p.write_text(s)
+          PY
+      - name: Typecheck diagnostic
+        run: npm run lint
+      - name: Run five-year species snapshot
+        run: npx tsx scripts/p5-coupled-fast-gate.ts --coarse-aquatic-substep=360 --out=artifacts/p39-species-snapshot
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p39-species-snapshot
+          path: artifacts/p39-species-snapshot/p5-coupled-fast-report.json
+          if-no-files-found: warn
