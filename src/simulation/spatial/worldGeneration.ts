@@ -24,8 +24,12 @@ import {
   aggregateLocalSiteInfluenceByPatch,
   type LocalSitePatchInfluence,
 } from './localSiteProfiles';
+import {
+  generateSpatialFaunaCommunity,
+  type GeneratedSpatialFaunaCommunity,
+} from './spatialFaunaCommunity';
 
-export const SPATIAL_WORLD_GENERATION_VERSION = 4;
+export const SPATIAL_WORLD_GENERATION_VERSION = 5;
 
 export interface GeneratedSpatialWorld {
   generationVersion: number;
@@ -42,6 +46,12 @@ export interface GeneratedSpatialWorld {
    * balance does not consume this yet; future systems can use it without hardcoding site names.
    */
   localSiteInfluenceByPatchId: Readonly<Record<string, LocalSitePatchInfluence>>;
+  /**
+   * Metric whole-island fauna census. Population counts are aggregate cohorts,
+   * not individual runtime entities. The legacy fauna tick remains untouched until
+   * its food/movement model migrates onto habitat patches.
+   */
+  faunaCommunity: GeneratedSpatialFaunaCommunity;
 }
 
 /**
@@ -60,6 +70,7 @@ export function generateSpatialWorld(worldSeed: string): GeneratedSpatialWorld {
   const localSitePool = generateLocalSitePool(worldSeed, habitatPatches, hydrology);
   const localSites = Object.freeze(generateLocalSites(worldSeed, habitatPatches, hydrology, localSitePool));
   const localSiteInfluenceByPatchId = aggregateLocalSiteInfluenceByPatch(localSites);
+  const faunaCommunity = generateSpatialFaunaCommunity(worldSeed, habitatPatches, localSiteInfluenceByPatchId);
 
   return Object.freeze({
     generationVersion: SPATIAL_WORLD_GENERATION_VERSION,
@@ -71,6 +82,7 @@ export function generateSpatialWorld(worldSeed: string): GeneratedSpatialWorld {
     localSitePool,
     localSites,
     localSiteInfluenceByPatchId,
+    faunaCommunity,
   });
 }
 
