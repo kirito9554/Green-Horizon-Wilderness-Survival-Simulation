@@ -146,7 +146,7 @@ The deterministic census produces:
 
 Counts remain aggregate cohorts rather than runtime objects per animal.
 
-`src/simulation/spatial/spatialFaunaRuntime.ts` now materializes that census into persistent patch cohorts with juvenile/adult/old stages, condition, stress, breeding, natural mortality, seasonal resource response and adjacency dispersal. Alpha begins with about **4,699 occupied patch cohorts** while the serialized fauna state remains around **282 KiB**.
+`src/simulation/spatial/spatialFaunaRuntime.ts` materializes that census into persistent patch cohorts with juvenile/adult/old stages, condition, stress, breeding, natural mortality, seasonal resource response and adjacency dispersal. Alpha begins with about **4,699 occupied patch cohorts** while the serialized fauna state remains around **282 KiB**.
 
 `src/simulation/spatial/spatialFaunaCompetition.ts` adds shared patch pressure so co-located species no longer receive private copies of food, water and refuge. Food pressure uses diet overlap and metabolic food demand, water uses shared metabolic demand, and refuge uses ecological guild overlap. Census K is the coexistence baseline: ordinary communities below that load are not penalized a second time, while local over-crowding or niche skew creates pressure above 1.
 
@@ -157,6 +157,8 @@ The current one-year regression retains all 23 present species in both determini
 These counts exclude aquatic populations, predators and untracked background insects/microfauna. See `docs/spatial-fauna-community.md` for the detailed compatibility and resource-model boundaries.
 
 The metric fauna ecosystem is now the living world-scale terrestrial population model. The old seven-species fauna/predator food web still runs only as a compatibility layer for systems that have not migrated and must not be added to metric island totals.
+
+The shared competition layer is deliberately **not** described as a conserved biomass model. Patch K and species demand currently provide the interaction baseline; persistent flora/insect/fruit/water stocks still need to become the single resource budget consumed by wildlife and player extraction.
 
 ## Travel foundation
 
