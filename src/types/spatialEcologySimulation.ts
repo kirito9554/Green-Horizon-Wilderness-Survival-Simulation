@@ -158,6 +158,8 @@ export type SpatialPredatorPatchCohortState = [
 export interface SpatialPredatorSpeciesRuntimeState {
   speciesId: string;
   cohortsByPatch: Record<string, SpatialPredatorPatchCohortState>;
+  globalAbsenceDays?: number;
+  lastImmigrationDay?: number;
 }
 
 export interface SpatialPredatorTelemetry {
@@ -172,6 +174,11 @@ export interface SpatialPredatorTelemetry {
   births: number;
   deaths: number;
   moved: number;
+  mateSearchMoved?: number;
+  natalDispersed?: number;
+  territorySettled?: number;
+  groupSplitMoved?: number;
+  immigrants?: number;
   meanCondition: number;
   unsuccessfulHunts: number;
 }
