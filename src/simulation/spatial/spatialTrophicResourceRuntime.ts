@@ -35,6 +35,15 @@ function plantSeason(resource: WildFoodResource, season: SpatialFaunaSeason): nu
   if (season === 'wet') return ({ fruit:1.18,seeds:1.04,browse:1.08,ground_vegetation:1.2,roots_tubers:1.12,insects:0,aquatic_plants:1.16,carrion:0 } as Record<WildFoodResource,number>)[resource];
   return ({ fruit:.92,seeds:.78,browse:1.02,ground_vegetation:1.08,roots_tubers:1.06,insects:0,aquatic_plants:1.38,carrion:0 } as Record<WildFoodResource,number>)[resource];
 }
+function accessibleInsectBiomassAtPatch(insects: SpatialInsectRuntimeState, patchId: string): number {
+  let total = 0;
+  for (const speciesState of insects.species) {
+    const state = speciesState.patches[patchId];
+    if (!state || state[0] <= 0) continue;
+    total += state[0] * clamp01(.88 - state[1] * .16);
+  }
+  return total;
+}
 
 export function tickSpatialTrophicResources(
   fauna: SpatialFaunaRuntimeState,
@@ -72,8 +81,6 @@ export function tickSpatialTrophicResources(
       stock[index] = round3(stock[index] + recovery);
       foodRecoveredKg += recovery;
     }
-    // Only exposed live insect biomass is edible. Egg/larval/refugial reserve stays
-    // inside the insect community and can rebuild visible biomass after depletion.
     stock[FOOD_INDEX.insects] = round3(Math.min(profile.foodCapacityKg.insects, insectAccessible[patch.id] ?? 0));
     const carrionLoss = stock[FOOD_INDEX.carrion] * (season === 'dry' ? .035 : season === 'wet' ? .055 : .07);
     stock[FOOD_INDEX.carrion] = round3(Math.max(0, stock[FOOD_INDEX.carrion] - carrionLoss));
@@ -119,7 +126,7 @@ export function tickSpatialTrophicResources(
         sat[r] = needed > 1e-9 ? clamp01(actual / needed) : 1;
         insectConsumedKg += actual;
         foodConsumedKg += actual;
-        stock[index] = round3(getSpatialInsectAccessibleBiomassByPatch(insects)[patchId] ?? 0);
+        stock[index] = round3(accessibleInsectBiomassAtPatch(insects, patchId));
         continue;
       }
       const consumed = Math.min(stock[index], needed);
