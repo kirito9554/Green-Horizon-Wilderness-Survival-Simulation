@@ -7,13 +7,34 @@ on:
       - 'src/simulation/spatial/**'
       - 'src/types/spatial*.ts'
       - 'scripts/spatial-trophic-multiyear-soak.ts'
+      - 'scripts/spatial-predator-p6-smoke.ts'
       - 'package.json'
+      - '.github/workflows/trophic-soak.yml'
   workflow_dispatch:
 
 jobs:
   trophic-soak:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: baseline
+            seed: spatial-trophic-soak-alpha
+            gate: '0'
+          - mode: mate-only
+            seed: spatial-trophic-soak-alpha
+            gate: '0'
+          - mode: recovery-only
+            seed: spatial-trophic-soak-alpha
+            gate: '0'
+          - mode: combined
+            seed: spatial-trophic-soak-alpha
+            gate: '1'
+          - mode: combined
+            seed: spatial-trophic-soak-beta
+            gate: '1'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,5 +51,20 @@ jobs:
       - name: Typecheck
         run: npm run lint
 
+      - name: Predator P6 regression
+        run: npm run test:spatial-predator-p6
+
       - name: Five-year terrestrial trophic soak
+        env:
+          PREDATOR_P6_MODE: ${{ matrix.mode }}
+          SPATIAL_TROPHIC_SEED: ${{ matrix.seed }}
+          PREDATOR_P6_ASSERT: ${{ matrix.gate }}
         run: npm run test:spatial-trophic-soak
+
+      - name: Upload P6 trophic report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predator-p6-${{ matrix.mode }}-${{ matrix.seed }}
+          path: artifacts/predator-p6-*.json
+          if-no-files-found: warn

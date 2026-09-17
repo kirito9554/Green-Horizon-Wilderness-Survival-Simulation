@@ -50,6 +50,9 @@ jobs:
       - name: Predator founder-unit smoke test
         run: npm run test:spatial-predator-founders
 
+      - name: Predator P6 breeding-retention/recovery smoke test
+        run: npm run test:spatial-predator-p6
+
       - name: Full spatial trophic ecosystem smoke test
         run: npm run test:spatial-trophic
 

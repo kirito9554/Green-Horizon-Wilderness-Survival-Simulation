@@ -158,8 +158,56 @@ export type SpatialPredatorPatchCohortState = [
 export interface SpatialPredatorSpeciesRuntimeState {
   speciesId: string;
   cohortsByPatch: Record<string, SpatialPredatorPatchCohortState>;
+  /** Consecutive days with zero island population. Kept distinct from below-MVP recovery pressure. */
   globalAbsenceDays?: number;
+  /** Consecutive/retained recovery pressure while below the minimum viable population. */
+  belowMvpDays?: number;
+  recoveryPressure?: number;
+  recoveredDays?: number;
   lastImmigrationDay?: number;
+  nextEligibleImmigrationDay?: number;
+  lastExtinctionDay?: number;
+  lastRecolonizationDay?: number;
+}
+
+export interface SpatialPredatorSpeciesTelemetry {
+  speciesId: string;
+  startPopulation: number;
+  endPopulation: number;
+  juveniles: number;
+  adults: number;
+  old: number;
+  births: number;
+  immigrants: number;
+  deaths: number;
+  hungerDeaths: number;
+  naturalDeaths: number;
+  deathJuveniles: number;
+  deathAdults: number;
+  deathOld: number;
+  matured: number;
+  aged: number;
+  preyKilled: number;
+  predatorDays: number;
+  foodCoveragePredatorDays: number;
+  reserveFillPredatorDays: number;
+  breedingCapableCohorts: number;
+  isolatedBreeders: number;
+  mateSearchProposed: number;
+  mateSearchExecuted: number;
+  mateSearchBlocked: number;
+  mateAccessBeforeSum: number;
+  mateAccessAfterSum: number;
+  belowMvpDays: number;
+  recoveryPressure: number;
+  recoveredDays: number;
+  nextEligibleImmigrationDay?: number;
+  immigrationPulses: number;
+  extinctionEvents: number;
+  recolonizationEvents: number;
+  globalAbsenceDays: number;
+  lastExtinctionDay?: number;
+  lastRecolonizationDay?: number;
 }
 
 export interface SpatialPredatorTelemetry {
@@ -173,14 +221,23 @@ export interface SpatialPredatorTelemetry {
   carrionAddedKg: number;
   births: number;
   deaths: number;
+  hungerDeaths?: number;
+  naturalDeaths?: number;
+  matured?: number;
+  aged?: number;
   moved: number;
   mateSearchMoved?: number;
+  mateSearchProposed?: number;
+  mateSearchExecuted?: number;
+  mateSearchBlocked?: number;
   natalDispersed?: number;
   territorySettled?: number;
   groupSplitMoved?: number;
   immigrants?: number;
+  immigrationPulses?: number;
   meanCondition: number;
   unsuccessfulHunts: number;
+  bySpecies?: Record<string, SpatialPredatorSpeciesTelemetry>;
 }
 
 export interface SpatialPredatorRuntimeState {

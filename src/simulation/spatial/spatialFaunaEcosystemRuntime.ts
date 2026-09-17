@@ -19,7 +19,12 @@ import {
   tickSpatialInsectsDay,
 } from './spatialInsectRuntime';
 import { applySpatialInsectPlantEffects } from './spatialInsectPlantBridge';
-import { SPATIAL_PREDATOR_RUNTIME_VERSION, createSpatialPredatorRuntimeState, tickSpatialPredatorsDay } from './spatialPredatorRuntime';
+import {
+  SPATIAL_PREDATOR_RUNTIME_VERSION,
+  createSpatialPredatorRuntimeState,
+  tickSpatialPredatorsDay,
+  type SpatialPredatorRuntimeOptions,
+} from './spatialPredatorRuntime';
 import { tickSpatialTrophicResources } from './spatialTrophicResourceRuntime';
 import { generateSpatialWorld, getSpatialWorldSeed, type GeneratedSpatialWorld } from './worldGeneration';
 
@@ -104,7 +109,12 @@ export function createSpatialFaunaEcosystemState(worldSeed: string, initialDay: 
 }
 
 /** Authoritative metric terrestrial day: plants -> insects -> shared material -> prey -> predators. */
-export function tickSpatialFaunaEcosystemDay(runtime: SpatialFaunaRuntimeState, world: GeneratedSpatialWorld, day: number): SpatialFaunaDailyTelemetry {
+export function tickSpatialFaunaEcosystemDay(
+  runtime: SpatialFaunaRuntimeState,
+  world: GeneratedSpatialWorld,
+  day: number,
+  predatorOptions?: SpatialPredatorRuntimeOptions,
+): SpatialFaunaDailyTelemetry {
   const season = getSpatialFaunaSeason(day);
   ensureSpatialTrophicLayers(runtime, world, Math.max(1, day - 1));
   const pollination = getSpatialPollinationByPatch(runtime.insectSystem!);
@@ -115,7 +125,7 @@ export function tickSpatialFaunaEcosystemDay(runtime: SpatialFaunaRuntimeState, 
   refreshLivingProducerTelemetry(runtime, world, season);
   const competition = applySpatialFaunaCompetitionPressure(runtime, world, { resourcePoolsOwnFoodWater: true });
   const telemetry = tickSpatialFaunaDay(runtime, world, day, resources.sufficiencyByPatch);
-  tickSpatialPredatorsDay(runtime.predatorSystem!, runtime, world, day, season);
+  tickSpatialPredatorsDay(runtime.predatorSystem!, runtime, world, day, season, predatorOptions);
   attachEcosystemTelemetry(runtime, telemetry, competition, resources);
   return telemetry;
 }
@@ -141,5 +151,7 @@ export function tickSpatialFaunaRuntime(state: GameState, _deltaGameMinutes: num
   ensureSpatialTrophicLayers(state.spatialFaunaSystem, world, state.spatialFaunaSystem.lastProcessedDay);
   ensureSpatialFaunaResourcePools(state.spatialFaunaSystem, world, getSpatialFaunaSeason(state.spatialFaunaSystem.lastProcessedDay));
   if (state.spatialFaunaSystem.lastProcessedDay >= day) return;
-  for (let processDay = state.spatialFaunaSystem.lastProcessedDay + 1; processDay <= day; processDay += 1) tickSpatialFaunaEcosystemDay(state.spatialFaunaSystem, world, processDay);
+  for (let processDay = state.spatialFaunaSystem.lastProcessedDay + 1; processDay <= day; processDay += 1) {
+    tickSpatialFaunaEcosystemDay(state.spatialFaunaSystem, world, processDay);
+  }
 }
