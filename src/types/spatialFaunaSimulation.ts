@@ -7,29 +7,24 @@ export interface SpatialFaunaStageCounts {
 }
 
 /**
- * Sparse, serializable cohort state for one species in one habitat patch.
- * Counts remain aggregate individuals; no per-animal runtime entity is created.
+ * Compact persistent cohort tuple:
+ * [juveniles, adults, old, condition(0..1), consecutiveStressDays].
+ *
+ * patchId is intentionally the key in cohortsByPatch instead of being repeated
+ * inside every cohort. Food/water/refuge/breeding and per-day event counters are
+ * derived during the daily tick and are not persisted on thousands of cohorts.
  */
-export interface SpatialFaunaPatchCohortState {
-  patchId: string;
-  stages: SpatialFaunaStageCounts;
-  /** 0..1 rolling body-condition / resource-health proxy. */
-  condition: number;
-  stressDays: number;
-  /** Last processed day telemetry. */
-  foodSufficiency: number;
-  waterSufficiency: number;
-  refugeSufficiency: number;
-  breedingReadiness: number;
-  lastBirths: number;
-  lastDeaths: number;
-  lastImmigrants: number;
-  lastEmigrants: number;
-}
+export type SpatialFaunaPatchCohortState = [
+  juveniles: number,
+  adults: number,
+  old: number,
+  condition: number,
+  stressDays: number,
+];
 
 export interface SpatialFaunaSpeciesRuntimeState {
   speciesId: string;
-  cohorts: SpatialFaunaPatchCohortState[];
+  cohortsByPatch: Record<string, SpatialFaunaPatchCohortState>;
 }
 
 export interface SpatialFaunaDailyTelemetry {
