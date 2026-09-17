@@ -97,12 +97,16 @@ function runWorld(seed: string, days = 90) {
   let kills = 0;
   let killedBiomass = 0;
   let insectConsumption = 0;
+  let predatorBirths = 0;
+  let predatorDeaths = 0;
   let minimumInsectBiomass = initialInsects;
   for (let day = 2; day <= days; day += 1) {
     const telemetry = tickSpatialFaunaEcosystemDay(runtime, world, day);
     kills += telemetry.predatorKills ?? 0;
     killedBiomass += telemetry.predatorKillBiomassKg ?? 0;
     insectConsumption += telemetry.insectConsumedKg ?? 0;
+    predatorBirths += runtime.predatorSystem!.telemetry.births;
+    predatorDeaths += runtime.predatorSystem!.telemetry.deaths;
     minimumInsectBiomass = Math.min(minimumInsectBiomass, runtime.insectSystem!.telemetry.totalBiomassKg);
   }
   const finalPrey = getSpatialFaunaRuntimePopulation(runtime);
@@ -117,8 +121,8 @@ function runWorld(seed: string, days = 90) {
   assert.ok(finalPredators > 0, `${seed}: predator community went extinct`);
   const serializedBytes = Buffer.byteLength(JSON.stringify(runtime), 'utf8');
   assert.ok(serializedBytes < 5 * 1024 * 1024, `${seed}: aggregate trophic state too large (${(serializedBytes/1024/1024).toFixed(2)}MiB)`);
-  console.log(`[${seed}] day${days} flora=${(finalFlora/1e6).toFixed(1)}Mkg insects=${(finalInsects/1000).toFixed(1)}t prey=${finalPrey}/${world.faunaCommunity.totalCarryingCapacity} predators=${finalPredators} kills=${kills} killMass=${killedBiomass.toFixed(1)}kg insectEaten=${insectConsumption.toFixed(1)}kg state=${(serializedBytes/1024).toFixed(0)}KiB`);
-  return { finalPrey, finalFlora, finalInsects, finalPredators, kills, killedBiomass };
+  console.log(`[${seed}] day${days} flora=${(finalFlora/1e6).toFixed(1)}Mkg insects=${(finalInsects/1000).toFixed(1)}t prey=${finalPrey}/${world.faunaCommunity.totalCarryingCapacity} predators=${finalPredators} kills=${kills} killMass=${killedBiomass.toFixed(1)}kg predBirths=${predatorBirths} predDeaths=${predatorDeaths} insectEaten=${insectConsumption.toFixed(1)}kg state=${(serializedBytes/1024).toFixed(0)}KiB`);
+  return { finalPrey, finalFlora, finalInsects, finalPredators, kills, killedBiomass, predatorBirths, predatorDeaths };
 }
 
 function deterministicShortRun(seed: string): void {
@@ -136,7 +140,8 @@ function deterministicShortRun(seed: string): void {
 catalogCoverage();
 insectReserveRecovery('spatial-trophic-insect-reserve');
 floraOwnsPlantRenewal('spatial-trophic-flora-ownership');
-runWorld('spatial-trophic-alpha', 90);
-runWorld('spatial-trophic-beta', 60);
+const alpha = runWorld('spatial-trophic-alpha', 90);
+const beta = runWorld('spatial-trophic-beta', 60);
+assert.ok(alpha.predatorDeaths + beta.predatorDeaths > 0, 'small spatial predator cohorts must experience fractional natural/hunger mortality instead of flooring all expected deaths to zero');
 deterministicShortRun('spatial-trophic-determinism');
 console.log('Full spatial terrestrial trophic ecosystem regression passed.');
