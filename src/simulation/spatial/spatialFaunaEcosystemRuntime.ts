@@ -10,16 +10,10 @@ import {
   getSpatialFaunaSeason,
   tickSpatialFaunaDay,
 } from './spatialFaunaRuntime';
-import {
-  ensureSpatialFaunaResourcePools,
-  type SpatialFaunaResourceDaySummary,
-} from './spatialFaunaResourcePools';
+import { ensureSpatialFaunaResourcePools, type SpatialFaunaResourceDaySummary } from './spatialFaunaResourcePools';
 import { createSpatialFloraRuntimeState, tickSpatialFloraDay } from './spatialFloraRuntime';
-import {
-  createSpatialInsectRuntimeState,
-  getSpatialPollinationByPatch,
-  tickSpatialInsectsDay,
-} from './spatialInsectRuntime';
+import { createSpatialInsectRuntimeState, getSpatialPollinationByPatch, tickSpatialInsectsDay } from './spatialInsectRuntime';
+import { applySpatialInsectPlantEffects } from './spatialInsectPlantBridge';
 import { createSpatialPredatorRuntimeState, tickSpatialPredatorsDay } from './spatialPredatorRuntime';
 import { tickSpatialTrophicResources } from './spatialTrophicResourceRuntime';
 import { generateSpatialWorld, getSpatialWorldSeed, type GeneratedSpatialWorld } from './worldGeneration';
@@ -33,12 +27,7 @@ function ensureSpatialTrophicLayers(runtime: SpatialFaunaRuntimeState, world: Ge
   runtime.predatorSystem ??= createSpatialPredatorRuntimeState(world, day);
 }
 
-function attachEcosystemTelemetry(
-  runtime: SpatialFaunaRuntimeState,
-  telemetry: SpatialFaunaDailyTelemetry,
-  competition: SpatialFaunaCompetitionSummary,
-  resources: SpatialFaunaResourceDaySummary,
-): void {
+function attachEcosystemTelemetry(runtime: SpatialFaunaRuntimeState, telemetry: SpatialFaunaDailyTelemetry, competition: SpatialFaunaCompetitionSummary, resources: SpatialFaunaResourceDaySummary): void {
   telemetry.meanFoodCompetitionPressure = competition.meanFoodPressure;
   telemetry.meanWaterCompetitionPressure = competition.meanWaterPressure;
   telemetry.meanRefugeCompetitionPressure = competition.meanRefugePressure;
@@ -71,11 +60,7 @@ function attachEcosystemTelemetry(
   if (latest?.day === telemetry.day) Object.assign(latest, telemetry);
 }
 
-export function createSpatialFaunaEcosystemState(
-  worldSeed: string,
-  initialDay: number,
-  world: GeneratedSpatialWorld,
-): SpatialFaunaRuntimeState {
+export function createSpatialFaunaEcosystemState(worldSeed: string, initialDay: number, world: GeneratedSpatialWorld): SpatialFaunaRuntimeState {
   const runtime = createSpatialFaunaRuntimeState(worldSeed, initialDay, world);
   runtime.floraSystem = createSpatialFloraRuntimeState(world, initialDay);
   runtime.insectSystem = createSpatialInsectRuntimeState(world, runtime.floraSystem, initialDay);
@@ -84,21 +69,14 @@ export function createSpatialFaunaEcosystemState(
   return runtime;
 }
 
-/**
- * Authoritative metric terrestrial day:
- * flora grows and fruits -> insect guilds recruit -> shared material is consumed
- * -> prey demography/dispersal -> spatial predators search, encounter and kill.
- */
-export function tickSpatialFaunaEcosystemDay(
-  runtime: SpatialFaunaRuntimeState,
-  world: GeneratedSpatialWorld,
-  day: number,
-): SpatialFaunaDailyTelemetry {
+/** Authoritative metric terrestrial day: plants -> insects -> shared material -> prey -> predators. */
+export function tickSpatialFaunaEcosystemDay(runtime: SpatialFaunaRuntimeState, world: GeneratedSpatialWorld, day: number): SpatialFaunaDailyTelemetry {
   const season = getSpatialFaunaSeason(day);
   ensureSpatialTrophicLayers(runtime, world, Math.max(1, day - 1));
   const pollination = getSpatialPollinationByPatch(runtime.insectSystem!);
   tickSpatialFloraDay(runtime.floraSystem!, world, day, season, pollination);
   tickSpatialInsectsDay(runtime.insectSystem!, world, runtime.floraSystem, day, season);
+  applySpatialInsectPlantEffects(runtime.floraSystem!, runtime.insectSystem!, world);
   const resources = tickSpatialTrophicResources(runtime, runtime.floraSystem!, runtime.insectSystem!, world, season);
   const competition = applySpatialFaunaCompetitionPressure(runtime, world, { resourcePoolsOwnFoodWater: true });
   const telemetry = tickSpatialFaunaDay(runtime, world, day);
@@ -116,7 +94,6 @@ export function tickSpatialFaunaRuntime(state: GameState, _deltaGameMinutes: num
     state.spatialFaunaSystem = createSpatialFaunaEcosystemState(worldSeed, day, world);
     return;
   }
-  if (state.spatialFaunaSystem.lastProcessedDay >= day) return;
   const world = generateSpatialWorld(worldSeed);
   if (state.spatialFaunaSystem.version !== SPATIAL_FAUNA_RUNTIME_VERSION || state.spatialFaunaSystem.communitySignature !== world.faunaCommunity.signature) {
     state.spatialFaunaSystem = createSpatialFaunaEcosystemState(worldSeed, day, world);
@@ -124,7 +101,6 @@ export function tickSpatialFaunaRuntime(state: GameState, _deltaGameMinutes: num
   }
   ensureSpatialTrophicLayers(state.spatialFaunaSystem, world, state.spatialFaunaSystem.lastProcessedDay);
   ensureSpatialFaunaResourcePools(state.spatialFaunaSystem, world, getSpatialFaunaSeason(state.spatialFaunaSystem.lastProcessedDay));
-  for (let processDay = state.spatialFaunaSystem.lastProcessedDay + 1; processDay <= day; processDay += 1) {
-    tickSpatialFaunaEcosystemDay(state.spatialFaunaSystem, world, processDay);
-  }
+  if (state.spatialFaunaSystem.lastProcessedDay >= day) return;
+  for (let processDay = state.spatialFaunaSystem.lastProcessedDay + 1; processDay <= day; processDay += 1) tickSpatialFaunaEcosystemDay(state.spatialFaunaSystem, world, processDay);
 }
