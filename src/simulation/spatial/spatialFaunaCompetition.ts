@@ -38,6 +38,10 @@ export interface SpatialFaunaCompetitionSummary {
   meanFoodPressure: number;
   meanWaterPressure: number;
   meanRefugePressure: number;
+  meanFoodFactor: number;
+  meanWaterFactor: number;
+  meanRefugeFactor: number;
+  meanCombinedFactor: number;
   limitedCohortCount: number;
   limitedPopulation: number;
   affectedPopulation: number;
@@ -243,6 +247,10 @@ export function applySpatialFaunaCompetitionPressure(
   let foodWeighted = 0;
   let waterWeighted = 0;
   let refugeWeighted = 0;
+  let foodFactorWeighted = 0;
+  let waterFactorWeighted = 0;
+  let refugeFactorWeighted = 0;
+  let combinedFactorWeighted = 0;
   let limitedCohortCount = 0;
   let limitedPopulation = 0;
 
@@ -257,6 +265,10 @@ export function applySpatialFaunaCompetitionPressure(
       foodWeighted += pressure.foodPressure * population;
       waterWeighted += pressure.waterPressure * population;
       refugeWeighted += pressure.refugePressure * population;
+      foodFactorWeighted += pressure.foodFactor * population;
+      waterFactorWeighted += pressure.waterFactor * population;
+      refugeFactorWeighted += pressure.refugeFactor * population;
+      combinedFactorWeighted += pressure.combinedFactor * population;
 
       const limited = pressure.foodPressure > 1.03
         || pressure.waterPressure > 1.03
@@ -280,6 +292,10 @@ export function applySpatialFaunaCompetitionPressure(
     meanFoodPressure: weight > 0 ? foodWeighted / weight : 0,
     meanWaterPressure: weight > 0 ? waterWeighted / weight : 0,
     meanRefugePressure: weight > 0 ? refugeWeighted / weight : 0,
+    meanFoodFactor: weight > 0 ? foodFactorWeighted / weight : 1,
+    meanWaterFactor: weight > 0 ? waterFactorWeighted / weight : 1,
+    meanRefugeFactor: weight > 0 ? refugeFactorWeighted / weight : 1,
+    meanCombinedFactor: weight > 0 ? combinedFactorWeighted / weight : 1,
     limitedCohortCount,
     limitedPopulation,
     affectedPopulation: weight,
