@@ -1,13 +1,15 @@
 name: Five-year Terrestrial Trophic Soak
 
 on:
-  push:
+  pull_request:
+    branches: [main]
     paths:
       - 'src/data/spatial*.ts'
       - 'src/simulation/spatial/**'
       - 'src/types/spatial*.ts'
       - 'scripts/spatial-trophic-multiyear-soak.ts'
       - 'package.json'
+      - '.github/workflows/trophic-soak.yml'
   workflow_dispatch:
 
 jobs:
