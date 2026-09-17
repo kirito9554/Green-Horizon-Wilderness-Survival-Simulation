@@ -44,6 +44,7 @@ export type SpatialFloraRole =
   | 'bank_stabilization'
   | 'wetland_structure'
   | 'aquatic_food'
+  | 'water_capture'
   | 'refuge'
   | 'succession_pioneer'
   | 'old_growth_indicator';
