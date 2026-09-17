@@ -19,17 +19,19 @@ import {
   tickSpatialInsectsDay,
 } from './spatialInsectRuntime';
 import { applySpatialInsectPlantEffects } from './spatialInsectPlantBridge';
-import { createSpatialPredatorRuntimeState, tickSpatialPredatorsDay } from './spatialPredatorRuntime';
+import { SPATIAL_PREDATOR_RUNTIME_VERSION, createSpatialPredatorRuntimeState, tickSpatialPredatorsDay } from './spatialPredatorRuntime';
 import { tickSpatialTrophicResources } from './spatialTrophicResourceRuntime';
 import { generateSpatialWorld, getSpatialWorldSeed, type GeneratedSpatialWorld } from './worldGeneration';
 
-export const SPATIAL_FAUNA_INTERACTION_VERSION = 4;
+export const SPATIAL_FAUNA_INTERACTION_VERSION = 5;
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
 
 function ensureSpatialTrophicLayers(runtime: SpatialFaunaRuntimeState, world: GeneratedSpatialWorld, day: number): void {
   runtime.floraSystem ??= createSpatialFloraRuntimeState(world, day);
   runtime.insectSystem ??= createSpatialInsectRuntimeState(world, runtime.floraSystem, day);
-  runtime.predatorSystem ??= createSpatialPredatorRuntimeState(world, day);
+  if (!runtime.predatorSystem || runtime.predatorSystem.version !== SPATIAL_PREDATOR_RUNTIME_VERSION) {
+    runtime.predatorSystem = createSpatialPredatorRuntimeState(world, day);
+  }
   runtime.interactionVersion = SPATIAL_FAUNA_INTERACTION_VERSION;
 }
 
@@ -76,8 +78,6 @@ function attachEcosystemTelemetry(runtime: SpatialFaunaRuntimeState, telemetry: 
   telemetry.meanWaterPoolFill = resources.meanWaterPoolFill;
   telemetry.resourceLimitedCohortCount = resources.resourceLimitedCohortCount;
   telemetry.resourceLimitedPopulation = resources.resourceLimitedPopulation;
-  // Conserved material stocks are the authoritative food/water signal. Do not
-  // multiply them by the older density/habitat proxy a second time.
   telemetry.meanFoodSufficiency = resources.meanFoodSufficiency;
   telemetry.meanWaterSufficiency = resources.meanWaterSufficiency;
   telemetry.meanRefugeSufficiency = clamp01(telemetry.meanRefugeSufficiency * competition.meanRefugeFactor);
