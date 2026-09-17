@@ -17,10 +17,11 @@ import type {
 import type { HabitatPatch } from './habitatPatches';
 import type { LocalSitePatchInfluence } from './localSiteProfiles';
 import type { SpatialFaunaPatchAllocation } from './spatialFaunaCommunity';
+import type { SpatialFaunaResourceSufficiencyByPatch } from './spatialFaunaResourcePools';
 import { spatialUnitRandom } from './spatialRandom';
 import { generateSpatialWorld, getSpatialWorldSeed, type GeneratedSpatialWorld } from './worldGeneration';
 
-export const SPATIAL_FAUNA_RUNTIME_VERSION = 3;
+export const SPATIAL_FAUNA_RUNTIME_VERSION = 4;
 export const SPATIAL_FAUNA_HISTORY_DAYS = 30;
 
 const JUVENILES = 0;
@@ -457,6 +458,7 @@ export function tickSpatialFaunaDay(
   runtime: SpatialFaunaRuntimeState,
   world: GeneratedSpatialWorld,
   day: number,
+  resourceSufficiencyByPatch?: SpatialFaunaResourceSufficiencyByPatch,
 ): SpatialFaunaDailyTelemetry {
   const season = getSpatialFaunaSeason(day);
   const planBySpecies = new Map(world.faunaCommunity.species.map(plan => [plan.speciesId, plan] as const));
@@ -506,7 +508,7 @@ export function tickSpatialFaunaDay(
       const startPopulation = getSpatialFaunaCohortPopulation(cohort);
       if (startPopulation <= 0) continue;
       const densityRatio = startPopulation / Math.max(1, allocation.carryingCapacity);
-      const resources = dailyResourceState(
+      const proxyResources = dailyResourceState(
         definition,
         patch,
         world.localSiteInfluenceByPatchId[patchId],
@@ -514,6 +516,10 @@ export function tickSpatialFaunaDay(
         startPopulation,
         allocation.carryingCapacity,
       );
+      const materialResources = resourceSufficiencyByPatch?.get(patchId)?.get(definition.id);
+      const resources: PatchResourceScores = materialResources
+        ? { ...proxyResources, food: materialResources.food, water: materialResources.water }
+        : proxyResources;
 
       const targetCondition = clamp01(resources.food * .48 + resources.water * .3 + resources.refuge * .22);
       cohort[CONDITION] = clamp01(cohort[CONDITION] * .84 + targetCondition * .16);
