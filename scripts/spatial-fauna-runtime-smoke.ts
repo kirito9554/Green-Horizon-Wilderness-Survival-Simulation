@@ -47,6 +47,8 @@ function assertRuntimeInvariants(seed: string, days: number, options: RuntimeVal
     }
   }
   assert.ok(initialCohorts > 200, `${seed}: census should be spatially distributed across many occupied patch cohorts`);
+  const initialSerializedBytes = Buffer.byteLength(JSON.stringify(runtime), 'utf8');
+  console.log(`[${seed}] initial cohorts=${initialCohorts} runtimeState=${(initialSerializedBytes / 1024).toFixed(1)} KiB`);
 
   let births = 0;
   let deaths = 0;
@@ -94,8 +96,6 @@ function assertRuntimeInvariants(seed: string, days: number, options: RuntimeVal
       const allocation = allocationByPatch.get(cohort.patchId);
       assert.ok(populationHere > 0 && Number.isInteger(populationHere), `${seed}: sparse runtime must not retain empty/fractional cohorts`);
       assert.ok(allocation, `${seed}: dispersal entered unsupported habitat for ${speciesState.speciesId}`);
-      // Birth pulses can briefly put a local cohort above K, but simultaneous
-      // dispersal must not stack arbitrary immigration into the same destination.
       assert.ok(
         populationHere <= allocation!.carryingCapacity * 1.25 + 2,
         `${seed}: ${speciesState.speciesId} overcrowded patch ${cohort.patchId} (${populationHere}/${allocation!.carryingCapacity})`,
@@ -116,8 +116,9 @@ function assertRuntimeInvariants(seed: string, days: number, options: RuntimeVal
     .slice(0, 6)
     .map(entry => `${entry.id.replace('FAUNA_', '')}=${entry.population}/${entry.k}`)
     .join(', ');
+  const finalSerializedBytes = Buffer.byteLength(JSON.stringify(runtime), 'utf8');
   const signature = JSON.stringify(runtime.species);
-  console.log(`[${seed}] day=${days} population=${population}/${world.faunaCommunity.totalCarryingCapacity} species=${runtime.telemetry.presentSpeciesCount}/${initialSpeciesCount} births=${births} deaths=${deaths} moved=${moved} crossRegion=${crossRegionMoved} condition=${runtime.telemetry.meanCondition.toFixed(3)}`);
+  console.log(`[${seed}] day=${days} population=${population}/${world.faunaCommunity.totalCarryingCapacity} species=${runtime.telemetry.presentSpeciesCount}/${initialSpeciesCount} cohorts=${runtime.telemetry.occupiedCohortCount} births=${births} deaths=${deaths} moved=${moved} crossRegion=${crossRegionMoved} condition=${runtime.telemetry.meanCondition.toFixed(3)} runtimeState=${(finalSerializedBytes / 1024).toFixed(1)} KiB`);
   console.log(`[${seed}] weakest: ${weakest}`);
   return { population, births, deaths, moved, crossRegionMoved, presentSpecies: runtime.telemetry.presentSpeciesCount, signature };
 }
