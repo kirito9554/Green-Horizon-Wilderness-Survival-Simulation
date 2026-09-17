@@ -47,6 +47,9 @@ jobs:
       - name: Area-scaled spatial fauna resource pool smoke test
         run: npm run test:spatial-fauna-resources
 
+      - name: Predator founder-unit smoke test
+        run: npm run test:spatial-predator-founders
+
       - name: Full spatial trophic ecosystem smoke test
         run: npm run test:spatial-trophic
 
