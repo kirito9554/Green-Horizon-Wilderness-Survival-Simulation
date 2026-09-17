@@ -45,6 +45,16 @@ export interface SpatialFaunaDailyTelemetry {
   meanFoodSufficiency: number;
   meanWaterSufficiency: number;
   meanRefugeSufficiency: number;
+  /**
+   * Shared-patch competition diagnostics are added by the metric ecosystem
+   * interaction pass. They are optional for backward-compatible saves and for
+   * the lower-level cohort tick when it is exercised in isolation.
+   */
+  meanFoodCompetitionPressure?: number;
+  meanWaterCompetitionPressure?: number;
+  meanRefugeCompetitionPressure?: number;
+  competitionLimitedCohortCount?: number;
+  competitionLimitedPopulation?: number;
 }
 
 export interface SpatialFaunaRuntimeState {
