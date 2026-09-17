@@ -81,6 +81,22 @@ function socialGroupTarget(mode: SpatialAnimalOrganizationMode, guild: SpatialFa
   }
 }
 
+function faunaSplitRatio(mode: SpatialAnimalOrganizationMode): number {
+  // A patch cohort is often an aggregate of several real groups. Group splitting therefore
+  // represents exceptional social concentration, not a daily response to ordinary density.
+  switch (mode) {
+    case 'herd': return 1.8;
+    case 'flock': return 2.4;
+    case 'colony': return 2.8;
+    case 'loose_group': return 2.0;
+    case 'breeding_pair': return 2.5;
+    case 'family_group': return 2.0;
+    case 'loose_aggregation': return 2.6;
+    case 'solitary_territory': return 4.0;
+    case 'aggregate_local': return 6.0;
+  }
+}
+
 export function getFaunaBehaviorProfile(species: SpatialFaunaSpeciesDefinition): SpatialAnimalBehaviorProfile {
   const organization = faunaOrganization(species.socialMode, species.guild);
   const [matingRangeKm, foragingRangeKm, dispersalRangeKm] = guildRanges(species.guild);
@@ -95,7 +111,7 @@ export function getFaunaBehaviorProfile(species: SpatialFaunaSpeciesDefinition):
     mateSearchRatePerDay: organization === 'breeding_pair' || organization === 'solitary_territory' ? .022 : mobile ? .018 : .012,
     natalDispersalFraction: mobile ? .48 : slow ? .18 : species.guild === 'large_herbivore' || species.guild === 'omnivore' ? .42 : .32,
     groupTargetSize,
-    groupSplitRatio: organization === 'colony' ? 1.75 : organization === 'flock' ? 1.55 : organization === 'herd' ? 1.4 : 1.3,
+    groupSplitRatio: faunaSplitRatio(organization),
     recolonizationDelayDays: mobile ? [90, 360] : slow ? [240, 900] : [150, 600],
     recolonizationFounderCount: organization === 'colony' || organization === 'flock' ? [3, 7] : organization === 'herd' ? [2, 5] : [1, 3],
   };
@@ -104,6 +120,10 @@ export function getFaunaBehaviorProfile(species: SpatialFaunaSpeciesDefinition):
 export function getPredatorBehaviorProfile(species: SpatialPredatorSpeciesDefinition): SpatialAnimalBehaviorProfile {
   const organization = species.socialMode;
   const target = organization === 'breeding_pair' ? 3 : organization === 'family_group' ? 5 : organization === 'loose_aggregation' ? 6 : 2;
+  const splitRatio = organization === 'breeding_pair' ? 2.4
+    : organization === 'family_group' ? 2.1
+      : organization === 'loose_aggregation' ? 2.5
+        : 3.0;
   return {
     organization,
     matingRangeKm: species.matingRangeKm,
@@ -112,7 +132,7 @@ export function getPredatorBehaviorProfile(species: SpatialPredatorSpeciesDefini
     mateSearchRatePerDay: organization === 'breeding_pair' ? .035 : .026,
     natalDispersalFraction: organization === 'family_group' ? .62 : .72,
     groupTargetSize: target,
-    groupSplitRatio: organization === 'loose_aggregation' ? 1.8 : organization === 'family_group' ? 1.45 : 1.25,
+    groupSplitRatio: splitRatio,
     recolonizationDelayDays: species.recolonizationDelayDays,
     recolonizationFounderCount: species.recolonizationFounderCount,
   };
