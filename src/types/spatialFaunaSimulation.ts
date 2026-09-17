@@ -1,3 +1,5 @@
+import type { WildFoodResource } from './ecologySimulation';
+
 export type SpatialFaunaSeason = 'dry' | 'wet' | 'monsoon';
 
 export interface SpatialFaunaStageCounts {
@@ -27,6 +29,37 @@ export interface SpatialFaunaSpeciesRuntimeState {
   cohortsByPatch: Record<string, SpatialFaunaPatchCohortState>;
 }
 
+export const SPATIAL_FAUNA_FOOD_RESOURCE_ORDER: readonly WildFoodResource[] = [
+  'fruit',
+  'seeds',
+  'browse',
+  'ground_vegetation',
+  'roots_tubers',
+  'insects',
+  'aquatic_plants',
+  'carrion',
+] as const;
+
+/**
+ * Persistent shared patch stock in physical/ecological units:
+ * [fruit kg, seeds kg, browse kg, ground vegetation kg, roots/tubers kg,
+ * insects kg, aquatic plants kg, carrion kg, fresh-water demand units].
+ *
+ * Capacity and productivity are regenerated deterministically from patch area,
+ * habitat, hydrology, Local Sites and the census K. Only changing stock is saved.
+ */
+export type SpatialFaunaPatchResourceStockState = [
+  fruitKg: number,
+  seedsKg: number,
+  browseKg: number,
+  groundVegetationKg: number,
+  rootsTubersKg: number,
+  insectsKg: number,
+  aquaticPlantsKg: number,
+  carrionKg: number,
+  freshWaterUnits: number,
+];
+
 export interface SpatialFaunaDailyTelemetry {
   day: number;
   season: SpatialFaunaSeason;
@@ -55,6 +88,19 @@ export interface SpatialFaunaDailyTelemetry {
   meanRefugeCompetitionPressure?: number;
   competitionLimitedCohortCount?: number;
   competitionLimitedPopulation?: number;
+  /** Persistent patch resource-pool diagnostics. */
+  foodPoolStockKg?: number;
+  foodPoolCapacityKg?: number;
+  foodPoolRecoveredKg?: number;
+  foodPoolConsumedKg?: number;
+  waterPoolStockUnits?: number;
+  waterPoolCapacityUnits?: number;
+  waterPoolRecoveredUnits?: number;
+  waterPoolConsumedUnits?: number;
+  meanFoodPoolFill?: number;
+  meanWaterPoolFill?: number;
+  resourceLimitedCohortCount?: number;
+  resourceLimitedPopulation?: number;
 }
 
 export interface SpatialFaunaRuntimeState {
@@ -65,6 +111,11 @@ export interface SpatialFaunaRuntimeState {
   lastProcessedDay: number;
   season: SpatialFaunaSeason;
   species: SpatialFaunaSpeciesRuntimeState[];
+  /**
+   * Shared food/water stocks keyed by generated habitat patch. Optional so old
+   * saves and the low-level demographic tests can lazily materialize the pools.
+   */
+  resourceStocksByPatch?: Record<string, SpatialFaunaPatchResourceStockState>;
   telemetry: SpatialFaunaDailyTelemetry;
   /** Small rolling history for diagnostics/UI; deliberately bounded. */
   history: SpatialFaunaDailyTelemetry[];
