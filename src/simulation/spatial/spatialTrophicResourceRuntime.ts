@@ -72,10 +72,11 @@ export function tickSpatialTrophicResources(
     for (const resource of ['fruit','seeds','browse','ground_vegetation','roots_tubers','aquatic_plants'] as const) {
       const index = FOOD_INDEX[resource];
       const capacity = profile.foodCapacityKg[resource];
-      const demandFloor = profile.baselineFoodDemandAtKPerDay[resource] * 1.22;
       const livingProduction = (dynamicByResource[resource] ?? 0) * plantSeason(resource, season);
-      const background = profile.neutralFoodProductionKgPerDay[resource] * .035;
-      const recoveryRate = Math.max(demandFloor, livingProduction + background);
+      // The explicit flora catalog owns most renewal. A small background term represents
+      // untracked seedlings, cryptogams and minor taxa, but it cannot guarantee census K.
+      const background = profile.neutralFoodProductionKgPerDay[resource] * .06;
+      const recoveryRate = livingProduction + background;
       const fill = capacity > 0 ? clamp01(stock[index] / capacity) : 0;
       const recovery = Math.min(Math.max(0, capacity - stock[index]), recoveryRate * (.42 + (1 - fill) * .58));
       stock[index] = round3(stock[index] + recovery);
