@@ -1,88 +1,151 @@
-# Spatial Fauna Community
+# Spatial Terrestrial Food Web
 
-This document defines the metric terrestrial-fauna system for the 120 km² procedural island. It covers the generated whole-island census, persistent living patch cohorts, shared competition and the persistent material food/water pools consumed by those cohorts. The legacy subarea food web remains only as a compatibility layer for systems, especially predators, that have not yet migrated.
+This document defines the authoritative terrestrial ecology runtime for the canonical **120 km²** island. The spatial patch world now owns tracked terrestrial fauna, living flora, insects, predators and the material food/water budget that connects them. The old BuildGrid/subarea animal and predator systems remain in the codebase for compatibility reads and isolated regressions, but `simEngine.ts` no longer advances them.
 
-## Why this layer exists
+## Runtime ownership
 
-The original terrestrial fauna runtime was built around small materialized ecological subareas. Its species definitions use `baseDensityPer1000M2` plus small `maxInitialPopulation` caps. Those caps are useful for the old sample-grid runtime but cannot represent a 120 km² island literally: even suitable habitat was commonly clamped to a few dozen animals per population.
+`GameState.spatialFaunaSystem` is the persistent root of the terrestrial food web. It contains:
 
-The spatial world has real metric patch area, terrain, Local Site habitat signals and a deterministic world seed, so fauna abundance and its supporting resources can instead be derived from actual habitat area.
+- aggregate prey/herbivore/omnivore cohorts by habitat patch;
+- living flora populations by species/guild and patch;
+- living insect biomass by functional guild and patch;
+- predator cohorts by patch with food reserve and condition;
+- shared patch food, carrion and fresh-water stocks;
+- bounded daily telemetry/history.
 
-The census rule is:
+The generated community reports `legacyRuntimeSpeciesCount = 0`. Seven historical fauna definitions still reuse authored life-history values from `ecologyFauna.ts`; they are explicitly counted as **catalog bridges**, not as legacy runtime ownership.
 
-```text
-metric habitat area
-× species prime-habitat density / km²
-× generated patch suitability
-× macro-region affinity
-= local carrying capacity
-```
+The whole interaction layer has its own `interactionVersion`. Saves created before the authoritative trophic runtime are deterministically regenerated from the persistent world seed instead of carrying the old anonymous food pools into the new food web.
 
-Counts are **aggregate cohort counts**, not one JavaScript entity per animal. Runtime cost therefore scales mainly with `species × occupied habitat patches`, while an island can contain tens of thousands of tracked animals.
+## Tracked terrestrial fauna
 
-## Species catalog
+`src/data/spatialFauna.ts` contains **24 tracked terrestrial fauna species**: seven historical species plus seventeen additions spanning large herbivores/omnivores, small mammals, ground and canopy birds, bats, reptiles, amphibians and large invertebrates.
 
-`src/data/spatialFauna.ts` currently contains **24 terrestrial tracked species**: the seven legacy herbivore/omnivore species plus seventeen additional species spanning large herbivores/omnivores, small mammals and rodents, ground and canopy birds, fruit bats, reptiles, amphibians and large terrestrial invertebrates.
-
-The seven legacy species are Wild Boar, Feral Goat, Agouti, Wild Rabbit, Feral Chicken, Feral Duck and Tree Rat. Additional tracked species include Flying Fox, Small Fruit Bat, Fruit Dove, Ground Dove, Island Rail, Forest Quail, Forest Hornbill, Large Forest Rodent, Bamboo Rat, Palm Squirrel, Mouse Deer, Forest Gecko, Forest Skink, Ground Frog, Tree Frog, Coconut Crab and Marsh Turtle.
-
-This is deliberately a **tracked fauna layer**, not a claim that the island contains only 24 terrestrial animal species. Insects, other invertebrates and microfauna can remain biomass/guild pools until an individual species needs gameplay or food-web identity.
-
-## Metric density instead of legacy population caps
-
-Each spatial fauna definition has `densityPerKm2`, interpreted as a game-scale prime-habitat carrying density. It is separate from the legacy `baseDensityPer1000M2` field and is never clamped by the old `maxInitialPopulation` value.
-
-Small species can therefore reach populations of thousands where connected habitat supports them. Large, disturbance-sensitive or habitat-specialist animals remain much rarer because their density and suitable area are lower.
-
-Each species also defines broad fauna guild, ecological target profile, macro-region affinity, diet, deterministic world-presence probability, minimum patch suitability, minimum island K, starting occupancy, body size and life-history metadata.
-
-## Patch suitability and Local Site influence
-
-`src/simulation/spatial/spatialFaunaCommunity.ts` calculates suitability from the generated world rather than assigning a fixed population to a named POI.
-
-Patch suitability combines terrain/environment fit, guild-specific habitat signals, Local Site influence such as forage/water/breeding/refuge, macro-region affinity and disturbance tolerance. Two campaigns with the same ten macro regions can therefore have different local fauna distributions because terrain, hydrology and Local Sites differ by world seed.
-
-## Island, region and patch census
-
-For every species the generator produces island carrying capacity, starting population below K, occupied patch count, exact integer population/K per habitat patch and exact aggregation by canonical macro region.
-
-Integer allocation conserves totals across all levels:
-
-```text
-sum(patch population) = region totals = island population
-sum(patch K)          = region K      = island K
-```
-
-Rare species may be absent from a particular campaign when the world lacks enough suitable habitat or its deterministic presence roll fails.
-
-The deterministic CI census currently produces:
-
-- `spatial-fauna-alpha`: **23/24 species, 49,347 initial individuals, K 66,193**;
-- `spatial-fauna-beta`: **23/24 species, 46,438 initial individuals, K 65,472**.
-
-These totals exclude aquatic populations, predators and untracked background insects/microfauna.
-
-## Persistent living patch cohorts
-
-`src/types/spatialFaunaSimulation.ts` and `src/simulation/spatial/spatialFaunaRuntime.ts` materialize the census as compact persistent patch cohorts in `GameState.spatialFaunaSystem`.
-
-Each occupied species/patch stores only:
+Counts are aggregate cohorts, not one JavaScript entity per animal. Each occupied species/patch stores:
 
 ```text
 [juveniles, adults, old, condition, stressDays]
 ```
 
-Everything else is derived for the daily tick. The alpha seed starts with roughly **4,699 occupied cohorts** while serialized fauna-only state is about **282 KiB**, rather than creating ~49,000 animal entities.
+Carrying capacity is derived from real patch area, generated habitat suitability, macro-region affinity and Local Site ecological influence:
 
-The daily runtime implements juvenile → adult → old transitions, life-history natural mortality, condition/stress response, breeding with effective breeder and nearby-mate availability, dry/wet/monsoon seasonality, habitat/refuge/breeding suitability, adjacency dispersal, cross-region movement and bounded diagnostic history.
+```text
+metric patch area
+× prime-habitat density / km²
+× generated suitability
+× macro-region affinity
+= patch carrying capacity
+```
 
-The game-state bridge processes fauna only on day boundaries and catches up missed days in order. The same world seed and elapsed day horizon reproduce the same aggregate cohort history.
+Exact integer allocation conserves population and K from patch → region → island. The lower-level cohort runtime handles maturation, aging, natural mortality, reproduction, condition/stress and adjacency/cross-region dispersal.
 
-The lower-level demographic regression, which intentionally isolates demography from shared material resources, gives alpha day 365 **46,109 / K 66,193** with all **23/23** present species retained and day 1,800 **41,476 / K 66,193** with 23/23 retained without predator pressure.
+## Living flora: small to large
 
-## Persistent area-scaled patch resource pools
+`src/data/spatialFlora.ts` expands the vegetation model to **40+ tracked taxa/guilds** across thirteen structural strata:
 
-`src/simulation/spatial/spatialFaunaResourcePools.ts` provides the first conserved material budget for the metric terrestrial fauna runtime.
+- emergent trees;
+- canopy trees;
+- subcanopy trees;
+- understory trees;
+- shrubs;
+- herbs;
+- groundcover;
+- ferns;
+- vines/lianas;
+- epiphytes;
+- reeds/sedges;
+- mangroves;
+- aquatic vegetation.
+
+Flora is classified by growth strategy, habitat targets, regional affinity, disturbance tolerance, seed/propagule dispersal and explicit ecological roles. Roles include canopy structure, shade, fruit/seed/browse/root/ground food, timber, fiber, medicine, nectar, pollinator host, insect host, nitrogen cycling, erosion control, bank stabilization, wetland structure, aquatic food, refuge, succession pioneer and old-growth indicator.
+
+Each patch population persists compact state:
+
+```text
+[standing biomass kg, propagule reserve, condition, succession age days]
+```
+
+`spatialFloraRuntime.ts` controls carrying biomass, growth, turnover, colonization, local extirpation and daily primary production. Fruit and seed output responds to pollination; browsing, ground feeding and root/tuber extraction damage the corresponding living plant populations rather than consuming a private duplicate resource.
+
+### Flora owns plant renewal
+
+The authoritative material pass no longer uses fauna census K as a daily plant-production floor. Plant-food renewal is driven mainly by current living flora biomass, condition, season and pollination. A small background term represents untracked seedlings, cryptogams and minor taxa, but it cannot guarantee enough production to sustain census K by itself.
+
+CI includes a direct ownership regression: two identical worlds have plant stocks depleted; one keeps living flora and the other has flora biomass removed. The living-flora world must recover materially more plant food than the bare world.
+
+## Insects as a real trophic layer
+
+`src/data/spatialInsects.ts` tracks **20+ insect taxa/guilds** across twelve functional guilds:
+
+- pollinators;
+- folivores;
+- frugivores;
+- seed feeders;
+- wood borers;
+- detritivores;
+- dung feeders;
+- carrion feeders;
+- fungivores;
+- predatory insects;
+- blood feeders;
+- aquatic larvae.
+
+Their suitability depends on habitat, hydrology, region, substrate and living flora host biomass. Substrates include canopy, understory, ground, deadwood, litter, dung, carrion, flowers, fruit, freshwater and wetlands.
+
+Each insect patch population persists:
+
+```text
+[live biomass kg, egg/larval/refugial recruitment reserve, condition]
+```
+
+Insect biomass is a major food source for many tracked birds, bats, reptiles, amphibians and small mammals. The fauna material pass consumes **actual accessible insect biomass**. Egg/larval/refugial reserve is protected from one-day predation and creates a recovery path after severe depletion, so `insects` is no longer an anonymous kg pool that simply respawns from a constant.
+
+Insects also act on the ecosystem instead of existing only as food:
+
+- pollinator biomass affects fruit/seed output;
+- folivore/herbivore pressure damages living flora biomass and condition;
+- detritivore, termite, dung and carrion guilds contribute decomposition/nutrient effects;
+- aquatic larvae provide a terrestrial/aquatic trophic connection signal.
+
+The accessible-biomass rule is centralized in `spatialInsectRuntime.ts`, so material-pool synchronization and actual predation use the same harvestable fraction.
+
+## Spatial predators
+
+`src/data/spatialPredators.ts` and `spatialPredatorRuntime.ts` migrate terrestrial predators onto the same generated patch world. Five predator definitions use metric density, habitat/region preferences, home-range scale, prey spectrum, daily food need, reserve capacity and hunt parameters.
+
+Predation is no longer omniscient selection from a legacy subarea menu. Each day predators perform a patch-scale process:
+
+```text
+home-range search
+→ prey availability / refuge / predator-opportunity scoring
+→ encounter
+→ attack / kill
+→ prey cohort subtraction
+→ predator food reserve
+→ leftover carrion
+```
+
+Kills remove heads from the actual prey cohort in the selected patch. Consumed biomass replenishes predator reserve; unused kill biomass becomes carrion in the shared material budget. Low reserve/poor hunting affects condition, mortality and movement.
+
+## Authoritative daily food-web order
+
+`spatialFaunaEcosystemRuntime.ts` resolves one terrestrial day in causal order:
+
+```text
+1. living flora growth / succession / primary production
+2. insect population growth and recruitment
+3. insect functional effects on plants
+4. shared material recovery + fauna feeding/drinking
+5. refresh flora/insect telemetry after consumption
+6. shared refuge/niche competition
+7. prey/herbivore/omnivore demography and dispersal
+8. predator search → encounter → kill → carrion
+9. combined telemetry/history
+```
+
+This order prevents the same shortage from being counted twice and makes plant/insect state causally upstream of fauna condition and predator prey availability.
+
+## Shared patch material budget
 
 Each generated habitat patch persists one compact stock tuple:
 
@@ -93,100 +156,67 @@ Each generated habitat patch persists one compact stock tuple:
   browse kg,
   ground vegetation kg,
   roots/tubers kg,
-  insects kg,
+  accessible insects kg,
   aquatic plants kg,
   carrion kg,
   fresh-water units
 ]
 ```
 
-Only changing stock is saved. Capacity and productivity are regenerated deterministically from the world seed, actual patch area, generated habitat, hydrology, Local Sites and the metric fauna census. This keeps save size bounded while making the material world reproducible.
+Standing-stock capacity is still calibrated from real patch area, habitat, hydrology and Local Sites so a clipped sliver cannot hold the same material as a large productive patch. The old area-scaled model also remains useful for capacity and scarcity regression.
 
-### Area is the primary scale
+Active renewal, however, now has different owners:
 
-The pool is deliberately **not** a fixed amount per patch. Every standing-stock capacity starts from:
+- plant families: living spatial flora + a small untracked-background term;
+- insects: living insect populations only;
+- carrion: mortality/predation events minus decay;
+- fresh water: hydrology/recharge;
+- consumption: all co-located fauna draw from the same stock.
 
-```text
-patch area in km²
-× resource standing crop per km²
-× habitat / hydrology / Local Site potential
-```
-
-Food standing-crop coefficients range from sparse carrion through fruit/seeds to much larger browse, ground vegetation and aquatic-plant biomass. Fresh-water capacity also scales with patch area, then receives wetness, water-index, catchment-flow and Local Site water signals.
-
-This means clipping the same nominal 600 m grid into a tiny polygon sliver does not magically create the same resource pool as a 0.3–0.36 km² patch. A large productive patch carries proportionally more standing material.
-
-The current deterministic model is intentionally large enough for a **120 km² tropical island** rather than inheriting sample-grid quantities. The first measured resource regression produced:
-
-- alpha: **67.93 million kg** total food standing capacity;
-- beta: **68.25 million kg** total food standing capacity;
-- minimum generated patch standing-food density in those worlds: about **310k–345k kg/km²**;
-- alpha neutral resource production: about **646k kg/day** across the full island;
-- beta neutral resource production: about **652k kg/day**;
-- full census-K tracked-fauna food demand is only about **3.0 t/day**.
-
-The large difference is intentional: the stock/productivity layer represents a whole tropical landscape and food-web substrate, whereas the 24 tracked species are only a selected gameplay/ecology census. Predators, aquatic fauna, untracked insects, decomposers/microfauna and future player extraction are not yet all drawing from these pools.
-
-### K is a safety calibration, not the source of biomass
-
-Area/habitat determines the physical-scale pool first. The metric census is then used as a consistency floor:
-
-- each consumed food family has enough standing reserve for its local K demand;
-- neutral production cannot be lower than local K demand × **1.35**;
-- fresh-water storage cannot be lower than **45 days** of local K water demand;
-- neutral water recharge cannot be lower than local K demand × **1.5**.
-
-This prevents a contradiction where the census says a patch can support a population while the resource model says the same patch cannot feed it. It does **not** make K an infinite food generator: all daily consumption still subtracts from the persisted stock.
-
-### Shared consumption and recovery
-
-At the start of each fauna ecosystem day the patch pools recover according to season and local environment, then all co-located cohorts submit their metabolic demand to the same material budget.
-
-Food demand is split through each species' normalized diet. If several species consume fruit, for example, they all draw from the same fruit stock exactly once. The available amount is allocated as a shared satisfaction ratio rather than giving every species a private copy of the fruit pool. Fresh water works the same way at patch level.
-
-Dry/wet/monsoon multipliers alter resource-family recovery differently. Dry season suppresses fruit, vegetation, insects and aquatic production more strongly; wet/monsoon conditions improve most biological/water recovery while preserving resource-specific differences.
-
-Material shortage directly changes persistent cohort condition and stress **before** mortality, breeding and dispersal are processed for the day. This gives later movement and population dynamics a causal material signal rather than a telemetry-only warning.
-
-A 30-day alpha regression consumed about **62.8 t** of food while the large landscape regenerated about **5.57 million kg** into partially empty standing pools. Food and water pools remained around **0.93–0.94 full** under the normal below-K tracked community. Adding the 486 compact patch resource tuples increased the serialized runtime state to roughly **369 KiB**, still well below the regression ceiling.
-
-The stress regression deliberately empties one patch, then derives the artificial overload from that patch's own daily productivity and the selected species' metabolic demand. The test therefore proves material scarcity only when demand exceeds actual local recovery; it no longer relies on an arbitrary fixed `20×K` multiplier.
-
-## Shared patch competition
-
-`src/simulation/spatial/spatialFaunaCompetition.ts` still computes start-of-day community pressure for every occupied patch. The census K remains the calibrated coexistence baseline rather than introducing another arbitrary global carrying-capacity multiplier.
-
-Competition diagnostics distinguish:
-
-1. **Food niche pressure** — metabolic food requirement weighted by normalized diet overlap;
-2. **Water pressure** — shared metabolic water demand;
-3. **Refuge pressure** — occupancy weighted by ecological guild overlap.
-
-With material pools active, food and water pressure are now **diagnostic only**. Their scarcity effect is owned by the conserved resource stocks so the runtime cannot punish the same shortage twice. Refuge remains a non-consumable shared-space constraint and still modifies condition/stress directly.
-
-The intentional Wild Boar/Agouti overload remains useful as a niche diagnostic: focal food pressure rises from **0.863** to **1.996** and its inferred food factor falls to **0.477** even though the focal cohort itself was not inflated.
-
-Normal one-year ecosystem runs retain all 23 present species in both deterministic worlds while the large material pools remain stable. This is expected at the current tracked-fauna density: the island-scale substrate is much larger than the selected census, while local depletion and future additional consumers can still create spatial scarcity.
+Material shortage changes persistent cohort condition/stress before demography. Food/water niche-pressure calculations remain diagnostic when conserved material pools are active; refuge remains an active non-consumable shared-space constraint.
 
 ## Compatibility boundary
 
-The metric system is now the living world-scale terrestrial-fauna runtime. `simEngine.ts` advances it before the legacy terrestrial ecology block.
+The migration deliberately separates **runtime ownership** from **compatibility code**.
 
-The old `ecologyFaunaSystem` and predator systems still run as a compatibility food web for gameplay/systems that have not migrated. They must not be interpreted as a second literal population census and their populations are not added to the metric island totals.
+`simEngine.ts` now advances the spatial terrestrial food web once and does **not** call the old terrestrial fauna, predator or long-run balance ticks. The old subarea flora still runs temporarily because existing UI/resource bridges read it. Aquatic ecology also remains on its existing runtime for now.
 
-The new fauna food/water pools are also **not yet the same state as player-facing Local Site harvest stocks**. Local Site resource simulation remains the current player extraction model. A later bridge must make fauna use, background ecology and player harvest share the appropriate material budget without double-counting resource families.
+Therefore:
 
-The legacy predator model has **not** yet been connected to the 24-species patch community. Predator migration remains deferred until prey/resource dynamics are stable enough that predation pressure can be measured against actual spatial prey availability rather than the old subarea menu.
+- old terrestrial animal/predator populations are not a second live census;
+- seven historical fauna species may reuse old authored data, but their live populations exist only in the spatial runtime;
+- old terrestrial predator code is regression/compatibility code, not gameplay authority;
+- old subarea flora is transitional compatibility state, while fauna food production is owned by spatial flora.
 
-## Next migration phase
+## Validation
 
-The next coherent steps are:
+The CI workflow includes dedicated spatial regressions for:
 
-1. bridge player gathering / Local Site harvest into the corresponding patch material pools so human extraction and fauna draw from one budget;
-2. add background/untracked guild turnover where needed so gross landscape productivity is not interpreted as free surplus owned only by the 24 tracked species;
-3. strengthen movement into explicit feeding/drinking/refuge/breeding patch selection and seasonal redistribution;
-4. expose only locally encountered groups/individuals to gameplay;
-5. migrate predators onto the same patch world, using search → encounter → attack rather than omniscient prey selection;
-6. validate biomass/energy flow, local extirpation/recolonization and predator competition before retiring the compatibility runtime.
+- metric fauna census and exact conservation;
+- living fauna cohort demography;
+- shared competition;
+- area-scaled material capacity/scarcity;
+- full terrestrial trophic ecosystem;
+- flora stratum/role coverage;
+- insect guild coverage and functional roles;
+- insect reserve recovery and protected biomass;
+- living-flora ownership of plant renewal;
+- predator removal of real prey cohorts;
+- insectivorous fauna consuming real insect biomass;
+- deterministic same-seed food-web evolution;
+- bounded serialized aggregate state.
 
-The core design remains: **the island contains ecologically meaningful animal populations and material resources at world scale, while gameplay materializes only animals and encounters that matter locally.**
+The full trophic long-run test uses deterministic 90-day and 60-day worlds and rejects collapses in flora, insects, prey or predators rather than merely checking that functions execute.
+
+## Still deferred
+
+The terrestrial migration does **not** make every ecology subsystem complete. The next clean boundaries are:
+
+1. bridge player gathering and Local Site harvesting into the same patch material budget so humans and wildlife cannot extract duplicate resources;
+2. migrate aquatic fauna/food-web populations onto generated spatial hydrology where appropriate;
+3. replace centroid-neighbor routing with exact passability, trails, barriers and seasonal crossings;
+4. strengthen fauna behavior from daily cohort redistribution into explicit feeding/drinking/refuge/breeding site selection where gameplay needs it;
+5. materialize only locally encountered animals/groups for encounter gameplay and UI;
+6. retire old subarea flora once all player-facing resource/UI readers consume spatial flora.
+
+The core rule is now: **one spatial terrestrial population and material budget owns the living island; gameplay materializes only the local organisms and encounters that matter to the player.**
