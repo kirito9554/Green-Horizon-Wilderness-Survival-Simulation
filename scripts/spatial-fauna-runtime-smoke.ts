@@ -14,6 +14,18 @@ interface RuntimeValidationOptions {
   maxSpeciesLoss?: number;
 }
 
+const MAX_SERIALIZED_RUNTIME_BYTES = 700 * 1024;
+
+function assertCompactCohort(cohort: [number, number, number, number, number], label: string): void {
+  const population = getSpatialFaunaCohortPopulation(cohort);
+  assert.ok(Number.isInteger(population) && population > 0, `${label}: cohort headcount must be a positive integer`);
+  assert.ok(Number.isInteger(cohort[0]) && cohort[0] >= 0, `${label}: juvenile count invalid`);
+  assert.ok(Number.isInteger(cohort[1]) && cohort[1] >= 0, `${label}: adult count invalid`);
+  assert.ok(Number.isInteger(cohort[2]) && cohort[2] >= 0, `${label}: old count invalid`);
+  assert.ok(cohort[3] >= 0 && cohort[3] <= 1, `${label}: condition invalid`);
+  assert.ok(Number.isInteger(cohort[4]) && cohort[4] >= 0, `${label}: stress-days invalid`);
+}
+
 function assertRuntimeInvariants(seed: string, days: number, options: RuntimeValidationOptions = {}): {
   population: number;
   births: number;
@@ -37,17 +49,18 @@ function assertRuntimeInvariants(seed: string, days: number, options: RuntimeVal
   let initialCohorts = 0;
   for (const speciesState of runtime.species) {
     assert.ok(SPATIAL_FAUNA_SPECIES_BY_ID[speciesState.speciesId], `${seed}: unknown runtime species ${speciesState.speciesId}`);
-    for (const cohort of speciesState.cohorts) {
+    for (const [patchId, cohort] of Object.entries(speciesState.cohortsByPatch)) {
       initialCohorts += 1;
-      assert.ok(patchIds.has(cohort.patchId), `${seed}: cohort references missing patch ${cohort.patchId}`);
-      const population = getSpatialFaunaCohortPopulation(cohort);
-      assert.ok(Number.isInteger(population) && population > 0, `${seed}: initial cohort headcount must be a positive integer`);
-      assert.equal(cohort.stages.juveniles + cohort.stages.adults + cohort.stages.old, population);
-      assert.ok(cohort.condition >= 0 && cohort.condition <= 1);
+      assert.ok(patchIds.has(patchId), `${seed}: cohort references missing patch ${patchId}`);
+      assertCompactCohort(cohort, `${seed}:${speciesState.speciesId}:${patchId}`);
     }
   }
   assert.ok(initialCohorts > 200, `${seed}: census should be spatially distributed across many occupied patch cohorts`);
   const initialSerializedBytes = Buffer.byteLength(JSON.stringify(runtime), 'utf8');
+  assert.ok(
+    initialSerializedBytes <= MAX_SERIALIZED_RUNTIME_BYTES,
+    `${seed}: compact runtime state regressed above ${(MAX_SERIALIZED_RUNTIME_BYTES / 1024).toFixed(0)} KiB (${(initialSerializedBytes / 1024).toFixed(1)} KiB)`,
+  );
   console.log(`[${seed}] initial cohorts=${initialCohorts} runtimeState=${(initialSerializedBytes / 1024).toFixed(1)} KiB`);
 
   let births = 0;
@@ -66,6 +79,7 @@ function assertRuntimeInvariants(seed: string, days: number, options: RuntimeVal
     assert.ok(telemetry.meanCondition >= 0 && telemetry.meanCondition <= 1);
     assert.ok(telemetry.meanFoodSufficiency >= 0 && telemetry.meanFoodSufficiency <= 1);
     assert.ok(telemetry.meanWaterSufficiency >= 0 && telemetry.meanWaterSufficiency <= 1);
+    assert.ok(telemetry.meanRefugeSufficiency >= 0 && telemetry.meanRefugeSufficiency <= 1);
     assert.ok(telemetry.foodDemandKg > 0 && telemetry.waterDemandUnits > 0, `${seed}: living fauna must publish resource demand`);
   }
 
@@ -90,22 +104,16 @@ function assertRuntimeInvariants(seed: string, days: number, options: RuntimeVal
     assert.ok(plan?.present, `${seed}: runtime species must belong to the generated census`);
     const allocationByPatch = new Map(plan!.patchAllocations.map(allocation => [allocation.patchId, allocation] as const));
     let speciesPopulation = 0;
-    for (const cohort of speciesState.cohorts) {
+    for (const [patchId, cohort] of Object.entries(speciesState.cohortsByPatch)) {
       const populationHere = getSpatialFaunaCohortPopulation(cohort);
       speciesPopulation += populationHere;
-      const allocation = allocationByPatch.get(cohort.patchId);
-      assert.ok(populationHere > 0 && Number.isInteger(populationHere), `${seed}: sparse runtime must not retain empty/fractional cohorts`);
+      const allocation = allocationByPatch.get(patchId);
+      assertCompactCohort(cohort, `${seed}:${speciesState.speciesId}:${patchId}`);
       assert.ok(allocation, `${seed}: dispersal entered unsupported habitat for ${speciesState.speciesId}`);
       assert.ok(
         populationHere <= allocation!.carryingCapacity * 1.25 + 2,
-        `${seed}: ${speciesState.speciesId} overcrowded patch ${cohort.patchId} (${populationHere}/${allocation!.carryingCapacity})`,
+        `${seed}: ${speciesState.speciesId} overcrowded patch ${patchId} (${populationHere}/${allocation!.carryingCapacity})`,
       );
-      assert.ok(cohort.stages.juveniles >= 0 && cohort.stages.adults >= 0 && cohort.stages.old >= 0);
-      assert.ok(cohort.condition >= 0 && cohort.condition <= 1);
-      assert.ok(cohort.foodSufficiency >= 0 && cohort.foodSufficiency <= 1);
-      assert.ok(cohort.waterSufficiency >= 0 && cohort.waterSufficiency <= 1);
-      assert.ok(cohort.refugeSufficiency >= 0 && cohort.refugeSufficiency <= 1);
-      assert.ok(cohort.breedingReadiness >= 0 && cohort.breedingReadiness <= 1);
     }
     assert.ok(speciesPopulation <= plan!.islandCarryingCapacity * 1.25 + 4, `${seed}: ${speciesState.speciesId} escaped its island-scale K too far`);
     finalSpecies.push({ id: speciesState.speciesId, population: speciesPopulation, k: plan!.islandCarryingCapacity });
@@ -117,6 +125,10 @@ function assertRuntimeInvariants(seed: string, days: number, options: RuntimeVal
     .map(entry => `${entry.id.replace('FAUNA_', '')}=${entry.population}/${entry.k}`)
     .join(', ');
   const finalSerializedBytes = Buffer.byteLength(JSON.stringify(runtime), 'utf8');
+  assert.ok(
+    finalSerializedBytes <= MAX_SERIALIZED_RUNTIME_BYTES,
+    `${seed}: compact runtime state grew above ${(MAX_SERIALIZED_RUNTIME_BYTES / 1024).toFixed(0)} KiB (${(finalSerializedBytes / 1024).toFixed(1)} KiB)`,
+  );
   const signature = JSON.stringify(runtime.species);
   console.log(`[${seed}] day=${days} population=${population}/${world.faunaCommunity.totalCarryingCapacity} species=${runtime.telemetry.presentSpeciesCount}/${initialSpeciesCount} cohorts=${runtime.telemetry.occupiedCohortCount} births=${births} deaths=${deaths} moved=${moved} crossRegion=${crossRegionMoved} condition=${runtime.telemetry.meanCondition.toFixed(3)} runtimeState=${(finalSerializedBytes / 1024).toFixed(1)} KiB`);
   console.log(`[${seed}] weakest: ${weakest}`);
@@ -141,7 +153,7 @@ function main(): void {
   assert.equal(alpha.births, alphaAgain.births, 'same seed/day horizon must reproduce births exactly');
   assert.equal(alpha.deaths, alphaAgain.deaths, 'same seed/day horizon must reproduce deaths exactly');
   assert.equal(alpha.moved, alphaAgain.moved, 'same seed/day horizon must reproduce dispersal exactly');
-  assert.equal(alpha.signature, alphaAgain.signature, 'same seed/day horizon must reproduce exact sparse cohort state');
+  assert.equal(alpha.signature, alphaAgain.signature, 'same seed/day horizon must reproduce exact compact cohort state');
   assert.notEqual(alpha.signature, beta.signature, 'different world seeds should retain different living fauna distributions');
   assert.ok(longRun.presentSpecies >= alpha.presentSpecies - 3, 'five-year runtime should retain most species without predator pressure');
 
