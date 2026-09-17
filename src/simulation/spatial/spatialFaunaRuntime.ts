@@ -20,7 +20,7 @@ import type { SpatialFaunaPatchAllocation } from './spatialFaunaCommunity';
 import { spatialUnitRandom } from './spatialRandom';
 import { generateSpatialWorld, getSpatialWorldSeed, type GeneratedSpatialWorld } from './worldGeneration';
 
-export const SPATIAL_FAUNA_RUNTIME_VERSION = 2;
+export const SPATIAL_FAUNA_RUNTIME_VERSION = 3;
 export const SPATIAL_FAUNA_HISTORY_DAYS = 30;
 
 const JUVENILES = 0;
@@ -169,7 +169,9 @@ function dailyResourceState(
   const food = clamp01((base.food * 1.25 + .18) / (.48 + density * .67));
   const water = clamp01((base.water * 1.18 + .2) / (.46 + density * .62));
   const refuge = clamp01(base.refuge / (.82 + Math.max(0, density - .65) * .36));
-  const breeding = clamp01(base.breeding * Math.max(.05, 1.22 - density));
+  // Carrying-capacity pressure belongs in breedingReadiness below. Applying it
+  // here as well suppresses reproduction twice for the same density signal.
+  const breeding = base.breeding;
   return { food, water, refuge, breeding };
 }
 
