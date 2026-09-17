@@ -25,6 +25,9 @@ export type SpatialFaunaPatchCohortState = [
 export interface SpatialFaunaSpeciesRuntimeState {
   speciesId: string;
   cohortsByPatch: Record<string, SpatialFaunaPatchCohortState>;
+  /** Consecutive globally absent days, used only by the slow external recolonization safety net. */
+  globalAbsenceDays?: number;
+  lastImmigrationDay?: number;
 }
 
 export const SPATIAL_FAUNA_FOOD_RESOURCE_ORDER: readonly WildFoodResource[] = [
@@ -56,6 +59,11 @@ export interface SpatialFaunaDailyTelemetry {
   agedIntoOld: number;
   moved: number;
   crossRegionMoved: number;
+  mateSearchMoved?: number;
+  natalDispersed?: number;
+  groupSplitMoved?: number;
+  resourceMoved?: number;
+  recolonizedIndividuals?: number;
   foodDemandKg: number;
   waterDemandUnits: number;
   meanCondition: number;
