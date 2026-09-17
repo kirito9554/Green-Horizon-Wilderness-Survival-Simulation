@@ -1,4 +1,9 @@
 import type { WildFoodResource } from './ecologySimulation';
+import type {
+  SpatialFloraRuntimeState,
+  SpatialInsectRuntimeState,
+  SpatialPredatorRuntimeState,
+} from './spatialEcologySimulation';
 
 export type SpatialFaunaSeason = 'dry' | 'wet' | 'monsoon';
 
@@ -8,14 +13,7 @@ export interface SpatialFaunaStageCounts {
   old: number;
 }
 
-/**
- * Compact persistent cohort tuple:
- * [juveniles, adults, old, condition(0..1), consecutiveStressDays].
- *
- * patchId is intentionally the key in cohortsByPatch instead of being repeated
- * inside every cohort. Food/water/refuge/breeding and per-day event counters are
- * derived during the daily tick and are not persisted on thousands of cohorts.
- */
+/** Compact cohort: [juveniles, adults, old, condition(0..1), consecutiveStressDays]. */
 export type SpatialFaunaPatchCohortState = [
   juveniles: number,
   adults: number,
@@ -30,24 +28,10 @@ export interface SpatialFaunaSpeciesRuntimeState {
 }
 
 export const SPATIAL_FAUNA_FOOD_RESOURCE_ORDER: readonly WildFoodResource[] = [
-  'fruit',
-  'seeds',
-  'browse',
-  'ground_vegetation',
-  'roots_tubers',
-  'insects',
-  'aquatic_plants',
-  'carrion',
+  'fruit', 'seeds', 'browse', 'ground_vegetation', 'roots_tubers', 'insects', 'aquatic_plants', 'carrion',
 ] as const;
 
-/**
- * Persistent shared patch stock in physical/ecological units:
- * [fruit kg, seeds kg, browse kg, ground vegetation kg, roots/tubers kg,
- * insects kg, aquatic plants kg, carrion kg, fresh-water demand units].
- *
- * Capacity and productivity are regenerated deterministically from patch area,
- * habitat, hydrology, Local Sites and the census K. Only changing stock is saved.
- */
+/** [fruit, seeds, browse, ground vegetation, roots/tubers, insects, aquatic plants, carrion, fresh water]. */
 export type SpatialFaunaPatchResourceStockState = [
   fruitKg: number,
   seedsKg: number,
@@ -78,17 +62,11 @@ export interface SpatialFaunaDailyTelemetry {
   meanFoodSufficiency: number;
   meanWaterSufficiency: number;
   meanRefugeSufficiency: number;
-  /**
-   * Shared-patch competition diagnostics are added by the metric ecosystem
-   * interaction pass. They are optional for backward-compatible saves and for
-   * the lower-level cohort tick when it is exercised in isolation.
-   */
   meanFoodCompetitionPressure?: number;
   meanWaterCompetitionPressure?: number;
   meanRefugeCompetitionPressure?: number;
   competitionLimitedCohortCount?: number;
   competitionLimitedPopulation?: number;
-  /** Persistent patch resource-pool diagnostics. */
   foodPoolStockKg?: number;
   foodPoolCapacityKg?: number;
   foodPoolRecoveredKg?: number;
@@ -101,23 +79,28 @@ export interface SpatialFaunaDailyTelemetry {
   meanWaterPoolFill?: number;
   resourceLimitedCohortCount?: number;
   resourceLimitedPopulation?: number;
+  /** Authoritative spatial trophic-layer diagnostics. */
+  floraBiomassKg?: number;
+  insectBiomassKg?: number;
+  insectConsumedKg?: number;
+  predatorPopulation?: number;
+  predatorKills?: number;
+  predatorKillBiomassKg?: number;
 }
 
 export interface SpatialFaunaRuntimeState {
   version: number;
   worldSeed: string;
   communitySignature: string;
-  /** Latest in-game day fully processed by the daily fauna runtime. */
   lastProcessedDay: number;
   season: SpatialFaunaSeason;
   species: SpatialFaunaSpeciesRuntimeState[];
-  /**
-   * Shared food/water stocks keyed by generated habitat patch. Optional so old
-   * saves and the low-level demographic tests can lazily materialize the pools.
-   */
   resourceStocksByPatch?: Record<string, SpatialFaunaPatchResourceStockState>;
+  /** These nested states make the metric patch world the terrestrial ecology authority. */
+  floraSystem?: SpatialFloraRuntimeState;
+  insectSystem?: SpatialInsectRuntimeState;
+  predatorSystem?: SpatialPredatorRuntimeState;
   telemetry: SpatialFaunaDailyTelemetry;
-  /** Small rolling history for diagnostics/UI; deliberately bounded. */
   history: SpatialFaunaDailyTelemetry[];
 }
 
