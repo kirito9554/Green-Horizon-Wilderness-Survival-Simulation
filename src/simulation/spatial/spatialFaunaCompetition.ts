@@ -50,6 +50,15 @@ export interface SpatialFaunaCompetitionSummary {
   affectedPopulation: number;
 }
 
+export interface SpatialFaunaCompetitionApplicationOptions {
+  /**
+   * When true, food and water factors stay diagnostic only because persistent
+   * material resource pools already own those scarcity effects. Refuge pressure
+   * still modifies condition/stress because shelter space is not a consumable stock.
+   */
+  resourcePoolsOwnFoodWater?: boolean;
+}
+
 interface PatchSpeciesLoad {
   speciesId: string;
   definition: SpatialFaunaSpeciesDefinition;
@@ -246,16 +255,15 @@ export function buildSpatialFaunaCompetitionSnapshot(
 }
 
 /**
- * Apply the shared-resource interaction before the core daily demographic tick.
- * This makes today's mortality, breeding readiness and stress-driven dispersal
- * see interspecific pressure without creating one entity per animal.
- *
- * This is a competition layer, not a conserved food-stock model. Living flora,
- * insects and local-resource stocks can later replace the K-derived baseline.
+ * Apply shared community interaction before the core daily demographic tick.
+ * When material resource pools are active, their conserved stock owns food and
+ * water scarcity; this layer then applies only refuge competition while keeping
+ * food/water pressure as a useful diagnostic of niche crowding.
  */
 export function applySpatialFaunaCompetitionPressure(
   runtime: SpatialFaunaRuntimeState,
   world: GeneratedSpatialWorld,
+  options: SpatialFaunaCompetitionApplicationOptions = {},
 ): SpatialFaunaCompetitionSummary {
   const snapshot = buildSpatialFaunaCompetitionSnapshot(runtime, world);
   let weight = 0;
@@ -293,12 +301,12 @@ export function applySpatialFaunaCompetitionPressure(
         limitedPopulation += population;
       }
 
-      // No boost below baseline K: ecological release is represented by the
-      // absence of an extra penalty, while the ordinary patch resource model
-      // remains responsible for positive condition recovery.
-      if (pressure.combinedFactor < .999) {
-        cohort[CONDITION] = clamp01(cohort[CONDITION] * (.86 + pressure.combinedFactor * .14));
-        if (pressure.combinedFactor < .9) cohort[STRESS_DAYS] += 1;
+      const appliedFactor = options.resourcePoolsOwnFoodWater
+        ? pressure.refugeFactor
+        : pressure.combinedFactor;
+      if (appliedFactor < .999) {
+        cohort[CONDITION] = clamp01(cohort[CONDITION] * (.86 + appliedFactor * .14));
+        if (appliedFactor < .9) cohort[STRESS_DAYS] += 1;
       }
     }
   }
