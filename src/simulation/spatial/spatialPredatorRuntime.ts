@@ -23,7 +23,7 @@ import {
   type SpatialAnimalMovementReason,
 } from './spatialAnimalBehavior';
 
-export const SPATIAL_PREDATOR_RUNTIME_VERSION = 5;
+export const SPATIAL_PREDATOR_RUNTIME_VERSION = 6;
 const JUVENILES = 0;
 const ADULTS = 1;
 const OLD = 2;
@@ -103,38 +103,92 @@ function clampPredatorReserve(cohort: SpatialPredatorPatchCohortState, species: 
   cohort[RESERVE] = Math.min(capacity, Math.max(0, cohort[RESERVE]));
   return capacity;
 }
+export function getSpatialPredatorMinimumFounderUnits(species: SpatialPredatorSpeciesDefinition): number {
+  switch (species.socialMode) {
+    case 'family_group': return 3;
+    case 'breeding_pair': return 2;
+    case 'loose_aggregation': return 2;
+    case 'solitary_territory': return 3;
+  }
+}
+
+export function getSpatialPredatorMinimumViablePopulation(species: SpatialPredatorSpeciesDefinition): number {
+  return Math.max(species.minIslandCapacity, getSpatialPredatorMinimumFounderUnits(species) * 2);
+}
+
+function preferredInitialFounderUnitSize(species: SpatialPredatorSpeciesDefinition): number {
+  if (species.socialMode === 'family_group') return 4;
+  if (species.socialMode === 'loose_aggregation') return 4;
+  return 2;
+}
+
+function createInitialFounderCohort(
+  species: SpatialPredatorSpeciesDefinition,
+  count: number,
+  suitability: number,
+  reserveFraction: number,
+): SpatialPredatorPatchCohortState {
+  const extraBeyondPair = Math.max(0, count - 2);
+  const juveniles = Math.min(extraBeyondPair, Math.floor(count * .18));
+  const old = Math.min(Math.max(0, extraBeyondPair - juveniles), Math.floor(count * .08));
+  const adults = Math.max(2, count - juveniles - old);
+  const cohort: SpatialPredatorPatchCohortState = [juveniles, adults, old, .82 + suitability * .14, 0];
+  initializePredatorReserve(cohort, species, reserveFraction);
+  return cohort;
+}
 
 export function createSpatialPredatorRuntimeState(world: GeneratedSpatialWorld, day = 1): SpatialPredatorRuntimeState {
   const speciesStates = SPATIAL_PREDATOR_SPECIES.map(def => {
     const cohortsByPatch: Record<string, SpatialPredatorPatchCohortState> = {};
-    if (spatialUnitRandom(world.worldSeed, `predator-presence|${def.id}`) <= def.worldPresence) {
-      let total = 0;
-      let bestPatch: HabitatPatch | undefined;
-      let bestSuitability = 0;
+    if (spatialUnitRandom(world.worldSeed, 'predator-presence|' + def.id) <= def.worldPresence) {
+      const minimumFounderUnits = getSpatialPredatorMinimumFounderUnits(def);
+      const minimumViablePopulation = getSpatialPredatorMinimumViablePopulation(def);
+      const candidates: Array<{ patch: HabitatPatch; suitability: number; expectedContribution: number; anchorScore: number }> = [];
+      let expectedIslandPopulation = 0;
+
       for (const patch of world.habitatPatches) {
         const suitability = predatorSuitability(def, patch, world);
-        if (suitability > bestSuitability) { bestSuitability = suitability; bestPatch = patch; }
-        if (suitability < def.minPatchSuitability) continue;
-        const expected = patch.areaKm2 * def.densityPerKm2 * Math.pow(suitability, 1.45);
-        const base = Math.floor(expected);
-        const fractional = expected - base;
-        let count = base + (spatialUnitRandom(world.worldSeed, `predator-count|${def.id}|${patch.id}`) < fractional ? 1 : 0);
-        const occupancy = def.initialOccupancy[0] + spatialUnitRandom(world.worldSeed, `predator-occ|${def.id}|${patch.id}`) * (def.initialOccupancy[1] - def.initialOccupancy[0]);
-        count = Math.round(count * occupancy);
-        if (count <= 0) continue;
-        const juveniles = Math.floor(count * .18);
-        const old = Math.floor(count * .08);
-        const adults = Math.max(0, count - juveniles - old);
-        const cohort: SpatialPredatorPatchCohortState = [juveniles, adults, old, .82 + suitability * .14, 0];
-        initializePredatorReserve(cohort, def, .52 + spatialUnitRandom(world.worldSeed, `predator-reserve|${def.id}|${patch.id}`) * .18);
-        cohortsByPatch[patch.id] = cohort;
-        total += count;
+        if (suitability < def.minPatchSuitability * .9) continue;
+        const occupancy = def.initialOccupancy[0]
+          + spatialUnitRandom(world.worldSeed, 'predator-occ|' + def.id + '|' + patch.id) * (def.initialOccupancy[1] - def.initialOccupancy[0]);
+        const densityExpectation = patch.areaKm2 * def.densityPerKm2 * Math.pow(suitability, 1.45);
+        const expectedContribution = suitability >= def.minPatchSuitability ? densityExpectation * occupancy : 0;
+        expectedIslandPopulation += expectedContribution;
+        const anchorScore = suitability * .55
+          + (1 - Math.exp(-expectedContribution * 4)) * .35
+          + spatialUnitRandom(world.worldSeed, 'predator-anchor|' + def.id + '|' + patch.id) * .1;
+        candidates.push({ patch, suitability, expectedContribution, anchorScore });
       }
-      if (total < def.minIslandCapacity && bestPatch && bestSuitability >= def.minPatchSuitability * .9) {
-        const count = def.minIslandCapacity;
-        const cohort: SpatialPredatorPatchCohortState = [Math.max(0, Math.floor(count * .15)), Math.max(1, Math.ceil(count * .77)), Math.floor(count * .08), .86, 0];
-        initializePredatorReserve(cohort, def, .62);
-        cohortsByPatch[bestPatch.id] = cohort;
+
+      if (candidates.length > 0) {
+        const ecologicalTarget = deterministicRound(
+          world.worldSeed,
+          'predator-island-target|' + def.id,
+          expectedIslandPopulation,
+        );
+        const targetPopulation = Math.max(minimumViablePopulation, ecologicalTarget);
+        const preferredUnitSize = preferredInitialFounderUnitSize(def);
+        const maximumUnitCount = Math.max(1, Math.floor(targetPopulation / 2));
+        const desiredUnitCount = Math.min(
+          candidates.length,
+          maximumUnitCount,
+          Math.max(minimumFounderUnits, Math.ceil(targetPopulation / preferredUnitSize)),
+        );
+
+        candidates.sort((a, b) => b.anchorScore - a.anchorScore || b.expectedContribution - a.expectedContribution || a.patch.id.localeCompare(b.patch.id));
+        const unitSizes = Array.from({ length: desiredUnitCount }, () => 2);
+        let remaining = targetPopulation - desiredUnitCount * 2;
+        for (let cursor = 0; remaining > 0; cursor += 1) {
+          unitSizes[cursor % desiredUnitCount] += 1;
+          remaining -= 1;
+        }
+
+        for (let index = 0; index < desiredUnitCount; index += 1) {
+          const anchor = candidates[index];
+          const count = unitSizes[index];
+          const reserveFraction = .52 + spatialUnitRandom(world.worldSeed, 'predator-reserve|' + def.id + '|' + anchor.patch.id) * .18;
+          cohortsByPatch[anchor.patch.id] = createInitialFounderCohort(def, count, anchor.suitability, reserveFraction);
+        }
       }
     }
     return { speciesId: def.id, cohortsByPatch, globalAbsenceDays: 0 };
@@ -154,7 +208,6 @@ export function createSpatialPredatorRuntimeState(world: GeneratedSpatialWorld, 
   runtime.telemetry = summarizePredators(runtime, day, 'dry');
   return runtime;
 }
-
 interface PreyCandidate {
   speciesId: string;
   patchId: string;
@@ -354,7 +407,7 @@ function maybeRecolonizePredator(
   day: number,
 ): number {
   const total = Object.values(speciesState.cohortsByPatch).reduce((sum, cohort) => sum + cohortPopulation(cohort), 0);
-  const minimumViable = Math.min(3, Math.max(2, predator.minIslandCapacity));
+  const minimumViable = getSpatialPredatorMinimumViablePopulation(predator);
   if (total >= minimumViable) {
     speciesState.globalAbsenceDays = 0;
     return 0;
@@ -378,11 +431,11 @@ function maybeRecolonizePredator(
     if (!best || score > best.score) best = { patchId: patch.id, score };
   }
   if (!best) return 0;
-  const founders = deterministicFounderCount(
-    spatialUnitRandom(world.worldSeed, `predator-immigration-count|${predator.id}|${day}`),
+  const founders = Math.max(2, deterministicFounderCount(
+    spatialUnitRandom(world.worldSeed, 'predator-immigration-count|' + predator.id + '|' + day),
     profile.recolonizationFounderCount,
-  );
-  const needed = Math.max(1, minimumViable - total);
+  ));
+  const needed = Math.max(2, minimumViable - total);
   const count = Math.min(founders, needed);
   const existing = speciesState.cohortsByPatch[best.patchId];
   if (existing) {
