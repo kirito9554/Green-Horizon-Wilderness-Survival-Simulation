@@ -11,7 +11,7 @@ import type { HabitatPatch } from './habitatPatches';
 import type { GeneratedSpatialWorld } from './worldGeneration';
 import { spatialUnitRandom } from './spatialRandom';
 
-export const SPATIAL_PREDATOR_RUNTIME_VERSION = 1;
+export const SPATIAL_PREDATOR_RUNTIME_VERSION = 2;
 const JUVENILES = 0;
 const ADULTS = 1;
 const OLD = 2;
@@ -19,6 +19,13 @@ const CONDITION = 3;
 const RESERVE = 4;
 const CARRION_STOCK_INDEX = 7;
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
+
+function deterministicRound(worldSeed: string, key: string, value: number): number {
+  if (value <= 0) return 0;
+  const whole = Math.floor(value);
+  const fraction = value - whole;
+  return whole + (spatialUnitRandom(worldSeed, key) < fraction ? 1 : 0);
+}
 
 function patchValue(patch: HabitatPatch, world: GeneratedSpatialWorld, key: keyof EcologyTargetProfile): number | undefined {
   const site = world.localSiteInfluenceByPatchId[patch.id];
@@ -247,7 +254,11 @@ export function tickSpatialPredatorsDay(
       const foodRatio = dailyNeed > 0 ? clamp01((dailyNeed - shortfall) / dailyNeed) : 1;
       cohort[CONDITION] = clamp01(cohort[CONDITION] + (foodRatio - .72) * .045);
       if (shortfall > dailyNeed * .45) {
-        const hungerDeaths = Math.min(population, Math.floor(population * (.0008 + (1 - foodRatio) * .004)));
+        const hungerRate = .0008 + (1 - foodRatio) * .004;
+        const hungerDeaths = Math.min(
+          population,
+          deterministicRound(world.worldSeed, `predator-hunger-death|${predator.id}|${patchId}|${day}`, population * hungerRate),
+        );
         let left = hungerDeaths;
         for (const stage of [OLD, JUVENILES, ADULTS] as const) {
           const taken = Math.min(cohort[stage], left);
@@ -256,7 +267,12 @@ export function tickSpatialPredatorsDay(
         }
         deaths += hungerDeaths;
       }
-      const naturalDeaths = Math.min(cohortPopulation(cohort), Math.floor(cohortPopulation(cohort) * (.00015 + (1 - cohort[CONDITION]) * .0007)));
+      const remainingPopulation = cohortPopulation(cohort);
+      const naturalRate = .00015 + (1 - cohort[CONDITION]) * .0007;
+      const naturalDeaths = Math.min(
+        remainingPopulation,
+        deterministicRound(world.worldSeed, `predator-natural-death|${predator.id}|${patchId}|${day}`, remainingPopulation * naturalRate),
+      );
       if (naturalDeaths > 0) {
         let left = naturalDeaths;
         for (const stage of [OLD, ADULTS, JUVENILES] as const) {
@@ -277,10 +293,16 @@ export function tickSpatialPredatorsDay(
         births += born;
       }
 
-      const mature = Math.min(cohort[JUVENILES], Math.floor(cohort[JUVENILES] / Math.max(60, predator.maturityDays)));
+      const mature = Math.min(
+        cohort[JUVENILES],
+        deterministicRound(world.worldSeed, `predator-mature|${predator.id}|${patchId}|${day}`, cohort[JUVENILES] / Math.max(60, predator.maturityDays)),
+      );
       cohort[JUVENILES] -= mature;
       cohort[ADULTS] += mature;
-      const aging = Math.min(cohort[ADULTS], Math.floor(cohort[ADULTS] / Math.max(365, predator.maxAgeDays * .55)));
+      const aging = Math.min(
+        cohort[ADULTS],
+        deterministicRound(world.worldSeed, `predator-aging|${predator.id}|${patchId}|${day}`, cohort[ADULTS] / Math.max(365, predator.maxAgeDays * .55)),
+      );
       cohort[ADULTS] -= aging;
       cohort[OLD] += aging;
 
