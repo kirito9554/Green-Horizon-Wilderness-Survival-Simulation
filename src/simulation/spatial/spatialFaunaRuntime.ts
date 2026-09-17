@@ -262,6 +262,52 @@ function movementBaseRate(guild: SpatialFaunaGuild): number {
   }
 }
 
+function breedingNeighborReachMeters(guild: SpatialFaunaGuild): number {
+  switch (guild) {
+    case 'bat': return 1600;
+    case 'canopy_bird': return 1400;
+    case 'large_herbivore': return 1300;
+    case 'omnivore': return 1200;
+    case 'ground_bird': return 1050;
+    case 'small_mammal': return 950;
+    case 'reptile': return 850;
+    case 'amphibian': return 725;
+    case 'invertebrate': return 650;
+  }
+}
+
+/**
+ * A 600 m habitat patch is a bookkeeping cell, not a hard mating boundary.
+ * Estimate mate availability across directly adjacent habitat when the species'
+ * movement guild can plausibly cross that distance. The snapshot makes the
+ * estimate simultaneous for the day rather than dependent on cohort iteration order.
+ */
+function estimateLocalBreederPool(
+  species: SpatialFaunaSpeciesDefinition,
+  patchId: string,
+  ownBreeders: number,
+  breederSnapshotByPatch: ReadonlyMap<string, number>,
+  world: GeneratedSpatialWorld,
+): number {
+  const reach = breedingNeighborReachMeters(species.guild);
+  let localBreeders = ownBreeders;
+  for (const edge of world.routeGraph.edgesByPatchId[patchId] ?? []) {
+    if (edge.distanceMeters > reach) continue;
+    const neighboringBreeders = breederSnapshotByPatch.get(edge.toPatchId) ?? 0;
+    if (neighboringBreeders <= 0) continue;
+    const proximity = clamp01(1 - edge.distanceMeters / Math.max(1, reach));
+    const accessibilityWeight = .25 + proximity * .75;
+    localBreeders += neighboringBreeders * accessibilityWeight;
+  }
+  return localBreeders;
+}
+
+/** Probability that an aggregate breeder pool contains both sexes under a 1:1 sex ratio. */
+function mateAvailabilityFactor(localBreeders: number): number {
+  if (localBreeders <= 1) return 0;
+  return clamp01(1 - Math.pow(2, 1 - localBreeders));
+}
+
 function movementScore(
   species: SpatialFaunaSpeciesDefinition,
   allocation: SpatialFaunaPatchAllocation,
@@ -443,6 +489,9 @@ export function tickSpatialFaunaDay(
     if (!definition || !plan?.present) continue;
     const allocationByPatch = new Map(plan.patchAllocations.map(allocation => [allocation.patchId, allocation] as const));
     const cohortByPatch = new Map(speciesState.cohorts.map(cohort => [cohort.patchId, cohort] as const));
+    const breederSnapshotByPatch = new Map(
+      speciesState.cohorts.map(cohort => [cohort.patchId, effectiveBreeders(cohort.stages)] as const),
+    );
     // Movement is resolved simultaneously after all cohorts choose destinations.
     // Reserve incoming capacity as choices are queued so multiple source patches
     // cannot all claim the same local K headroom during one day.
@@ -486,7 +535,14 @@ export function tickSpatialFaunaDay(
 
       const afterMortality = getSpatialFaunaCohortPopulation(cohort);
       const breeders = effectiveBreeders(cohort.stages);
-      const mateFactor = breeders < 2 ? 0 : clamp01((breeders - 1) / 4);
+      const localBreeders = estimateLocalBreederPool(
+        definition,
+        cohort.patchId,
+        breeders,
+        breederSnapshotByPatch,
+        world,
+      );
+      const mateFactor = mateAvailabilityFactor(localBreeders);
       const densityAfterMortality = afterMortality / Math.max(1, allocation.carryingCapacity);
       const breedingReadiness = clamp01(
         resources.breeding
