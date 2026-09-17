@@ -1,0 +1,90 @@
+import assert from 'node:assert/strict';
+import { SPATIAL_FLORA_SPECIES } from '../src/data/spatialFlora';
+import { SPATIAL_INSECT_SPECIES } from '../src/data/spatialInsects';
+import { SPATIAL_PREDATOR_SPECIES } from '../src/data/spatialPredators';
+import { SPATIAL_FAUNA_SPECIES } from '../src/data/spatialFauna';
+import { createSpatialFaunaEcosystemState, tickSpatialFaunaEcosystemDay } from '../src/simulation/spatial/spatialFaunaEcosystemRuntime';
+import { getSpatialFaunaRuntimePopulation } from '../src/simulation/spatial/spatialFaunaRuntime';
+import { generateSpatialWorld } from '../src/simulation/spatial/worldGeneration';
+
+const REQUIRED_FLORA_STRATA = ['emergent','canopy','subcanopy','understory_tree','shrub','herb','groundcover','fern','vine','epiphyte','reed_sedge','mangrove','aquatic'] as const;
+const REQUIRED_INSECT_GUILDS = ['pollinator','folivore','frugivore','seed_feeder','wood_borer','detritivore','dung_feeder','carrion_feeder','fungivore','predator','blood_feeder','aquatic_larva'] as const;
+
+function catalogCoverage(): void {
+  assert.ok(SPATIAL_FLORA_SPECIES.length >= 40, `expected >=40 spatial flora taxa/guilds, got ${SPATIAL_FLORA_SPECIES.length}`);
+  assert.equal(new Set(SPATIAL_FLORA_SPECIES.map(s => s.id)).size, SPATIAL_FLORA_SPECIES.length, 'flora ids must be unique');
+  const strata = new Set(SPATIAL_FLORA_SPECIES.map(s => s.stratum));
+  for (const stratum of REQUIRED_FLORA_STRATA) assert.ok(strata.has(stratum), `flora stratum missing: ${stratum}`);
+  assert.ok(SPATIAL_FLORA_SPECIES.filter(s => s.roles.includes('fruit_source')).length >= 8, 'need diverse fruit-producing flora');
+  assert.ok(SPATIAL_FLORA_SPECIES.filter(s => s.roles.includes('pollinator_host')).length >= 8, 'need pollinator-host flora');
+  assert.ok(SPATIAL_FLORA_SPECIES.filter(s => s.roles.includes('insect_host')).length >= 10, 'need insect-host flora');
+
+  assert.ok(SPATIAL_INSECT_SPECIES.length >= 20, `expected >=20 insect taxa/guilds, got ${SPATIAL_INSECT_SPECIES.length}`);
+  assert.equal(new Set(SPATIAL_INSECT_SPECIES.map(s => s.id)).size, SPATIAL_INSECT_SPECIES.length, 'insect ids must be unique');
+  const guilds = new Set(SPATIAL_INSECT_SPECIES.map(s => s.guild));
+  for (const guild of REQUIRED_INSECT_GUILDS) assert.ok(guilds.has(guild), `insect guild missing: ${guild}`);
+  assert.ok(SPATIAL_INSECT_SPECIES.some(s => s.pollinationValue >= .9), 'strong pollinators required');
+  assert.ok(SPATIAL_INSECT_SPECIES.some(s => s.decompositionValue >= .9), 'strong decomposers required');
+  assert.ok(SPATIAL_INSECT_SPECIES.some(s => s.aquaticExportValue >= .9), 'aquatic insect export required');
+
+  assert.equal(SPATIAL_PREDATOR_SPECIES.length, 5, 'all five terrestrial predator definitions should be metric spatial predators');
+  assert.ok(SPATIAL_FAUNA_SPECIES.filter(s => (s.diet.insects ?? 0) >= .25).length >= 8, 'insects should be a major diet component for many fauna species');
+}
+
+function runWorld(seed: string, days = 90) {
+  const world = generateSpatialWorld(seed);
+  const runtime = createSpatialFaunaEcosystemState(seed, 1, world);
+  assert.ok(runtime.floraSystem && runtime.insectSystem && runtime.predatorSystem, `${seed}: all trophic layers must persist in spatial state`);
+  const initialPrey = getSpatialFaunaRuntimePopulation(runtime);
+  const initialFlora = runtime.floraSystem!.telemetry.totalBiomassKg;
+  const initialInsects = runtime.insectSystem!.telemetry.totalBiomassKg;
+  const initialPredators = runtime.predatorSystem!.telemetry.totalPopulation;
+  assert.ok(initialFlora > 20_000_000, `${seed}: metric flora biomass is too small for 120 km² (${initialFlora.toFixed(0)}kg)`);
+  assert.ok(initialInsects > 40_000, `${seed}: insect biomass is too small to be a major trophic resource (${initialInsects.toFixed(0)}kg)`);
+  assert.ok(initialPredators >= 10, `${seed}: spatial predator community failed to establish (${initialPredators})`);
+  assert.ok(runtime.predatorSystem!.telemetry.presentSpecies >= 4, `${seed}: expected at least four predator species`);
+
+  let kills = 0;
+  let killedBiomass = 0;
+  let insectConsumption = 0;
+  let minimumInsectBiomass = initialInsects;
+  for (let day = 2; day <= days; day += 1) {
+    const telemetry = tickSpatialFaunaEcosystemDay(runtime, world, day);
+    kills += telemetry.predatorKills ?? 0;
+    killedBiomass += telemetry.predatorKillBiomassKg ?? 0;
+    insectConsumption += telemetry.insectConsumedKg ?? 0;
+    minimumInsectBiomass = Math.min(minimumInsectBiomass, runtime.insectSystem!.telemetry.totalBiomassKg);
+  }
+  const finalPrey = getSpatialFaunaRuntimePopulation(runtime);
+  const finalFlora = runtime.floraSystem!.telemetry.totalBiomassKg;
+  const finalInsects = runtime.insectSystem!.telemetry.totalBiomassKg;
+  const finalPredators = runtime.predatorSystem!.telemetry.totalPopulation;
+  assert.ok(kills > 0 && killedBiomass > 0, `${seed}: predators must search, encounter and remove real prey cohorts`);
+  assert.ok(insectConsumption > 0, `${seed}: insectivorous fauna must consume live insect biomass`);
+  assert.ok(finalInsects > initialInsects * .35 && minimumInsectBiomass > 0, `${seed}: insect trophic layer collapsed`);
+  assert.ok(finalFlora > initialFlora * .65, `${seed}: flora layer collapsed in ${days} days`);
+  assert.ok(finalPrey > initialPrey * .55, `${seed}: migrated food web caused prey collapse`);
+  assert.ok(finalPredators > 0, `${seed}: predator community went extinct`);
+  const serializedBytes = Buffer.byteLength(JSON.stringify(runtime), 'utf8');
+  assert.ok(serializedBytes < 5 * 1024 * 1024, `${seed}: aggregate trophic state too large (${(serializedBytes/1024/1024).toFixed(2)}MiB)`);
+  console.log(`[${seed}] day${days} flora=${(finalFlora/1e6).toFixed(1)}Mkg insects=${(finalInsects/1000).toFixed(1)}t prey=${finalPrey}/${world.faunaCommunity.totalCarryingCapacity} predators=${finalPredators} kills=${kills} killMass=${killedBiomass.toFixed(1)}kg insectEaten=${insectConsumption.toFixed(1)}kg state=${(serializedBytes/1024).toFixed(0)}KiB`);
+  return { finalPrey, finalFlora, finalInsects, finalPredators, kills, killedBiomass };
+}
+
+function deterministicShortRun(seed: string): void {
+  const worldA = generateSpatialWorld(seed);
+  const worldB = generateSpatialWorld(seed);
+  const a = createSpatialFaunaEcosystemState(seed, 1, worldA);
+  const b = createSpatialFaunaEcosystemState(seed, 1, worldB);
+  for (let day = 2; day <= 12; day += 1) {
+    tickSpatialFaunaEcosystemDay(a, worldA, day);
+    tickSpatialFaunaEcosystemDay(b, worldB, day);
+  }
+  assert.deepEqual(a, b, `${seed}: same seed/day must reproduce complete trophic state`);
+}
+
+catalogCoverage();
+runWorld('spatial-trophic-alpha', 90);
+runWorld('spatial-trophic-beta', 60);
+deterministicShortRun('spatial-trophic-determinism');
+console.log('Full spatial terrestrial trophic ecosystem regression passed.');
