@@ -23,6 +23,7 @@
     "test:spatial-fauna-runtime": "tsx scripts/spatial-fauna-runtime-smoke.ts",
     "test:spatial-fauna-competition": "tsx scripts/spatial-fauna-competition-smoke.ts",
     "test:spatial-fauna-resources": "tsx scripts/spatial-fauna-resource-pools-smoke.ts",
+    "test:spatial-predator-founders": "tsx scripts/spatial-predator-founder-smoke.ts",
     "test:spatial-trophic": "tsx scripts/spatial-trophic-ecosystem-smoke.ts",
     "test:spatial-trophic-soak": "tsx scripts/spatial-trophic-multiyear-soak.ts",
     "test:spatial-predator-soak": "npm run test:spatial-trophic-soak",
