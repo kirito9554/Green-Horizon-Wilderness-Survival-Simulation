@@ -16,6 +16,9 @@ const CONDITION = 3;
 const STRESS_DAYS = 4;
 
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
+const normalizedDietCache = new Map<string, Readonly<Record<string, number>>>();
+const dietOverlapCache = new Map<string, number>();
+const metabolicFactorCache = new Map<string, number>();
 
 /**
  * The census K already represents a calibrated coexistence baseline. Shared
@@ -50,7 +53,6 @@ export interface SpatialFaunaCompetitionSummary {
 interface PatchSpeciesLoad {
   speciesId: string;
   definition: SpatialFaunaSpeciesDefinition;
-  cohort: SpatialFaunaPatchCohortState;
   population: number;
   actualMetabolicHeads: number;
   baselinePopulation: number;
@@ -71,17 +73,26 @@ function metabolicHeads(cohort: SpatialFaunaPatchCohortState): number {
 }
 
 function expectedMetabolicHeadFactor(species: SpatialFaunaSpeciesDefinition): number {
+  const cached = metabolicFactorCache.get(species.id);
+  if (cached !== undefined) return cached;
   const juvenileShare = Math.max(.1, Math.min(.34, .1 + species.offspringPerAdultFemalePerYear * .018));
   const oldShare = Math.max(.06, Math.min(.18, .18 - species.offspringPerAdultFemalePerYear * .007));
   const adultShare = Math.max(.45, 1 - juvenileShare - oldShare);
-  return adultShare + oldShare * .9 + juvenileShare * .55;
+  const factor = adultShare + oldShare * .9 + juvenileShare * .55;
+  metabolicFactorCache.set(species.id, factor);
+  return factor;
 }
 
 function normalizedDiet(species: SpatialFaunaSpeciesDefinition): Readonly<Record<string, number>> {
+  const cached = normalizedDietCache.get(species.id);
+  if (cached) return cached;
   const entries = Object.entries(species.diet).filter(([, value]) => (value ?? 0) > 0) as Array<[string, number]>;
   const total = entries.reduce((sum, [, value]) => sum + value, 0);
-  if (total <= 0) return {};
-  return Object.fromEntries(entries.map(([key, value]) => [key, value / total]));
+  const normalized = total <= 0
+    ? {}
+    : Object.fromEntries(entries.map(([key, value]) => [key, value / total]));
+  normalizedDietCache.set(species.id, normalized);
+  return normalized;
 }
 
 /** 0 = no shared food niche, 1 = identical diet composition. */
@@ -90,12 +101,17 @@ export function spatialFaunaDietOverlap(
   b: SpatialFaunaSpeciesDefinition,
 ): number {
   if (a.id === b.id) return 1;
+  const pairKey = [a.id, b.id].sort().join('|');
+  const cached = dietOverlapCache.get(pairKey);
+  if (cached !== undefined) return cached;
   const dietA = normalizedDiet(a);
   const dietB = normalizedDiet(b);
   const keys = new Set([...Object.keys(dietA), ...Object.keys(dietB)]);
   let overlap = 0;
   for (const key of keys) overlap += Math.min(dietA[key] ?? 0, dietB[key] ?? 0);
-  return clamp01(overlap);
+  const normalizedOverlap = clamp01(overlap);
+  dietOverlapCache.set(pairKey, normalizedOverlap);
+  return normalizedOverlap;
 }
 
 function refugeOverlap(a: SpatialFaunaGuild, b: SpatialFaunaGuild): number {
@@ -151,7 +167,6 @@ function buildPatchLoads(
       const load: PatchSpeciesLoad = {
         speciesId: speciesState.speciesId,
         definition,
-        cohort,
         population,
         actualMetabolicHeads: metabolicHeads(cohort),
         baselinePopulation,
