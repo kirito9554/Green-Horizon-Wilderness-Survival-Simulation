@@ -44,6 +44,9 @@ jobs:
       - name: Shared spatial fauna competition smoke test
         run: npm run test:spatial-fauna-competition
 
+      - name: Area-scaled spatial fauna resource pool smoke test
+        run: npm run test:spatial-fauna-resources
+
       - name: World ecology foundation smoke test
         run: npm run test:ecology
 
