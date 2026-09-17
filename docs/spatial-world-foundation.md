@@ -30,15 +30,16 @@ The existing `buildingSimulation.worldSeed` is the root **world DNA** for spatia
 ```text
 Main Island
   -> Macro Region (10 authored polygons, stable between runs)
-    -> Habitat Patch (seeded geometry + terrain)
+    -> Habitat Patch (seeded geometry + terrain + physical area)
       -> Drainage / watercourse topology
       -> Per-seed Local Site Pool
         -> Local Site instances (seeded position and properties)
           -> Gameplay / ecology / resource semantics
-          -> Dynamic local resource state
+          -> Dynamic player-facing local resource state
       -> Metric fauna carrying-capacity map
         -> Persistent living patch cohorts
-        -> Shared food / water / refuge competition
+        -> Persistent area-scaled food / water stocks
+        -> Shared niche / refuge competition
       -> Future trails / crossings / encounter spaces
 ```
 
@@ -96,9 +97,9 @@ Examples:
 
 `aggregateLocalSiteInfluenceByPatch()` converts spawned sites into normalized patch signals. `GeneratedSpatialWorld.localSiteInfluenceByPatchId` exposes site-derived forage, cover, water, breeding habitat, prey refuge, predator opportunity, aquatic nursery value, decomposition, disturbance sensitivity, shelter/camp quality, hazard/navigation and resource richness.
 
-## Dynamic local resource simulation
+## Dynamic player-facing Local Site resources
 
-`src/simulation/spatial/localSiteResourceSimulation.ts` turns the resource opportunities above into serializable dynamic state. It deliberately avoids the old generic `currentStock/maxStock + timer` model.
+`src/simulation/spatial/localSiteResourceSimulation.ts` turns Local Site resource opportunities into serializable dynamic state. It deliberately avoids the old generic `currentStock/maxStock + timer` model.
 
 Every repeatable local resource has:
 
@@ -114,30 +115,22 @@ The reserve floor is **not harvestable emergency stock**. Harvest can reach the 
 
 Critical depletion strongly penalizes harvest yield, average material/food quality, labor efficiency and recovery speed.
 
-This means a small primitive community cannot permanently erase a natural resource, but it can make a local source economically useless and ecologically degraded for a long time.
-
 ### Recovery families
 
-1. `renewable_biomass` — plants, fruit, fungi and similar biomass use stock-dependent/logistic recovery. Low surviving stock recovers slowly, middle stock fastest, near-capacity stock slows again.
-2. `geological_flux` — stone, clay, sand and minerals recover at a very slow fixed geological rate with bonuses from erosion, weathering, rainfall and flooding.
-3. `flow` — water resources recover through inflow and local hydrology rather than biological growth.
-4. `episodic` — driftwood and comparable deposits use a tiny background rate plus storm/flood/tidal pulses.
-5. `population_backed` — fish, shellfish, insects, eggs/feathers, honey and similar resources retain a small background recolonization path until the living fauna/aquatic systems own these values directly.
-6. `salvage_exposure` — wreck/ruin salvage does not regrow; an extremely slow repeatable source represents erosion, collapse, flooding or storms exposing previously inaccessible material.
+1. `renewable_biomass` — plants, fruit, fungi and similar biomass use stock-dependent/logistic recovery;
+2. `geological_flux` — stone, clay, sand and minerals recover only through very slow weathering/erosion flux;
+3. `flow` — water resources recover through inflow and local hydrology;
+4. `episodic` — driftwood and comparable deposits use storm/flood/tidal pulses;
+5. `population_backed` — fish, shellfish, insects, eggs/feathers, honey and similar resources currently retain a background recolonization path until their living systems own them directly;
+6. `salvage_exposure` — wreck/ruin salvage does not regrow, but erosion/collapse can expose previously inaccessible material at an extremely slow rate.
 
-All six families therefore have a non-zero restock path, but their timescales and causes differ radically.
-
-`harvestLocalSiteResource()` applies extraction pressure and floor protection. `tickLocalSiteResource()` applies recovery, critical hysteresis, slow condition repair and depletion-pressure decay. `deriveLocalResourceRecoveryContext()` derives baseline rainfall/erosion/flooding/recruitment/capacity signals from the generated habitat patch and hydrology, with room for later live weather/season/event overrides.
-
-The resource state is not yet wired into legacy gathering UI/actions. That migration is intentionally separate so this PR cannot silently rebalance the existing game loop.
+The player-facing Local Site stock is not yet the exact same persistent state as the new fauna food/water material pool. That bridge is intentionally deferred so harvesting cannot silently double-count or delete world-scale ecological biomass.
 
 ## Metric spatial fauna ecosystem
 
 `src/data/spatialFauna.ts` and `src/simulation/spatial/spatialFaunaCommunity.ts` define the whole-island fauna census based on the metric patch world.
 
-The tracked terrestrial catalog contains **24 species**: all seven legacy herbivore/omnivore species plus seventeen additional mammals, birds, bats, reptiles, amphibians and large invertebrates. Each species has a prime-habitat `densityPerKm2`, region affinity, habitat target profile, minimum patch suitability and starting occupancy range.
-
-Carrying capacity is derived from actual patch area and generated habitat quality rather than legacy sample-grid population caps. Local Site ecology signals contribute to patch suitability, so breeding/refuge/feeding/water features influence the spatial census without hardcoding site names.
+The tracked terrestrial catalog contains **24 species**. Carrying capacity is derived from actual patch area and generated habitat quality rather than legacy sample-grid population caps. Local Site ecology signals contribute to patch suitability.
 
 The deterministic census produces:
 
@@ -146,19 +139,62 @@ The deterministic census produces:
 
 Counts remain aggregate cohorts rather than runtime objects per animal.
 
-`src/simulation/spatial/spatialFaunaRuntime.ts` materializes that census into persistent patch cohorts with juvenile/adult/old stages, condition, stress, breeding, natural mortality, seasonal resource response and adjacency dispersal. Alpha begins with about **4,699 occupied patch cohorts** while the serialized fauna state remains around **282 KiB**.
+`src/simulation/spatial/spatialFaunaRuntime.ts` materializes that census into persistent patch cohorts with juvenile/adult/old stages, condition, stress, breeding, natural mortality and adjacency dispersal. Alpha begins with about **4,699 occupied patch cohorts** while fauna-only serialized state remains around **282 KiB**.
 
-`src/simulation/spatial/spatialFaunaCompetition.ts` adds shared patch pressure so co-located species no longer receive private copies of food, water and refuge. Food pressure uses diet overlap and metabolic food demand, water uses shared metabolic demand, and refuge uses ecological guild overlap. Census K is the coexistence baseline: ordinary communities below that load are not penalized a second time, while local over-crowding or niche skew creates pressure above 1.
+### Area-scaled conserved food / water pools
 
-`src/simulation/spatial/spatialFaunaEcosystemRuntime.ts` applies the shared interaction before every demographic day. Condition, breeding, mortality and stress-driven movement therefore respond to local competition without materializing individual animals.
+`src/simulation/spatial/spatialFaunaResourcePools.ts` adds persistent material stocks shared by all terrestrial fauna in each generated patch:
 
-The current one-year regression retains all 23 present species in both deterministic worlds. Alpha finishes at **46,109 / K 66,193** and beta at **45,241 / K 65,472**. Population-weighted mean competition remains below baseline across the normal world, while an intentional Wild Boar/Agouti overload raises focal food pressure from **0.863** to **1.996** and lowers its food factor to **0.477**.
+- fruit;
+- seeds;
+- browse;
+- ground vegetation;
+- roots/tubers;
+- insects;
+- aquatic plants;
+- carrion;
+- fresh water.
 
-These counts exclude aquatic populations, predators and untracked background insects/microfauna. See `docs/spatial-fauna-community.md` for the detailed compatibility and resource-model boundaries.
+The key scale rule is physical:
 
-The metric fauna ecosystem is now the living world-scale terrestrial population model. The old seven-species fauna/predator food web still runs only as a compatibility layer for systems that have not migrated and must not be added to metric island totals.
+```text
+patch resource capacity
+= patch area km²
+× resource standing crop / km²
+× generated habitat / hydrology / Local Site potential
+```
 
-The shared competition layer is deliberately **not** described as a conserved biomass model. Patch K and species demand currently provide the interaction baseline; persistent flora/insect/fruit/water stocks still need to become the single resource budget consumed by wildlife and player extraction.
+Capacity is therefore not a fixed number attached to a patch ID. A large patch owns proportionally more standing biomass than a tiny clipped sliver. Fresh-water capacity additionally responds to drainage/catchment, wetness and Local Site water signals.
+
+The first deterministic measurements are deliberately landscape-scale:
+
+- alpha total food standing capacity: about **67.93 million kg**;
+- beta: about **68.25 million kg**;
+- minimum patch standing-food density: roughly **310k–345k kg/km²**;
+- neutral island production: roughly **646k–652k kg/day**;
+- full census-K demand from the currently tracked terrestrial fauna: roughly **3.0 t/day**.
+
+This gap is expected because the material substrate represents a 120 km² tropical landscape while only 24 terrestrial species are explicitly tracked. Aquatic fauna, predators, untracked insects/microfauna/decomposers and player extraction are not all consuming it yet.
+
+Area/habitat is the source of physical scale. Census K is only a consistency floor: local neutral food production cannot fall below K demand × **1.35**, standing reserve must cover the resource-specific K horizon, fresh-water storage must cover at least **45 K-demand days**, and neutral water recharge must exceed K demand × **1.5**. This prevents a carrying-capacity definition that its own material model cannot sustain without turning K itself into free food.
+
+Only the changing stock tuple is persisted. Derived capacity/productivity is regenerated from the seed/world geometry, keeping the resource addition compact. In the alpha regression the full cohort + 486 patch resource tuples serialized to roughly **369 KiB**.
+
+On each ecosystem day resources recover by season/environment first, then every co-located cohort consumes the **same** stock. Diet demand is split across the species' normalized food resources and subtracts from each pool once. Shared satisfaction modifies persistent condition/stress before demographic mortality, breeding and dispersal.
+
+A normal first-month alpha run consumed about **62.8 t** while the large landscape refilled about **5.57 million kg** of partially empty capacity; food/water pools remained around **93–94% full**. This is the expected behavior for the current below-K selected fauna census on a 120 km² tropical substrate, not evidence of private per-species food copies.
+
+### Shared niche and refuge pressure
+
+`src/simulation/spatial/spatialFaunaCompetition.ts` still measures food-niche pressure, shared water load and refuge overlap against the K coexistence baseline.
+
+With persistent material pools active, **food and water competition factors are diagnostic only**. Material stock depletion owns actual food/water scarcity so condition cannot be penalized twice. Refuge is a shared-space constraint rather than a consumable stock, so refuge competition remains an active condition/stress factor.
+
+The Wild Boar/Agouti overload diagnostic still raises focal food pressure from **0.863** to **1.996**, proving local niche overlap is measurable independently from material stock accounting.
+
+`src/simulation/spatial/spatialFaunaEcosystemRuntime.ts` orders the full day as material recovery/consumption → refuge/community interaction → demographic tick. Condition, breeding, mortality and stress-driven movement therefore react to causal local state without creating individual-animal entities.
+
+The old seven-species fauna/predator food web still runs only as a compatibility layer and must not be added to metric island totals.
 
 ## Travel foundation
 
@@ -166,18 +202,25 @@ The shared competition layer is deliberately **not** described as a conserved bi
 
 ## Ecology integration plan
 
-The prey side now has metric census, persistent patch cohorts and shared local competition. The next ecology migration should replace K-inferred shared capacity with persistent patch food/water/productivity stocks where real resource families exist, then connect player extraction and fauna demand to those same stocks.
+The prey side now has metric census, persistent patch cohorts, area-scaled material food/water pools and local shared-space competition.
+
+Next steps should bridge player gathering / Local Site harvest into the corresponding patch material budget, add background/untracked guild turnover where necessary, then strengthen fauna movement into explicit feeding/drinking/refuge/breeding selection.
 
 Predators should migrate only after that prey/resource layer is stable. Their future hunt loop should operate on spatial search/home-range overlap and actual encounter candidates rather than an omniscient macro-region prey menu. Regional movement, local refugia, local extirpation/recolonization and predator competition can then emerge from the same patch topology.
 
 ## Validation
 
-The fully cached competition implementation passed workflow run **35180934854** across typecheck, spatial world, census, living fauna runtime, shared fauna competition, legacy terrestrial fauna/predators, aquatic ecology, hydrology/environmental scale, buildings/storage/agriculture and production build.
+The fauna validation now checks both population behavior and physical resource scale:
 
-The validation intentionally distinguishes two behaviors:
-
-- a normal below-K spatial community retains all 23 present species across the one-year alpha and beta regressions without receiving an island-wide competition penalty;
-- a deliberate co-located Wild Boar/Agouti overload raises focal food pressure from **0.863** to **1.996**, lowering its food factor to **0.477**, proving interspecific pressure is active when local demand exceeds the calibrated coexistence baseline.
+- full 120 km² patch coverage;
+- every generated patch has an area-derived resource profile;
+- standing food capacity remains large in kg/km² rather than sample-grid quantities;
+- local food production cannot contradict census-K metabolic demand;
+- local water capacity/recharge cannot contradict K water demand;
+- normal cohorts consume and regenerate the same persistent patch stocks;
+- save state remains bounded;
+- a deliberately depleted patch becomes materially resource-limited once demand is scaled above that patch's own recovery capacity;
+- normal one-year fauna runs retain the present species without a hidden island-wide competition penalty.
 
 ## Reproducibility contract
 
@@ -186,9 +229,11 @@ Procedural generation must obey:
 1. **same seed + same generation version = same spatial world, Local Site pool and fauna census**;
 2. **different seed = materially different local terrain/site topology, vocabulary and fauna spatial distribution while preserving the macro map**;
 3. **a natural local site may spawn only if its archetype is enabled for that world and its patch satisfies local requirements**;
-4. **repeatable local resources may be locally devastated but may never cross the ecological reserve floor**;
+4. **repeatable player-facing local resources may be locally devastated but may never cross their ecological reserve floor**;
 5. **fauna patch and region allocations must exactly conserve island carrying capacity and starting headcount**;
 6. **same seed + same day horizon reproduces the same living aggregate fauna state**;
-7. **shared fauna competition must respond to local overload without applying an island-wide penalty to a normal below-K community**.
+7. **fauna material pool capacity must scale with real patch area and habitat rather than a fixed per-patch quantity**;
+8. **all fauna sharing a patch draw food/water from the same persistent material stocks**;
+9. **shared niche/refuge competition must respond to local overload without double-counting material food/water scarcity**.
 
-The spatial and fauna smoke tests verify those rules plus complete Local Site profile coverage, valid item references, resource depletion/recovery behavior, exact 120 km² area conservation, polygon containment, drainage direction, patch-fauna suitability, cohort demography, adjacency dispersal, shared niche pressure and cross-region route connectivity.
+The spatial and fauna smoke tests verify those rules plus complete Local Site profile coverage, valid item references, resource depletion/recovery behavior, exact 120 km² area conservation, polygon containment, drainage direction, patch-fauna suitability, cohort demography, adjacency dispersal, material resource consumption, shared niche pressure and cross-region route connectivity.
