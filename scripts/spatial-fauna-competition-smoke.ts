@@ -5,11 +5,11 @@ import {
   buildSpatialFaunaCompetitionSnapshot,
   spatialFaunaDietOverlap,
 } from '../src/simulation/spatial/spatialFaunaCompetition';
-import { tickSpatialFaunaEcosystemDay } from '../src/simulation/spatial/spatialFaunaEcosystemRuntime';
 import {
   createSpatialFaunaRuntimeState,
   getSpatialFaunaCohortPopulation,
   getSpatialFaunaRuntimePopulation,
+  tickSpatialFaunaDay,
 } from '../src/simulation/spatial/spatialFaunaRuntime';
 import { generateSpatialWorld } from '../src/simulation/spatial/worldGeneration';
 
@@ -84,6 +84,12 @@ function assertArtificialCompetitionResponse(seed: string): void {
   );
 }
 
+/**
+ * This regression deliberately isolates shared-space competition from flora,
+ * insects, material stocks and predators. The full food web owns those in the
+ * separate spatial-trophic regression; running it here duplicated hundreds of
+ * expensive ecosystem days and obscured which layer caused a failure.
+ */
 function assertOneYearCommunity(seed: string): void {
   const world = generateSpatialWorld(seed);
   const runtime = createSpatialFaunaRuntimeState(seed, 1, world);
@@ -95,28 +101,33 @@ function assertOneYearCommunity(seed: string): void {
   let peakRefugePressure = 0;
 
   for (let day = 2; day <= 365; day += 1) {
-    const telemetry = tickSpatialFaunaEcosystemDay(runtime, world, day);
-    assert.ok(telemetry.meanFoodCompetitionPressure !== undefined);
-    assert.ok(telemetry.meanWaterCompetitionPressure !== undefined);
-    assert.ok(telemetry.meanRefugeCompetitionPressure !== undefined);
-    assert.ok(telemetry.competitionLimitedPopulation !== undefined);
+    // In the authoritative runtime conserved material owns food/water scarcity;
+    // this layer actively applies refuge pressure while retaining food/water
+    // pressure as diagnostics of local niche crowding.
+    const competition = applySpatialFaunaCompetitionPressure(runtime, world, {
+      resourcePoolsOwnFoodWater: true,
+    });
+    const telemetry = tickSpatialFaunaDay(runtime, world, day);
+    assert.ok(competition.meanFoodPressure >= 0);
+    assert.ok(competition.meanWaterPressure >= 0);
+    assert.ok(competition.meanRefugePressure >= 0);
     assert.ok(telemetry.meanFoodSufficiency >= 0 && telemetry.meanFoodSufficiency <= 1);
     assert.ok(telemetry.meanWaterSufficiency >= 0 && telemetry.meanWaterSufficiency <= 1);
     assert.ok(telemetry.meanRefugeSufficiency >= 0 && telemetry.meanRefugeSufficiency <= 1);
-    maxLimitedPopulation = Math.max(maxLimitedPopulation, telemetry.competitionLimitedPopulation ?? 0);
-    peakFoodPressure = Math.max(peakFoodPressure, telemetry.meanFoodCompetitionPressure ?? 0);
-    peakWaterPressure = Math.max(peakWaterPressure, telemetry.meanWaterCompetitionPressure ?? 0);
-    peakRefugePressure = Math.max(peakRefugePressure, telemetry.meanRefugeCompetitionPressure ?? 0);
+    maxLimitedPopulation = Math.max(maxLimitedPopulation, competition.limitedPopulation);
+    peakFoodPressure = Math.max(peakFoodPressure, competition.meanFoodPressure);
+    peakWaterPressure = Math.max(peakWaterPressure, competition.meanWaterPressure);
+    peakRefugePressure = Math.max(peakRefugePressure, competition.meanRefugePressure);
   }
 
   const finalPopulation = getSpatialFaunaRuntimePopulation(runtime);
-  assert.ok(finalPopulation >= initialPopulation * .48, `${seed}: shared competition caused whole-community collapse (${initialPopulation} -> ${finalPopulation})`);
+  assert.ok(finalPopulation >= initialPopulation * .48, `${seed}: shared refuge competition caused whole-community collapse (${initialPopulation} -> ${finalPopulation})`);
   assert.ok(finalPopulation <= world.faunaCommunity.totalCarryingCapacity * 1.12, `${seed}: population escaped metric K too far`);
-  assert.ok(runtime.telemetry.presentSpeciesCount >= initialSpecies - 2, `${seed}: too many species vanished before predators were migrated`);
+  assert.ok(runtime.telemetry.presentSpeciesCount >= initialSpecies - 2, `${seed}: too many species vanished in isolated competition regression`);
   assert.ok(runtime.history.length <= 30, `${seed}: rolling telemetry history must remain bounded`);
 
   console.log(
-    `[${seed}] shared competition day365 pop=${finalPopulation}/${world.faunaCommunity.totalCarryingCapacity} `
+    `[${seed}] isolated competition day365 pop=${finalPopulation}/${world.faunaCommunity.totalCarryingCapacity} `
       + `species=${runtime.telemetry.presentSpeciesCount}/${initialSpecies} `
       + `peakMeanPressure food=${peakFoodPressure.toFixed(3)} water=${peakWaterPressure.toFixed(3)} refuge=${peakRefugePressure.toFixed(3)} `
       + `maxLimitedPop=${maxLimitedPopulation}`,
