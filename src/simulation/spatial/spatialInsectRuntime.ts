@@ -187,6 +187,16 @@ export function getSpatialInsectBiomassByPatch(runtime: SpatialInsectRuntimeStat
   return result;
 }
 
+export function getSpatialInsectAccessibleBiomassAtPatch(runtime: SpatialInsectRuntimeState, patchId: string): number {
+  let total = 0;
+  for (const speciesState of runtime.species) {
+    const state = speciesState.patches[patchId];
+    if (!state || state[BIOMASS] <= 0) continue;
+    total += state[BIOMASS] * harvestableFraction(state);
+  }
+  return total;
+}
+
 export function getSpatialInsectAccessibleBiomassByPatch(runtime: SpatialInsectRuntimeState): Readonly<Record<string, number>> {
   const result: Record<string, number> = {};
   for (const speciesState of runtime.species) for (const [patchId, state] of Object.entries(speciesState.patches)) {
