@@ -19,6 +19,7 @@ interface Snapshot {
   predatorSpecies: number;
   floraSpecies: number;
   insectSpecies: number;
+  meanCondition: number;
   meanFoodSufficiency: number;
   meanWaterSufficiency: number;
   foodFill: number;
@@ -29,6 +30,20 @@ interface Snapshot {
 interface OccupancyTransitions {
   localExtirpations: number;
   localRecolonizations: number;
+}
+
+interface AnnualDemography {
+  year: number;
+  startPopulation: number;
+  endPopulation: number;
+  births: number;
+  nonPredatorDeaths: number;
+  predatorKills: number;
+  meanConditionSum: number;
+  meanFoodSufficiencySum: number;
+  meanWaterSufficiencySum: number;
+  resourceLimitedPopulationSum: number;
+  days: number;
 }
 
 function presentPreySpecies(runtime: SpatialFaunaRuntimeState): number {
@@ -74,6 +89,7 @@ function snapshot(runtime: SpatialFaunaRuntimeState, day: number): Snapshot {
     predatorSpecies: presentPredatorSpecies(runtime),
     floraSpecies: presentFloraSpecies(runtime),
     insectSpecies: presentInsectSpecies(runtime),
+    meanCondition: runtime.telemetry.meanCondition,
     meanFoodSufficiency: runtime.telemetry.meanFoodSufficiency,
     meanWaterSufficiency: runtime.telemetry.meanWaterSufficiency,
     foodFill: runtime.telemetry.meanFoodPoolFill ?? 1,
@@ -96,8 +112,23 @@ function printCheckpoint(label: string, point: Snapshot, k: number): void {
       + `flora=${(point.floraKg / 1e6).toFixed(1)}Mkg insects=${(point.insectKg / 1000).toFixed(1)}t `
       + `prey=${point.prey}/${k} predators=${point.predators} `
       + `species prey=${point.preySpecies} pred=${point.predatorSpecies} flora=${point.floraSpecies} insects=${point.insectSpecies} `
-      + `suff food=${point.meanFoodSufficiency.toFixed(3)} water=${point.meanWaterSufficiency.toFixed(3)} `
+      + `condition=${point.meanCondition.toFixed(3)} suff food=${point.meanFoodSufficiency.toFixed(3)} water=${point.meanWaterSufficiency.toFixed(3)} `
       + `fill food=${point.foodFill.toFixed(3)} water=${point.waterFill.toFixed(3)}`,
+  );
+}
+
+function printAnnualDemography(seed: string, annual: AnnualDemography): void {
+  const expectedEnd = annual.startPopulation + annual.births - annual.nonPredatorDeaths - annual.predatorKills;
+  const net = annual.endPopulation - annual.startPopulation;
+  const accountedNet = annual.births - annual.nonPredatorDeaths - annual.predatorKills;
+  assert.equal(expectedEnd, annual.endPopulation, `${seed}: year ${annual.year} demographic accounting mismatch (${expectedEnd} vs ${annual.endPopulation})`);
+  console.log(
+    `[${seed}] demography y${annual.year} pop=${annual.startPopulation}->${annual.endPopulation} net=${net} `
+      + `births=${annual.births} deaths=${annual.nonPredatorDeaths} kills=${annual.predatorKills} accounted=${accountedNet} `
+      + `meanCondition=${(annual.meanConditionSum / annual.days).toFixed(3)} `
+      + `food=${(annual.meanFoodSufficiencySum / annual.days).toFixed(3)} `
+      + `water=${(annual.meanWaterSufficiencySum / annual.days).toFixed(3)} `
+      + `resourceLimited=${Math.round(annual.resourceLimitedPopulationSum / annual.days)}`,
   );
 }
 
@@ -115,6 +146,21 @@ function runFiveYearSoak(seed: string): void {
   const transitions: OccupancyTransitions = { localExtirpations: 0, localRecolonizations: 0 };
   let previousOccupancy = preyOccupancy(runtime);
 
+  const annual: AnnualDemography[] = Array.from({ length: 5 }, (_, index) => ({
+    year: index + 1,
+    startPopulation: 0,
+    endPopulation: 0,
+    births: 0,
+    nonPredatorDeaths: 0,
+    predatorKills: 0,
+    meanConditionSum: 0,
+    meanFoodSufficiencySum: 0,
+    meanWaterSufficiencySum: 0,
+    resourceLimitedPopulationSum: 0,
+    days: 0,
+  }));
+  annual[0].startPopulation = initial.prey;
+
   const minima = { floraKg: initial.floraKg, insectKg: initial.insectKg, prey: initial.prey, predators: initial.predators };
   const maxima = { floraKg: initial.floraKg, insectKg: initial.insectKg, prey: initial.prey, predators: initial.predators };
   let totalKills = 0;
@@ -128,6 +174,19 @@ function runFiveYearSoak(seed: string): void {
     totalInsectConsumption += telemetry.insectConsumedKg ?? 0;
     if (telemetry.meanFoodSufficiency < .9) daysWithFoodStress += 1;
     if (telemetry.meanWaterSufficiency < .9) daysWithWaterStress += 1;
+
+    const yearIndex = Math.min(4, Math.floor((day - 1) / 365));
+    const bucket = annual[yearIndex];
+    if (bucket.days === 0 && yearIndex > 0) bucket.startPopulation = annual[yearIndex - 1].endPopulation;
+    bucket.births += telemetry.births;
+    bucket.nonPredatorDeaths += telemetry.deaths;
+    bucket.predatorKills += telemetry.predatorKills ?? 0;
+    bucket.meanConditionSum += telemetry.meanCondition;
+    bucket.meanFoodSufficiencySum += telemetry.meanFoodSufficiency;
+    bucket.meanWaterSufficiencySum += telemetry.meanWaterSufficiency;
+    bucket.resourceLimitedPopulationSum += telemetry.resourceLimitedPopulation ?? 0;
+    bucket.days += 1;
+    bucket.endPopulation = getSpatialFaunaRuntimePopulation(runtime);
 
     const currentFlora = runtime.floraSystem?.telemetry.totalBiomassKg ?? 0;
     const currentInsects = runtime.insectSystem?.telemetry.totalBiomassKg ?? 0;
@@ -158,6 +217,7 @@ function runFiveYearSoak(seed: string): void {
   printCheckpoint(`[${seed}] year1`, y1, k);
   printCheckpoint(`[${seed}] year3`, y3, k);
   printCheckpoint(`[${seed}] year5`, y5, k);
+  for (const bucket of annual) printAnnualDemography(seed, bucket);
 
   const trailing = samples.filter(sample => sample.day > 1825 - TRAILING_WINDOW_DAYS);
   const priorYear = samples.filter(sample => sample.day > 1095 && sample.day <= 1460);
@@ -170,30 +230,21 @@ function runFiveYearSoak(seed: string): void {
   const trailingPredators = mean(trailing.map(sample => sample.predators));
   const priorPredators = mean(priorYear.map(sample => sample.predators));
 
-  // Collapse floors: seasonal troughs are allowed, but none of the living trophic
-  // layers may trend toward zero in an undisturbed five-year world.
   assert.ok(minima.floraKg > initial.floraKg * .2, `${seed}: flora hit collapse floor (${ratio(minima.floraKg, initial.floraKg).toFixed(3)}x initial)`);
   assert.ok(minima.insectKg > initial.insectKg * .1, `${seed}: insects hit collapse floor (${ratio(minima.insectKg, initial.insectKg).toFixed(3)}x initial)`);
   assert.ok(minima.prey > k * .2, `${seed}: prey hit collapse floor (${minima.prey}/${k})`);
   assert.ok(minima.predators > 0, `${seed}: predator community went globally extinct`);
 
-  // Slow-death guard: year-five trailing means cannot be substantially below the
-  // previous annual window. This allows predator/prey oscillation without accepting
-  // a persistent downward ratchet.
   assert.ok(trailingFlora >= priorFlora * .72, `${seed}: flora shows slow death spiral (${priorFlora.toFixed(0)} -> ${trailingFlora.toFixed(0)}kg mean)`);
   assert.ok(trailingInsects >= priorInsects * .6, `${seed}: insects show slow death spiral (${priorInsects.toFixed(0)} -> ${trailingInsects.toFixed(0)}kg mean)`);
   assert.ok(trailingPrey >= priorPrey * .68, `${seed}: prey shows slow death spiral (${priorPrey.toFixed(0)} -> ${trailingPrey.toFixed(0)} mean)`);
   assert.ok(trailingPredators >= Math.max(1, priorPredators * .45), `${seed}: predators show slow death spiral (${priorPredators.toFixed(1)} -> ${trailingPredators.toFixed(1)} mean)`);
 
-  // Global biodiversity guards. Local extirpations are expected; widespread global
-  // species loss in an untouched island is not.
   assert.ok(y5.preySpecies >= initialPreySpecies - 3, `${seed}: excessive prey species loss (${initialPreySpecies} -> ${y5.preySpecies})`);
   assert.ok(y5.predatorSpecies >= Math.max(3, initialPredatorSpecies - 2), `${seed}: excessive predator species loss (${initialPredatorSpecies} -> ${y5.predatorSpecies})`);
   assert.ok(y5.floraSpecies >= initialFloraSpecies - 4, `${seed}: excessive flora taxon loss (${initialFloraSpecies} -> ${y5.floraSpecies})`);
   assert.ok(y5.insectSpecies >= initialInsectSpecies - 4, `${seed}: excessive insect guild/taxon loss (${initialInsectSpecies} -> ${y5.insectSpecies})`);
 
-  // A spatially living community should both lose and regain local occupancies over
-  // five years instead of remaining frozen or only contracting.
   assert.ok(transitions.localExtirpations > 0, `${seed}: no local prey extirpation observed over five years`);
   assert.ok(transitions.localRecolonizations > 0, `${seed}: no local prey recolonization observed over five years`);
   assert.ok(totalKills > 0, `${seed}: predators stopped functioning during soak`);
