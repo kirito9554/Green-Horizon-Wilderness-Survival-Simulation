@@ -16,7 +16,7 @@ import type {
 } from '../../types/spatialFaunaSimulation';
 import type { HabitatPatch } from './habitatPatches';
 import type { LocalSitePatchInfluence } from './localSiteProfiles';
-import type { SpatialFaunaPatchAllocation, SpatialFaunaSpeciesPlan } from './spatialFaunaCommunity';
+import type { SpatialFaunaPatchAllocation } from './spatialFaunaCommunity';
 import { spatialUnitRandom } from './spatialRandom';
 import { generateSpatialWorld, getSpatialWorldSeed, type GeneratedSpatialWorld } from './worldGeneration';
 
@@ -443,6 +443,10 @@ export function tickSpatialFaunaDay(
     if (!definition || !plan?.present) continue;
     const allocationByPatch = new Map(plan.patchAllocations.map(allocation => [allocation.patchId, allocation] as const));
     const cohortByPatch = new Map(speciesState.cohorts.map(cohort => [cohort.patchId, cohort] as const));
+    // Movement is resolved simultaneously after all cohorts choose destinations.
+    // Reserve incoming capacity as choices are queued so multiple source patches
+    // cannot all claim the same local K headroom during one day.
+    const pendingIncomingByPatch = new Map<string, number>();
 
     for (const cohort of speciesState.cohorts) {
       resetDailyCohortTelemetry(cohort);
@@ -521,9 +525,9 @@ export function tickSpatialFaunaDay(
         const destinationAllocation = allocationByPatch.get(edge.toPatchId);
         const destinationPatch = world.routeGraph.patchesById[edge.toPatchId];
         if (!destinationAllocation || !destinationPatch || destinationAllocation.carryingCapacity <= 0) continue;
-        const destinationPopulation = cohortByPatch.has(edge.toPatchId)
+        const destinationPopulation = (cohortByPatch.has(edge.toPatchId)
           ? getSpatialFaunaCohortPopulation(cohortByPatch.get(edge.toPatchId)!)
-          : 0;
+          : 0) + (pendingIncomingByPatch.get(edge.toPatchId) ?? 0);
         const freeCapacity = destinationAllocation.carryingCapacity - destinationPopulation;
         if (freeCapacity <= 0) continue;
         const routePenalty = clamp01(edge.weightedDistanceMeters / 1800) * .12;
@@ -552,9 +556,9 @@ export function tickSpatialFaunaDay(
         .12,
       );
       let moveCount = deterministicRound(runtime.worldSeed, `${day}|${definition.id}|${cohort.patchId}|move`, population * dispersalRate);
-      const destinationPopulation = cohortByPatch.has(best.patch.id)
+      const destinationPopulation = (cohortByPatch.has(best.patch.id)
         ? getSpatialFaunaCohortPopulation(cohortByPatch.get(best.patch.id)!)
-        : 0;
+        : 0) + (pendingIncomingByPatch.get(best.patch.id) ?? 0);
       moveCount = Math.min(moveCount, Math.max(0, best.allocation.carryingCapacity - destinationPopulation));
       if (moveCount <= 0) continue;
       const stages = stageSliceForMovement(cohort.stages, moveCount);
@@ -568,6 +572,7 @@ export function tickSpatialFaunaDay(
         count: actualMove,
         crossRegion: patch.parentRegionId !== best.patch.parentRegionId,
       });
+      pendingIncomingByPatch.set(best.patch.id, (pendingIncomingByPatch.get(best.patch.id) ?? 0) + actualMove);
     }
   }
 
