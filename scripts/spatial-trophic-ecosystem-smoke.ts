@@ -5,6 +5,8 @@ import { SPATIAL_PREDATOR_SPECIES } from '../src/data/spatialPredators';
 import { SPATIAL_FAUNA_SPECIES } from '../src/data/spatialFauna';
 import { createSpatialFaunaEcosystemState, tickSpatialFaunaEcosystemDay } from '../src/simulation/spatial/spatialFaunaEcosystemRuntime';
 import { getSpatialFaunaRuntimePopulation } from '../src/simulation/spatial/spatialFaunaRuntime';
+import { createSpatialFloraRuntimeState } from '../src/simulation/spatial/spatialFloraRuntime';
+import { consumeSpatialInsectBiomass, createSpatialInsectRuntimeState, tickSpatialInsectsDay } from '../src/simulation/spatial/spatialInsectRuntime';
 import { generateSpatialWorld } from '../src/simulation/spatial/worldGeneration';
 
 const REQUIRED_FLORA_STRATA = ['emergent','canopy','subcanopy','understory_tree','shrub','herb','groundcover','fern','vine','epiphyte','reed_sedge','mangrove','aquatic'] as const;
@@ -29,6 +31,31 @@ function catalogCoverage(): void {
 
   assert.equal(SPATIAL_PREDATOR_SPECIES.length, 5, 'all five terrestrial predator definitions should be metric spatial predators');
   assert.ok(SPATIAL_FAUNA_SPECIES.filter(s => (s.diet.insects ?? 0) >= .25).length >= 8, 'insects should be a major diet component for many fauna species');
+}
+
+function insectReserveRecovery(seed: string): void {
+  const world = generateSpatialWorld(seed);
+  const flora = createSpatialFloraRuntimeState(world, 1);
+  const insects = createSpatialInsectRuntimeState(world, flora, 1);
+  let target: { patchId: string; state: [number, number, number] } | undefined;
+  for (const species of insects.species) {
+    for (const [patchId, state] of Object.entries(species.patches)) {
+      if (state[0] > 1) { target = { patchId, state }; break; }
+    }
+    if (target) break;
+  }
+  assert.ok(target, `${seed}: need an insect population for reserve test`);
+  const starting = target!.state[0];
+  target!.state[0] = Math.max(.001, starting * .00001);
+  target!.state[1] = .92;
+  target!.state[2] = .9;
+  const depleted = target!.state[0];
+  tickSpatialInsectsDay(insects, world, flora, 2, 'wet');
+  assert.ok(target!.state[0] > depleted, `${seed}: egg/larval reserve must rebuild severely depleted live insect biomass`);
+  const beforePredation = target!.state[0];
+  const eaten = consumeSpatialInsectBiomass(insects, target!.patchId, 1e12);
+  assert.ok(eaten > 0, `${seed}: live insects should be consumable by fauna`);
+  assert.ok(target!.state[0] > 0 && target!.state[0] < beforePredation, `${seed}: predation must deplete live biomass but preserve hidden/refugial reserve`);
 }
 
 function runWorld(seed: string, days = 90) {
@@ -84,6 +111,7 @@ function deterministicShortRun(seed: string): void {
 }
 
 catalogCoverage();
+insectReserveRecovery('spatial-trophic-insect-reserve');
 runWorld('spatial-trophic-alpha', 90);
 runWorld('spatial-trophic-beta', 60);
 deterministicShortRun('spatial-trophic-determinism');
