@@ -5,6 +5,7 @@ on:
     branches: [feature/spatial-world-foundation-founder-work]
     paths:
       - '.github/workflows/apply-predator-founder-seeding.yml'
+      - 'scripts/apply-predator-founder-seeding.mjs'
 
 permissions:
   contents: write
