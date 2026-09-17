@@ -1,14 +1,14 @@
 # Spatial Fauna Community
 
-This document defines the first metric fauna layer for the 120 km² procedural island. It is intentionally a **census and carrying-capacity foundation**, not yet the live replacement for the legacy subarea fauna tick.
+This document defines the metric terrestrial-fauna system for the 120 km² procedural island. It now covers both the generated whole-island census and the persistent living patch-cohort runtime. The legacy subarea food web remains only as a compatibility layer for systems, especially predators, that have not yet migrated.
 
 ## Why this layer exists
 
 The original terrestrial fauna runtime was built around small materialized ecological subareas. Its species definitions use `baseDensityPer1000M2` plus small `maxInitialPopulation` caps. Those caps are useful for the old sample-grid runtime but cannot represent a 120 km² island literally: even suitable habitat was commonly clamped to a few dozen animals per population.
 
-The spatial world now has real metric patch area, terrain, local-site habitat signals and deterministic world seeds, so fauna abundance can instead be derived from actual habitat area.
+The spatial world has real metric patch area, terrain, Local Site habitat signals and a deterministic world seed, so fauna abundance can instead be derived from actual habitat area.
 
-The new rule is:
+The census rule is:
 
 ```text
 metric habitat area
@@ -18,23 +18,15 @@ metric habitat area
 = local carrying capacity
 ```
 
-Counts are **aggregate cohort counts**, not one JavaScript entity per animal. Runtime cost therefore scales mainly with `species × habitat patches`, while an island can still contain tens of thousands of tracked animals.
+Counts are **aggregate cohort counts**, not one JavaScript entity per animal. Runtime cost therefore scales mainly with `species × occupied habitat patches`, while an island can contain tens of thousands of tracked animals.
 
 ## Species catalog
 
 `src/data/spatialFauna.ts` currently contains **24 terrestrial tracked species**: the seven legacy herbivore/omnivore species plus seventeen additional species.
 
-The expanded community covers:
+The expanded community covers large herbivores/omnivores, small mammals and rodents, ground and canopy birds, fruit bats, reptiles, amphibians and large terrestrial invertebrates.
 
-- large herbivores / large omnivores;
-- small mammals and rodents;
-- ground birds and canopy birds;
-- fruit bats;
-- reptiles;
-- amphibians;
-- large terrestrial invertebrates.
-
-The seven legacy species are bridged into the metric catalog without changing their existing live runtime yet:
+The seven legacy species are also represented in the metric catalog:
 
 - Wild Boar
 - Feral Goat
@@ -64,49 +56,25 @@ Additional tracked species currently include:
 - Coconut Crab
 - Marsh Turtle
 
-This is still a deliberately selective **tracked fauna layer**, not a claim that the island contains only 24 terrestrial animal species. Insects, other invertebrates and microfauna can remain biomass/guild pools until individual species need gameplay or food-web identity.
+This is deliberately a **tracked fauna layer**, not a claim that the island contains only 24 terrestrial animal species. Insects, other invertebrates and microfauna can remain biomass/guild pools until an individual species needs gameplay or food-web identity.
 
 ## Metric density instead of legacy population caps
 
 Each spatial fauna definition has `densityPerKm2`, interpreted as a game-scale prime-habitat carrying density. It is separate from the legacy `baseDensityPer1000M2` field and is never clamped by the old `maxInitialPopulation` value.
 
-Small species can therefore reach populations of thousands where large connected habitat supports them. Large, disturbance-sensitive or habitat-specialist animals remain much rarer because their density and suitable area are lower.
+Small species can therefore reach populations of thousands where connected habitat supports them. Large, disturbance-sensitive or habitat-specialist animals remain much rarer because their density and suitable area are lower.
 
-Each species also defines:
-
-- broad fauna guild;
-- ecological target profile;
-- macro-region affinity;
-- diet;
-- deterministic per-world presence probability for non-universal species;
-- minimum patch suitability;
-- minimum island carrying capacity;
-- starting occupancy range below K;
-- body size and life-history metadata retained for later live simulation migration.
+Each species also defines broad fauna guild, ecological target profile, macro-region affinity, diet, deterministic world-presence probability, minimum patch suitability, minimum island K, starting occupancy, body size and life-history metadata.
 
 ## Patch suitability and Local Site influence
 
 `src/simulation/spatial/spatialFaunaCommunity.ts` calculates suitability from the generated world rather than assigning a fixed population to a named POI.
 
-Patch suitability combines:
-
-1. terrain/environment fit against the species target profile;
-2. guild-specific habitat signals such as forage, cover, moisture and aquatic access;
-3. Local Site influence such as breeding habitat, prey refuge, water and decomposition hotspots;
-4. authored macro-region affinity;
-5. disturbance tolerance.
-
-A species is only allocated to patches above its minimum suitability. This means two campaigns with the same ten macro regions can have different local carrying-capacity maps because terrain, hydrology and Local Sites differ by world seed.
+Patch suitability combines terrain/environment fit, guild-specific habitat signals, Local Site influence such as forage/water/breeding/refuge, macro-region affinity and disturbance tolerance. Two campaigns with the same ten macro regions can therefore have different local fauna distributions because terrain, hydrology and Local Sites differ by world seed.
 
 ## Island, region and patch census
 
-For every species the generator produces:
-
-- island carrying capacity;
-- initial aggregate population below K;
-- occupied patch count;
-- exact integer population and K per habitat patch;
-- exact aggregation by canonical macro region.
+For every species the generator produces island carrying capacity, starting population below K, occupied patch count, exact integer population/K per habitat patch and exact aggregation by canonical macro region.
 
 Integer allocation conserves totals across all levels:
 
@@ -115,58 +83,100 @@ sum(patch population) = region totals = island population
 sum(patch K)          = region K      = island K
 ```
 
-Rare species may be absent from a particular campaign when the world lacks enough suitable habitat or its deterministic presence roll fails. Common species remain consistent where the generated island supports them.
+Rare species may be absent from a particular campaign when the world lacks enough suitable habitat or its deterministic presence roll fails.
 
-## Current census scale
+The deterministic CI census currently produces:
 
-The CI regression currently exercises two deterministic worlds.
+- `spatial-fauna-alpha`: **23/24 species, 49,347 initial individuals, K 66,193**;
+- `spatial-fauna-beta`: **23/24 species, 46,438 initial individuals, K 65,472**.
 
-`spatial-fauna-alpha`:
+These totals exclude aquatic populations, predators and untracked background insects/microfauna.
 
-- 23 / 24 tracked species present;
-- **49,347** initial terrestrial individuals;
-- island terrestrial K **66,193**.
+## Persistent living patch cohorts
 
-Largest tracked populations in that seed include Ground Frog 9,069, Tree Rat 7,213, Tree Frog 6,524, Forest Gecko 6,357, Forest Skink 3,987 and Small Fruit Bat 3,956.
+`src/types/spatialFaunaSimulation.ts` and `src/simulation/spatial/spatialFaunaRuntime.ts` materialize the census as compact persistent patch cohorts in `GameState.spatialFaunaSystem`.
 
-`spatial-fauna-beta`:
+Each occupied species/patch stores only:
 
-- 23 / 24 tracked species present;
-- **46,438** initial terrestrial individuals;
-- island terrestrial K **65,472**.
+```text
+[juveniles, adults, old, condition, stressDays]
+```
 
-The difference comes from procedural habitat geometry/suitability and deterministic species presence/occupancy, not from a global random multiplier.
+Everything else is derived for the daily tick. The alpha seed starts with roughly **4,699 occupied cohorts** while serialized fauna state remains about **282 KiB**, rather than creating ~49,000 animal entities.
 
-These totals deliberately exclude aquatic populations, predators and untracked background insects/microfauna. The tracked terrestrial community is therefore already an order of magnitude larger than the previous tiny capped runtime without materializing tens of thousands of entities.
+The daily runtime implements:
+
+- juvenile → adult → old stage transitions;
+- life-history natural mortality;
+- condition/stress response;
+- breeding with effective breeder and nearby-mate availability;
+- seasonal dry/wet/monsoon resource effects;
+- patch food, water, refuge and breeding suitability from terrain + Local Sites;
+- adjacency dispersal toward better supported patches;
+- cross-region movement when the patch graph allows it;
+- bounded 30-day diagnostic history.
+
+The game-state bridge processes fauna only on day boundaries and catches up missed days in order. The same world seed and elapsed day horizon reproduce the same aggregate cohort history.
+
+Before shared competition is applied, the lower-level demographic regression gives the alpha seed:
+
+- day 365: **46,109 / K 66,193**, all **23/23** present species retained;
+- day 1,800: **41,476 / K 66,193**, still **23/23** retained without predator pressure.
+
+This lower-level test remains useful because it isolates cohort demography from the community-interaction layer.
+
+## Shared patch resource competition
+
+A species cannot now treat patch food/water/refuge as a private copy of the environment.
+
+`src/simulation/spatial/spatialFaunaCompetition.ts` builds a start-of-day shared community load for every occupied patch. The census K is treated as the **calibrated coexistence baseline** rather than introducing another arbitrary global carrying-capacity multiplier.
+
+Competition channels are intentionally different:
+
+1. **Food** — competitor demand is weighted by metabolic headcount, daily food requirement and normalized diet overlap. Species with little diet overlap contribute little to one another's food pressure.
+2. **Water** — all co-located animals contribute their metabolic water demand to the same patch pressure.
+3. **Refuge** — occupancy is weighted by ecological guild overlap so species using similar shelter/space niches interfere more strongly.
+
+Pressure is expressed relative to the corresponding K-derived baseline. At or below the designed coexistence load, the interaction layer does **not** add another penalty. Above baseline, a smooth factor reduces effective food/water/refuge sufficiency and persistent condition.
+
+`src/simulation/spatial/spatialFaunaEcosystemRuntime.ts` applies competition **before** each demographic day. The core tick therefore sees the changed condition/stress immediately, so mortality, breeding readiness and stress-driven dispersal can react on the same simulated day. Competition diagnostics are then attached to the daily telemetry.
+
+The regression includes an intentional overload test. In `spatial-fauna-alpha`, a co-located Wild Boar/Agouti pair starts with focal food pressure **0.863**. Artificially overloading the overlapping competitor raises focal food pressure to **1.996** and reduces the food sufficiency factor to **0.477**, while leaving the focal population itself untouched before the pressure calculation. This verifies that the response is genuinely interspecific.
+
+Normal one-year worlds do not receive a hidden island-wide debuff:
+
+- alpha day 365: **46,109 / 66,193**, 23/23 species; peak population-weighted mean pressures food **0.781**, water **0.793**, refuge **0.753**; at most 230 individuals were inside locally competition-limited cohorts on a sampled day;
+- beta day 365: **45,241 / 65,472**, 23/23 species; peak mean pressures food **0.775**, water **0.781**, refuge **0.726**; at most 587 individuals were inside locally competition-limited cohorts.
+
+The important result is spatial: most of the island stays below its calibrated coexistence load while local crowding/niche skew can still create real scarcity.
+
+Diet-overlap and life-history baseline calculations are cached by species/pair. The ecological state remains cohort-level; caching changes cost, not results.
+
+## Current resource-model boundary
+
+Shared competition is **not yet a conserved biomass stock simulation**. It is an interaction layer inferred from patch K, real species food/water needs and niche overlap.
+
+The project already has dynamic Local Site resource state, but those stocks are not yet the single persistent source consumed by fauna, player gathering and other ecological guilds. Pretending otherwise would double-count resources or force the old sample-grid food assumptions back into the 120 km² world.
+
+The next resource migration should therefore create shared patch productivity/stock pools for the ecological resource families actually consumed by fauna, then let cohort demand draw from those same pools before regeneration/recruitment restores them.
 
 ## Compatibility boundary
 
-This phase does **not** inject the metric census into `ecologyFaunaSystem.ts` yet.
+The metric system is now the living world-scale terrestrial-fauna runtime. `simEngine.ts` advances it before the legacy terrestrial ecology block.
 
-The old system currently owns live feeding, reproduction, movement and predator-facing prey records for the seven legacy species. Replacing only its population numbers would massively increase food demand while still using the old sample-grid food-web assumptions, producing a misleading balance failure.
+The old `ecologyFaunaSystem` and predator systems still run as a compatibility food web for gameplay/systems that have not migrated. They must not be interpreted as a second literal population census and their populations are not added to the metric island totals.
 
-For now:
-
-```text
-GeneratedSpatialWorld.faunaCommunity
-= authoritative metric census / future spatial ecology baseline
-
-legacy ecologyFaunaSystem
-= compatibility live runtime until migration
-```
-
-The seventeen new tracked species therefore exist in the spatial census but are not yet independently ticking as legacy `WildAnimalPopulation` records.
+The legacy predator model has **not** yet been connected to the 24-species patch community. Predator migration remains deferred until prey/resource dynamics are stable enough that predation pressure can be measured against actual spatial prey availability rather than the old subarea menu.
 
 ## Next migration phase
 
-The live migration should happen as a coherent patch-ecology step:
+The next coherent steps are:
 
-1. create persistent patch/cohort fauna state from the metric census;
-2. move food/water demand onto patch resource productivity rather than legacy sample pools;
-3. make animals select feeding, drinking, refuge and breeding patches/sites;
-4. add patch adjacency dispersal and seasonal movement;
-5. expose only locally encountered groups/individuals to gameplay;
-6. migrate predators onto the same patch world and broaden their diets to the expanded prey community;
-7. validate biomass/energy flow and predator pressure before removing the compatibility runtime.
+1. replace K-inferred competition capacity with persistent patch food/water/resource productivity where the underlying resource family exists;
+2. connect fauna demand to those stocks and let harvesting/season/weather alter the same resource budget;
+3. strengthen movement into explicit feeding/drinking/refuge/breeding patch selection and seasonal redistribution;
+4. expose only locally encountered groups/individuals to gameplay;
+5. migrate predators onto the same patch world, using search → encounter → attack rather than omniscient prey selection;
+6. validate biomass/energy flow, local extirpation/recolonization and predator competition before retiring the compatibility runtime.
 
-This preserves the core design goal: **the island contains ecologically meaningful animal populations at world scale, while gameplay only materializes the animals and encounters that matter locally.**
+The core design remains: **the island contains ecologically meaningful animal populations at world scale, while gameplay materializes only animals and encounters that matter locally.**
