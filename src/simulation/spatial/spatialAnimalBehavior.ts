@@ -41,6 +41,7 @@ export interface SpatialBehaviorPatchDistance {
 }
 
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
+const rangeCache = new WeakMap<GeneratedSpatialWorld, Map<string, SpatialBehaviorPatchDistance[]>>();
 
 function faunaOrganization(socialMode: SpatialFaunaSocialMode, guild: SpatialFaunaGuild): SpatialAnimalOrganizationMode {
   if (socialMode === 'pair') return 'breeding_pair';
@@ -123,7 +124,17 @@ export function getBehaviorPatchesWithinRange(
   startPatchId: string,
   rangeKm: number,
 ): SpatialBehaviorPatchDistance[] {
-  const maxMeters = Math.max(0, rangeKm) * 1000;
+  const normalizedRange = Math.round(Math.max(0, rangeKm) * 1000) / 1000;
+  const cacheKey = `${startPatchId}|${normalizedRange}`;
+  let worldCache = rangeCache.get(world);
+  if (!worldCache) {
+    worldCache = new Map();
+    rangeCache.set(world, worldCache);
+  }
+  const cached = worldCache.get(cacheKey);
+  if (cached) return cached;
+
+  const maxMeters = normalizedRange * 1000;
   const bestDistance = new Map<string, number>([[startPatchId, 0]]);
   const bestWeighted = new Map<string, number>([[startPatchId, 0]]);
   const queue: Array<{ patchId: string; distance: number; weighted: number }> = [{ patchId: startPatchId, distance: 0, weighted: 0 }];
@@ -142,13 +153,15 @@ export function getBehaviorPatchesWithinRange(
       queue.push({ patchId: edge.toPatchId, distance, weighted });
     }
   }
-  return [...bestDistance.entries()]
+  const result = [...bestDistance.entries()]
     .map(([patchId, distance]) => ({
       patchId,
       distanceKm: distance / 1000,
       weightedDistanceKm: (bestWeighted.get(patchId) ?? distance) / 1000,
     }))
     .sort((a, b) => a.weightedDistanceKm - b.weightedDistanceKm || a.patchId.localeCompare(b.patchId));
+  worldCache.set(cacheKey, result);
+  return result;
 }
 
 export function estimateReachableBreeders(
@@ -201,10 +214,7 @@ export function recolonizationReadiness(absenceDays: number, delay: readonly [nu
   return clamp01((absenceDays - minimum) / Math.max(1, maximum - minimum));
 }
 
-export function deterministicFounderCount(
-  unitRandom: number,
-  range: readonly [number, number],
-): number {
+export function deterministicFounderCount(unitRandom: number, range: readonly [number, number]): number {
   const low = Math.max(1, Math.floor(range[0]));
   const high = Math.max(low, Math.floor(range[1]));
   return low + Math.min(high - low, Math.floor(unitRandom * (high - low + 1)));
