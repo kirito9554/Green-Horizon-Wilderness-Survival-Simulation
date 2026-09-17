@@ -37,7 +37,7 @@ import { tickWildPredators } from './ecologyPredatorSystem';
 import { createWorldHydrologyState, tickWorldHydrology } from './hydrologySystem';
 import { tickSurfaceWaterHydrology } from './hydrologySurfaceWaterSystem';
 import { tickWaterManagement } from './waterManagementSystem';
-import { tickSpatialFaunaRuntime } from './spatial/spatialFaunaRuntime';
+import { tickSpatialFaunaRuntime } from './spatial/spatialFaunaEcosystemRuntime';
 import {
   finalizeEnvironmentalWaterManagementScale,
   prepareEnvironmentalWaterManagementScale,
@@ -104,7 +104,18 @@ export * from './waterManagementSystem';
 export * from './environmentalScaleSystem';
 export * from './terrestrialEcologyScaleSystem';
 export * from './livingHydrologyBridge';
-export * from './spatial/spatialFaunaRuntime';
+export {
+  SPATIAL_FAUNA_RUNTIME_VERSION,
+  SPATIAL_FAUNA_HISTORY_DAYS,
+  getSpatialFaunaSeason,
+  getSpatialFaunaCohortPopulation,
+  getSpatialFaunaRuntimePopulation,
+  createSpatialFaunaRuntimeState,
+  tickSpatialFaunaDay,
+  createSpatialFaunaRuntimeForState,
+} from './spatial/spatialFaunaRuntime';
+export * from './spatial/spatialFaunaCompetition';
+export * from './spatial/spatialFaunaEcosystemRuntime';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 const rockyShoreGroundStorageId = 'storage_ground_AREA_FISHING_LAGOON';
@@ -242,9 +253,8 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickAgriculture(next, deltaGameMinutes, deltaGameSeconds);
 
   // The metric 120 km² fauna runtime is independent from the compatibility
-  // BuildGrid food web below. It advances sparse patch cohorts only on day
-  // boundaries, so the expanded census can live spatially without multiplying
-  // the obsolete sample-grid food demand inside the legacy ecology system.
+  // BuildGrid food web below. Shared patch competition is resolved before each
+  // daily demographic step, while cohorts remain aggregate rather than entities.
   tickSpatialFaunaRuntime(next, deltaGameMinutes);
 
   // BuildGrid/subarea geometry is a local physical sample. Terrestrial ecology
