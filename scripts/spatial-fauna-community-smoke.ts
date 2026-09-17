@@ -16,8 +16,9 @@ function validateCommunity(seed: string): ReturnType<typeof generateSpatialWorld
   assert.ok(SPATIAL_FAUNA_SPECIES.length >= 24, `expanded metric catalog should contain at least 24 species; got ${SPATIAL_FAUNA_SPECIES.length}`);
   assert.equal(new Set(SPATIAL_FAUNA_SPECIES.map(species => species.id)).size, SPATIAL_FAUNA_SPECIES.length, 'spatial fauna IDs must be unique');
   assert.equal(community.catalogSpeciesCount, SPATIAL_FAUNA_SPECIES.length);
-  assert.equal(community.legacyRuntimeSpeciesCount, WILD_FAUNA_SPECIES_IDS.length, 'all seven legacy runtime species should remain represented in metric census');
-  assert.deepEqual([...LEGACY_SPATIAL_FAUNA_SPECIES_IDS].sort(), [...WILD_FAUNA_SPECIES_IDS].sort(), 'legacy spatial fauna bridge must cover the old fauna catalog exactly');
+  assert.equal(community.legacyRuntimeSpeciesCount, 0, 'spatial patch runtime must own all terrestrial fauna after migration');
+  assert.equal(community.legacyCatalogBridgeSpeciesCount, WILD_FAUNA_SPECIES_IDS.length, 'seven historical species should reuse authored catalog data without legacy runtime ownership');
+  assert.deepEqual([...LEGACY_SPATIAL_FAUNA_SPECIES_IDS].sort(), [...WILD_FAUNA_SPECIES_IDS].sort(), 'legacy data bridge must cover the old fauna catalog exactly');
 
   assert.ok(community.presentSpeciesCount >= 18, `${seed}: a 120 km² tropical island should support a broad terrestrial community; got ${community.presentSpeciesCount}`);
   assert.ok(community.totalInitialIndividuals >= 3000, `${seed}: metric census should contain thousands of aggregate individuals; got ${community.totalInitialIndividuals}`);
