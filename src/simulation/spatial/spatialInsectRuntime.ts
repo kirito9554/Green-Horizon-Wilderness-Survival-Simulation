@@ -11,7 +11,7 @@ import { spatialUnitRandom } from './spatialRandom';
 import type { GeneratedSpatialWorld } from './worldGeneration';
 import type { HabitatPatch } from './habitatPatches';
 
-export const SPATIAL_INSECT_RUNTIME_VERSION = 1;
+export const SPATIAL_INSECT_RUNTIME_VERSION = 2;
 const BIOMASS = 0;
 const RECRUITMENT = 1;
 const CONDITION = 2;
@@ -95,6 +95,12 @@ function carryingBiomass(species: SpatialInsectSpeciesDefinition, patch: Habitat
   return patch.areaKm2 * species.biomassKgPerKm2 * (.22 + fit * .78);
 }
 
+function harvestableFraction(state: SpatialInsectPatchState): number {
+  // Live adults/larvae are food; eggs, hidden larvae and refugial colonies are
+  // represented by recruitment reserve and are not all exposed to one day's predation.
+  return clamp01(.88 - state[RECRUITMENT] * .16);
+}
+
 export function createSpatialInsectRuntimeState(
   world: GeneratedSpatialWorld,
   flora: SpatialFloraRuntimeState | undefined,
@@ -156,9 +162,13 @@ export function tickSpatialInsectsDay(
       }
       const fill = clamp01(state[BIOMASS] / cap);
       const seasonal = species.seasonMultiplier[season];
-      const recruitment = state[BIOMASS] * species.turnoverPerDay * seasonal * state[CONDITION] * Math.max(.05, 1 - fill);
+      const liveRecruitment = state[BIOMASS] * species.turnoverPerDay * seasonal * state[CONDITION] * Math.max(.05, 1 - fill);
+      // Egg/larval/refugial reserve creates a genuine recovery path even after
+      // severe visible biomass depletion; it does not create harvestable food instantly.
+      const reserveRecruitment = cap * state[RECRUITMENT] * species.turnoverPerDay * seasonal * .0018 * Math.max(.15, 1 - fill);
+      const recruitment = liveRecruitment + reserveRecruitment;
       const naturalTurnover = state[BIOMASS] * species.turnoverPerDay * (.24 + fill * .26);
-      state[BIOMASS] = round3(Math.min(cap * 1.08, Math.max(cap * .0004, state[BIOMASS] + recruitment - naturalTurnover)));
+      state[BIOMASS] = round3(Math.min(cap * 1.08, Math.max(cap * .00025, state[BIOMASS] + recruitment - naturalTurnover)));
       state[RECRUITMENT] = clamp01(state[RECRUITMENT] + species.turnoverPerDay * .3 * seasonal - .004);
       state[CONDITION] = clamp01(state[CONDITION] + suitability * .0015 - patch.suitability.disturbance * .0008);
       producedBiomassKg += recruitment;
@@ -173,6 +183,14 @@ export function getSpatialInsectBiomassByPatch(runtime: SpatialInsectRuntimeStat
   const result: Record<string, number> = {};
   for (const speciesState of runtime.species) for (const [patchId, state] of Object.entries(speciesState.patches)) {
     result[patchId] = (result[patchId] ?? 0) + state[BIOMASS];
+  }
+  return result;
+}
+
+export function getSpatialInsectAccessibleBiomassByPatch(runtime: SpatialInsectRuntimeState): Readonly<Record<string, number>> {
+  const result: Record<string, number> = {};
+  for (const speciesState of runtime.species) for (const [patchId, state] of Object.entries(speciesState.patches)) {
+    result[patchId] = (result[patchId] ?? 0) + state[BIOMASS] * harvestableFraction(state);
   }
   return result;
 }
@@ -199,20 +217,22 @@ export function consumeSpatialInsectBiomass(
   requestedKg: number,
 ): number {
   if (requestedKg <= 0) return 0;
-  const candidates: Array<{ state: SpatialInsectPatchState; weight: number }> = [];
+  const candidates: Array<{ state: SpatialInsectPatchState; available: number }> = [];
   let available = 0;
   for (const speciesState of runtime.species) {
     const state = speciesState.patches[patchId];
     if (!state || state[BIOMASS] <= 0) continue;
-    candidates.push({ state, weight: state[BIOMASS] });
-    available += state[BIOMASS];
+    const exposed = state[BIOMASS] * harvestableFraction(state);
+    if (exposed <= 0) continue;
+    candidates.push({ state, available: exposed });
+    available += exposed;
   }
-  const consumed = Math.min(requestedKg, available * .72);
+  const consumed = Math.min(requestedKg, available);
   if (consumed <= 0 || available <= 0) return 0;
   for (const candidate of candidates) {
-    const share = consumed * candidate.weight / available;
+    const share = consumed * candidate.available / available;
     candidate.state[BIOMASS] = round3(Math.max(0, candidate.state[BIOMASS] - share));
-    candidate.state[CONDITION] = clamp01(candidate.state[CONDITION] - share / Math.max(1, candidate.weight) * .035);
+    candidate.state[CONDITION] = clamp01(candidate.state[CONDITION] - share / Math.max(1, candidate.available) * .035);
   }
   runtime.telemetry.consumedByFaunaKg += consumed;
   return consumed;
