@@ -170,6 +170,15 @@ The prey side now has metric census, persistent patch cohorts and shared local c
 
 Predators should migrate only after that prey/resource layer is stable. Their future hunt loop should operate on spatial search/home-range overlap and actual encounter candidates rather than an omniscient macro-region prey menu. Regional movement, local refugia, local extirpation/recolonization and predator competition can then emerge from the same patch topology.
 
+## Validation
+
+The fully cached competition implementation passed workflow run **35180934854** across typecheck, spatial world, census, living fauna runtime, shared fauna competition, legacy terrestrial fauna/predators, aquatic ecology, hydrology/environmental scale, buildings/storage/agriculture and production build.
+
+The validation intentionally distinguishes two behaviors:
+
+- a normal below-K spatial community retains all 23 present species across the one-year alpha and beta regressions without receiving an island-wide competition penalty;
+- a deliberate co-located Wild Boar/Agouti overload raises focal food pressure from **0.863** to **1.996**, lowering its food factor to **0.477**, proving interspecific pressure is active when local demand exceeds the calibrated coexistence baseline.
+
 ## Reproducibility contract
 
 Procedural generation must obey:
