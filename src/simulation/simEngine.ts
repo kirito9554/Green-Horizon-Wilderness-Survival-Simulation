@@ -33,7 +33,6 @@ import { createStorageSystemState, tickStorageSimulation } from './storageSystem
 import { tickStorageHauling } from './storageHaulSystem';
 import { createAgricultureSystemState, tickAgriculture } from './agricultureSystem';
 import { createWorldEcologyState, tickWorldEcology } from './ecologySystem';
-import { tickWildPredators } from './ecologyPredatorSystem';
 import { createWorldHydrologyState, tickWorldHydrology } from './hydrologySystem';
 import { tickSurfaceWaterHydrology } from './hydrologySurfaceWaterSystem';
 import { tickWaterManagement } from './waterManagementSystem';
@@ -57,10 +56,6 @@ import {
   prepareMaintenanceWorkstations,
   prepareUpgradeWorkstations,
 } from './productionWorkstationCoordinator';
-import {
-  tickLongRunEcosystemBalance,
-  tickWildFaunaWithStableFoodWebClock,
-} from './longRunEcosystemSystem';
 
 export * from './inventorySystem';
 export * from './timeSystem';
@@ -116,6 +111,10 @@ export {
 } from './spatial/spatialFaunaRuntime';
 export * from './spatial/spatialFaunaCompetition';
 export * from './spatial/spatialFaunaEcosystemRuntime';
+export * from './spatial/spatialFloraRuntime';
+export * from './spatial/spatialInsectRuntime';
+export * from './spatial/spatialPredatorRuntime';
+export * from './spatial/spatialTrophicResourceRuntime';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 const rockyShoreGroundStorageId = 'storage_ground_AREA_FISHING_LAGOON';
@@ -210,7 +209,6 @@ export const INITIAL_GAME_STATE: GameState = {
 
 export function tickSimulation(state: GameState, deltaRealSeconds: number): GameState {
   if (state.gameTime.speed === 0) return state;
-
   const next = JSON.parse(JSON.stringify(state)) as GameState;
   const speedMult = state.gameTime.speed * (state.settings.gameSpeedMultiplier || 1);
   const deltaGameMinutes = deltaRealSeconds * 0.5 * speedMult;
@@ -223,16 +221,11 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickSurvivors(next, deltaGameMinutes, deltaGameSeconds);
   tickExpeditions(next, deltaGameMinutes);
   tickItemSimulation(next, deltaGameMinutes);
-
   tickBuildingPreparationRuntime(next);
   tickBuildingConstructionRuntime(next);
   tickStructureLifecycle(next, deltaGameMinutes);
   tickStructureWorkRuntime(next);
 
-  // Natural hydrology resolves first. Living systems publish demand into the
-  // same water network before player infrastructure allocates any volume.
-  // Macro natural storage is temporarily expanded to its environmental scale;
-  // local pools and player-built storage remain literal 1:1 physical volumes.
   tickWorldHydrology(next, deltaGameMinutes);
   tickSurfaceWaterHydrology(next, deltaGameMinutes);
   syncLivingWaterDemands(next);
@@ -243,35 +236,26 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
 
   tickStorageSimulation(next, deltaGameMinutes);
   tickStorageHauling(next, deltaGameSeconds);
-
   prepareMaintenanceWorkstations(next);
   tickMaintenanceSystem(next, deltaGameSeconds);
   prepareUpgradeWorkstations(next);
   tickUpgradeSystem(next, deltaGameSeconds);
   tickCraftingAndResearch(next, deltaGameSeconds);
-
   tickAgriculture(next, deltaGameMinutes, deltaGameSeconds);
 
-  // The metric 120 km² fauna runtime is independent from the compatibility
-  // BuildGrid food web below. Shared patch competition is resolved before each
-  // daily demographic step, while cohorts remain aggregate rather than entities.
+  // The metric patch runtime is now the single authority for terrestrial fauna,
+  // flora-driven food, insects and predators. Legacy BuildGrid animal/predator
+  // populations are retained only for compatibility reads and isolated tests.
   tickSpatialFaunaRuntime(next, deltaGameMinutes);
 
-  // BuildGrid/subarea geometry is a local physical sample. Terrestrial ecology
-  // temporarily sees a bounded effective landscape area so flora, prey and
-  // predators represent regional stocks. The physical footprint is restored
-  // before the simulation state leaves this tick.
+  // Old subarea flora still feeds compatibility UI/material systems during the
+  // transition. It no longer advances terrestrial fauna or predators.
   const terrestrialScaleSnapshot = prepareTerrestrialEcologyScale(next);
   try {
     tickWorldEcology(next, deltaGameMinutes);
-    reconcileTerrestrialEcologyScale(next); // flora materialized during this tick
+    reconcileTerrestrialEcologyScale(next);
     finalizeLivingHydrologyState(next);
     tickAquaticEcologyAtEnvironmentalScale(next, deltaGameMinutes);
-    tickWildFaunaWithStableFoodWebClock(next, deltaGameMinutes);
-    reconcileTerrestrialEcologyScale(next); // fauna seeded during this tick
-    tickWildPredators(next, deltaGameMinutes);
-    reconcileTerrestrialEcologyScale(next); // predators seeded during this tick
-    tickLongRunEcosystemBalance(next, deltaGameMinutes);
   } finally {
     finalizeTerrestrialEcologyScale(next, terrestrialScaleSnapshot);
   }
