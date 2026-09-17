@@ -193,7 +193,9 @@ export function advancePredatorRecoveryClock(
   recolonizationDelayDays: readonly [number, number],
 ): PredatorRecoveryClock {
   if (totalPopulation < minimumViablePopulation) {
-    state.belowMvpDays = (state.belowMvpDays ?? 0) + 1;
+    // Complete absence is a stricter form of being below MVP. Keep the recovery clock at
+    // least as old as confirmed absence without using absence as the cooldown itself.
+    state.belowMvpDays = Math.max(state.belowMvpDays ?? 0, state.globalAbsenceDays ?? 0) + 1;
     state.recoveredDays = 0;
     state.recoveryPressure = recolonizationReadiness(state.belowMvpDays, recolonizationDelayDays);
   } else {
