@@ -3,7 +3,12 @@ import type { WildFoodResource } from '../../types/ecologySimulation';
 import { SPATIAL_FAUNA_FOOD_RESOURCE_ORDER, type SpatialFaunaRuntimeState, type SpatialFaunaSeason, type SpatialFaunaPatchCohortState } from '../../types/spatialFaunaSimulation';
 import type { SpatialFloraRuntimeState, SpatialInsectRuntimeState } from '../../types/spatialEcologySimulation';
 import { applySpatialFloraConsumption, getSpatialFloraProductionByPatch } from './spatialFloraRuntime';
-import { consumeSpatialInsectBiomass, getSpatialInsectAccessibleBiomassByPatch, getSpatialPollinationByPatch } from './spatialInsectRuntime';
+import {
+  consumeSpatialInsectBiomass,
+  getSpatialInsectAccessibleBiomassAtPatch,
+  getSpatialInsectAccessibleBiomassByPatch,
+  getSpatialPollinationByPatch,
+} from './spatialInsectRuntime';
 import {
   ensureSpatialFaunaResourcePools,
   getSpatialFaunaResourceModel,
@@ -34,15 +39,6 @@ function plantSeason(resource: WildFoodResource, season: SpatialFaunaSeason): nu
   if (season === 'dry') return ({ fruit:.58,seeds:1.08,browse:.82,ground_vegetation:.58,roots_tubers:.78,insects:0,aquatic_plants:.56,carrion:0 } as Record<WildFoodResource,number>)[resource];
   if (season === 'wet') return ({ fruit:1.18,seeds:1.04,browse:1.08,ground_vegetation:1.2,roots_tubers:1.12,insects:0,aquatic_plants:1.16,carrion:0 } as Record<WildFoodResource,number>)[resource];
   return ({ fruit:.92,seeds:.78,browse:1.02,ground_vegetation:1.08,roots_tubers:1.06,insects:0,aquatic_plants:1.38,carrion:0 } as Record<WildFoodResource,number>)[resource];
-}
-function accessibleInsectBiomassAtPatch(insects: SpatialInsectRuntimeState, patchId: string): number {
-  let total = 0;
-  for (const speciesState of insects.species) {
-    const state = speciesState.patches[patchId];
-    if (!state || state[0] <= 0) continue;
-    total += state[0] * clamp01(.88 - state[1] * .16);
-  }
-  return total;
 }
 
 export function tickSpatialTrophicResources(
@@ -127,7 +123,7 @@ export function tickSpatialTrophicResources(
         sat[r] = needed > 1e-9 ? clamp01(actual / needed) : 1;
         insectConsumedKg += actual;
         foodConsumedKg += actual;
-        stock[index] = round3(accessibleInsectBiomassAtPatch(insects, patchId));
+        stock[index] = round3(getSpatialInsectAccessibleBiomassAtPatch(insects, patchId));
         continue;
       }
       const consumed = Math.min(stock[index], needed);
