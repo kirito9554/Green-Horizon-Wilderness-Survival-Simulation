@@ -38,6 +38,9 @@ jobs:
       - name: Metric spatial fauna community smoke test
         run: npm run test:spatial-fauna
 
+      - name: Living spatial fauna cohort runtime smoke test
+        run: npm run test:spatial-fauna-runtime
+
       - name: World ecology foundation smoke test
         run: npm run test:ecology
 
