@@ -47,6 +47,9 @@ jobs:
       - name: Area-scaled spatial fauna resource pool smoke test
         run: npm run test:spatial-fauna-resources
 
+      - name: Full spatial trophic ecosystem smoke test
+        run: npm run test:spatial-trophic
+
       - name: World ecology foundation smoke test
         run: npm run test:ecology
 
