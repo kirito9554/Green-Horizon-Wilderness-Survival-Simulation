@@ -104,17 +104,7 @@ Each occupied species/patch stores only:
 
 Everything else is derived for the daily tick. The alpha seed starts with roughly **4,699 occupied cohorts** while serialized fauna state remains about **282 KiB**, rather than creating ~49,000 animal entities.
 
-The daily runtime implements:
-
-- juvenile → adult → old stage transitions;
-- life-history natural mortality;
-- condition/stress response;
-- breeding with effective breeder and nearby-mate availability;
-- seasonal dry/wet/monsoon resource effects;
-- patch food, water, refuge and breeding suitability from terrain + Local Sites;
-- adjacency dispersal toward better supported patches;
-- cross-region movement when the patch graph allows it;
-- bounded 30-day diagnostic history.
+The daily runtime implements juvenile → adult → old transitions, life-history natural mortality, condition/stress response, breeding with effective breeder and nearby-mate availability, dry/wet/monsoon seasonality, patch food/water/refuge/breeding suitability, adjacency dispersal, cross-region movement and bounded diagnostic history.
 
 The game-state bridge processes fauna only on day boundaries and catches up missed days in order. The same world seed and elapsed day horizon reproduce the same aggregate cohort history.
 
@@ -150,7 +140,7 @@ Normal one-year worlds do not receive a hidden island-wide debuff:
 
 The important result is spatial: most of the island stays below its calibrated coexistence load while local crowding/niche skew can still create real scarcity.
 
-Diet-overlap and life-history baseline calculations are cached by species/pair. The ecological state remains cohort-level; caching changes cost, not results.
+Diet-overlap and life-history baseline calculations are cached by species/pair. The ecological state remains cohort-level; caching changes cost, not results. Full workflow run **35180934854** passed with the cached implementation, including the competition regression and every existing ecology/predator/aquatic/build test.
 
 ## Current resource-model boundary
 
