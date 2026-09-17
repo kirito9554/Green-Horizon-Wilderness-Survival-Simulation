@@ -37,6 +37,7 @@ interface AnnualDemography {
   startPopulation: number;
   endPopulation: number;
   births: number;
+  faunaImmigrants: number;
   nonPredatorDeaths: number;
   predatorKills: number;
   meanConditionSum: number;
@@ -118,13 +119,13 @@ function printCheckpoint(label: string, point: Snapshot, k: number): void {
 }
 
 function printAnnualDemography(seed: string, annual: AnnualDemography): void {
-  const expectedEnd = annual.startPopulation + annual.births - annual.nonPredatorDeaths - annual.predatorKills;
+  const expectedEnd = annual.startPopulation + annual.births + annual.faunaImmigrants - annual.nonPredatorDeaths - annual.predatorKills;
   const net = annual.endPopulation - annual.startPopulation;
-  const accountedNet = annual.births - annual.nonPredatorDeaths - annual.predatorKills;
+  const accountedNet = annual.births + annual.faunaImmigrants - annual.nonPredatorDeaths - annual.predatorKills;
   assert.equal(expectedEnd, annual.endPopulation, `${seed}: year ${annual.year} demographic accounting mismatch (${expectedEnd} vs ${annual.endPopulation})`);
   console.log(
     `[${seed}] demography y${annual.year} pop=${annual.startPopulation}->${annual.endPopulation} net=${net} `
-      + `births=${annual.births} deaths=${annual.nonPredatorDeaths} kills=${annual.predatorKills} accounted=${accountedNet} `
+      + `births=${annual.births} immigrants=${annual.faunaImmigrants} deaths=${annual.nonPredatorDeaths} kills=${annual.predatorKills} accounted=${accountedNet} `
       + `meanCondition=${(annual.meanConditionSum / annual.days).toFixed(3)} `
       + `food=${(annual.meanFoodSufficiencySum / annual.days).toFixed(3)} `
       + `water=${(annual.meanWaterSufficiencySum / annual.days).toFixed(3)} `
@@ -151,6 +152,7 @@ function runFiveYearSoak(seed: string): void {
     startPopulation: 0,
     endPopulation: 0,
     births: 0,
+    faunaImmigrants: 0,
     nonPredatorDeaths: 0,
     predatorKills: 0,
     meanConditionSum: 0,
@@ -167,11 +169,36 @@ function runFiveYearSoak(seed: string): void {
   let totalInsectConsumption = 0;
   let daysWithFoodStress = 0;
   let daysWithWaterStress = 0;
+  let faunaMateMoves = 0;
+  let faunaNatalMoves = 0;
+  let faunaGroupSplits = 0;
+  let faunaResourceMoves = 0;
+  let faunaImmigrants = 0;
+  let predatorMateMoves = 0;
+  let predatorNatalMoves = 0;
+  let predatorTerritorySettlements = 0;
+  let predatorGroupSplits = 0;
+  let predatorImmigrants = 0;
+  let predatorBirths = 0;
+  let predatorDeaths = 0;
 
   for (let day = 2; day <= 1825; day += 1) {
     const telemetry = tickSpatialFaunaEcosystemDay(runtime, world, day);
+    const predatorTelemetry = runtime.predatorSystem?.telemetry;
     totalKills += telemetry.predatorKills ?? 0;
     totalInsectConsumption += telemetry.insectConsumedKg ?? 0;
+    faunaMateMoves += telemetry.mateSearchMoved ?? 0;
+    faunaNatalMoves += telemetry.natalDispersed ?? 0;
+    faunaGroupSplits += telemetry.groupSplitMoved ?? 0;
+    faunaResourceMoves += telemetry.resourceMoved ?? 0;
+    faunaImmigrants += telemetry.recolonizedIndividuals ?? 0;
+    predatorMateMoves += predatorTelemetry?.mateSearchMoved ?? 0;
+    predatorNatalMoves += predatorTelemetry?.natalDispersed ?? 0;
+    predatorTerritorySettlements += predatorTelemetry?.territorySettled ?? 0;
+    predatorGroupSplits += predatorTelemetry?.groupSplitMoved ?? 0;
+    predatorImmigrants += predatorTelemetry?.immigrants ?? 0;
+    predatorBirths += predatorTelemetry?.births ?? 0;
+    predatorDeaths += predatorTelemetry?.deaths ?? 0;
     if (telemetry.meanFoodSufficiency < .9) daysWithFoodStress += 1;
     if (telemetry.meanWaterSufficiency < .9) daysWithWaterStress += 1;
 
@@ -179,6 +206,7 @@ function runFiveYearSoak(seed: string): void {
     const bucket = annual[yearIndex];
     if (bucket.days === 0 && yearIndex > 0) bucket.startPopulation = annual[yearIndex - 1].endPopulation;
     bucket.births += telemetry.births;
+    bucket.faunaImmigrants += telemetry.recolonizedIndividuals ?? 0;
     bucket.nonPredatorDeaths += telemetry.deaths;
     bucket.predatorKills += telemetry.predatorKills ?? 0;
     bucket.meanConditionSum += telemetry.meanCondition;
@@ -249,6 +277,8 @@ function runFiveYearSoak(seed: string): void {
   assert.ok(transitions.localRecolonizations > 0, `${seed}: no local prey recolonization observed over five years`);
   assert.ok(totalKills > 0, `${seed}: predators stopped functioning during soak`);
   assert.ok(totalInsectConsumption > 0, `${seed}: insect trophic link stopped functioning during soak`);
+  assert.ok(faunaNatalMoves > 0, `${seed}: fauna natal dispersal stopped functioning during soak`);
+  assert.ok(predatorMateMoves + predatorNatalMoves + predatorTerritorySettlements > 0, `${seed}: predator social/territorial movement stopped functioning during soak`);
 
   console.log(
     `[${seed}] 5y extrema flora=${(minima.floraKg / 1e6).toFixed(1)}-${(maxima.floraKg / 1e6).toFixed(1)}Mkg `
@@ -256,6 +286,11 @@ function runFiveYearSoak(seed: string): void {
       + `prey=${minima.prey}-${maxima.prey} predators=${minima.predators}-${maxima.predators} `
       + `localTransitions extirp=${transitions.localExtirpations} recolon=${transitions.localRecolonizations} `
       + `stressDays food=${daysWithFoodStress} water=${daysWithWaterStress} kills=${totalKills} insectEaten=${(totalInsectConsumption / 1000).toFixed(1)}t`,
+  );
+  console.log(
+    `[${seed}] movement fauna mate=${faunaMateMoves} natal=${faunaNatalMoves} split=${faunaGroupSplits} resource=${faunaResourceMoves} immigrants=${faunaImmigrants} `
+      + `predator mate=${predatorMateMoves} natal=${predatorNatalMoves} settle=${predatorTerritorySettlements} split=${predatorGroupSplits} immigrants=${predatorImmigrants} `
+      + `predator births=${predatorBirths} deaths=${predatorDeaths}`,
   );
   console.log(
     `[${seed}] annual trend year4->year5 mean flora=${(priorFlora / 1e6).toFixed(1)}->${(trailingFlora / 1e6).toFixed(1)}Mkg `
