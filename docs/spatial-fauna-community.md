@@ -1,6 +1,6 @@
 # Spatial Fauna Community
 
-This document defines the metric terrestrial-fauna system for the 120 km² procedural island. It now covers both the generated whole-island census and the persistent living patch-cohort runtime. The legacy subarea food web remains only as a compatibility layer for systems, especially predators, that have not yet migrated.
+This document defines the metric terrestrial-fauna system for the 120 km² procedural island. It covers both the generated whole-island census and the persistent living patch-cohort runtime. The legacy subarea food web remains only as a compatibility layer for systems, especially predators, that have not yet migrated.
 
 ## Why this layer exists
 
@@ -22,39 +22,9 @@ Counts are **aggregate cohort counts**, not one JavaScript entity per animal. Ru
 
 ## Species catalog
 
-`src/data/spatialFauna.ts` currently contains **24 terrestrial tracked species**: the seven legacy herbivore/omnivore species plus seventeen additional species.
+`src/data/spatialFauna.ts` currently contains **24 terrestrial tracked species**: the seven legacy herbivore/omnivore species plus seventeen additional species spanning large herbivores/omnivores, small mammals and rodents, ground and canopy birds, fruit bats, reptiles, amphibians and large terrestrial invertebrates.
 
-The expanded community covers large herbivores/omnivores, small mammals and rodents, ground and canopy birds, fruit bats, reptiles, amphibians and large terrestrial invertebrates.
-
-The seven legacy species are also represented in the metric catalog:
-
-- Wild Boar
-- Feral Goat
-- Agouti
-- Wild Rabbit
-- Feral Chicken
-- Feral Duck
-- Tree Rat
-
-Additional tracked species currently include:
-
-- Flying Fox
-- Small Fruit Bat
-- Fruit Dove
-- Ground Dove
-- Island Rail
-- Forest Quail
-- Forest Hornbill
-- Large Forest Rodent
-- Bamboo Rat
-- Palm Squirrel
-- Mouse Deer
-- Forest Gecko
-- Forest Skink
-- Ground Frog
-- Tree Frog
-- Coconut Crab
-- Marsh Turtle
+The seven legacy species are Wild Boar, Feral Goat, Agouti, Wild Rabbit, Feral Chicken, Feral Duck and Tree Rat. Additional tracked species include Flying Fox, Small Fruit Bat, Fruit Dove, Ground Dove, Island Rail, Forest Quail, Forest Hornbill, Large Forest Rodent, Bamboo Rat, Palm Squirrel, Mouse Deer, Forest Gecko, Forest Skink, Ground Frog, Tree Frog, Coconut Crab and Marsh Turtle.
 
 This is deliberately a **tracked fauna layer**, not a claim that the island contains only 24 terrestrial animal species. Insects, other invertebrates and microfauna can remain biomass/guild pools until an individual species needs gameplay or food-web identity.
 
@@ -108,12 +78,7 @@ The daily runtime implements juvenile → adult → old transitions, life-histor
 
 The game-state bridge processes fauna only on day boundaries and catches up missed days in order. The same world seed and elapsed day horizon reproduce the same aggregate cohort history.
 
-Before shared competition is applied, the lower-level demographic regression gives the alpha seed:
-
-- day 365: **46,109 / K 66,193**, all **23/23** present species retained;
-- day 1,800: **41,476 / K 66,193**, still **23/23** retained without predator pressure.
-
-This lower-level test remains useful because it isolates cohort demography from the community-interaction layer.
+Before shared competition is applied, the lower-level demographic regression gives the alpha seed day 365 **46,109 / K 66,193** with all **23/23** present species retained, and day 1,800 **41,476 / K 66,193** with 23/23 retained without predator pressure. This lower-level test remains useful because it isolates cohort demography from the community-interaction layer.
 
 ## Shared patch resource competition
 
