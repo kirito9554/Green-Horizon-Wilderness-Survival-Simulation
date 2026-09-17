@@ -1,6 +1,7 @@
 import type { MainWorldAreaId } from '../../data/mainWorldAreas';
 import type { EcologyTargetProfile } from '../../data/ecologyProfiles';
 import {
+  LEGACY_SPATIAL_FAUNA_SPECIES_IDS,
   SPATIAL_FAUNA_SPECIES,
   type SpatialFaunaGuild,
   type SpatialFaunaSpeciesDefinition,
@@ -9,7 +10,7 @@ import type { HabitatPatch } from './habitatPatches';
 import type { LocalSitePatchInfluence } from './localSiteProfiles';
 import { spatialUnitRandom } from './spatialRandom';
 
-export const SPATIAL_FAUNA_COMMUNITY_VERSION = 1;
+export const SPATIAL_FAUNA_COMMUNITY_VERSION = 2;
 
 export interface SpatialFaunaPatchAllocation {
   patchId: string;
@@ -45,7 +46,10 @@ export interface GeneratedSpatialFaunaCommunity {
   presentSpeciesCount: number;
   totalCarryingCapacity: number;
   totalInitialIndividuals: number;
+  /** Live terrestrial ownership remaining in the old BuildGrid/subarea runtime. */
   legacyRuntimeSpeciesCount: number;
+  /** Species whose authored life-history data is reused from the historical catalog. */
+  legacyCatalogBridgeSpeciesCount: number;
   species: readonly SpatialFaunaSpeciesPlan[];
   signature: string;
 }
@@ -260,7 +264,8 @@ export function generateSpatialFaunaCommunity(
     presentSpeciesCount: present.length,
     totalCarryingCapacity: present.reduce((sum, plan) => sum + plan.islandCarryingCapacity, 0),
     totalInitialIndividuals: present.reduce((sum, plan) => sum + plan.initialPopulation, 0),
-    legacyRuntimeSpeciesCount: SPATIAL_FAUNA_SPECIES.filter(species => species.legacyRuntime).length,
+    legacyRuntimeSpeciesCount: 0,
+    legacyCatalogBridgeSpeciesCount: LEGACY_SPATIAL_FAUNA_SPECIES_IDS.length,
     species: Object.freeze(plans),
     signature: communitySignature(plans),
   });
