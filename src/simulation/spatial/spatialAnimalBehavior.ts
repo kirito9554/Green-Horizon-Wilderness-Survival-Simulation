@@ -82,18 +82,19 @@ function socialGroupTarget(mode: SpatialAnimalOrganizationMode, guild: SpatialFa
 }
 
 function faunaSplitRatio(mode: SpatialAnimalOrganizationMode): number {
-  // A patch cohort is often an aggregate of several real groups. Group splitting therefore
-  // represents exceptional social concentration, not a daily response to ordinary density.
+  // A patch cohort is often an aggregate of several real groups. Only genuinely social
+  // organizations use the group-split channel; solitary/aggregate/pair populations expand
+  // through natal dispersal, mate search and resource/territory settlement instead.
   switch (mode) {
-    case 'herd': return 1.8;
-    case 'flock': return 2.4;
-    case 'colony': return 2.8;
-    case 'loose_group': return 2.0;
-    case 'breeding_pair': return 2.5;
-    case 'family_group': return 2.0;
-    case 'loose_aggregation': return 2.6;
-    case 'solitary_territory': return 4.0;
-    case 'aggregate_local': return 6.0;
+    case 'herd': return 2.2;
+    case 'flock': return 2.8;
+    case 'colony': return 3.2;
+    case 'loose_group': return 2.5;
+    case 'family_group': return 2.4;
+    case 'loose_aggregation': return 3.0;
+    case 'breeding_pair': return 100;
+    case 'solitary_territory': return 100;
+    case 'aggregate_local': return 100;
   }
 }
 
@@ -120,10 +121,9 @@ export function getFaunaBehaviorProfile(species: SpatialFaunaSpeciesDefinition):
 export function getPredatorBehaviorProfile(species: SpatialPredatorSpeciesDefinition): SpatialAnimalBehaviorProfile {
   const organization = species.socialMode;
   const target = organization === 'breeding_pair' ? 3 : organization === 'family_group' ? 5 : organization === 'loose_aggregation' ? 6 : 2;
-  const splitRatio = organization === 'breeding_pair' ? 2.4
-    : organization === 'family_group' ? 2.1
-      : organization === 'loose_aggregation' ? 2.5
-        : 3.0;
+  const splitRatio = organization === 'family_group' ? 2.5
+    : organization === 'loose_aggregation' ? 3.0
+      : 100;
   return {
     organization,
     matingRangeKm: species.matingRangeKm,
