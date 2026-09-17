@@ -1,0 +1,36 @@
+name: Five-year Terrestrial Trophic Soak
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/data/spatial*.ts'
+      - 'src/simulation/spatial/**'
+      - 'src/types/spatial*.ts'
+      - 'scripts/spatial-trophic-multiyear-soak.ts'
+      - 'package.json'
+      - '.github/workflows/trophic-soak.yml'
+  workflow_dispatch:
+
+jobs:
+  trophic-soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Five-year terrestrial trophic soak
+        run: npm run test:spatial-trophic-soak
