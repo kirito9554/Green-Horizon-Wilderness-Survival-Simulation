@@ -3,7 +3,7 @@ import type { WildFoodResource } from '../../types/ecologySimulation';
 import { SPATIAL_FAUNA_FOOD_RESOURCE_ORDER, type SpatialFaunaRuntimeState, type SpatialFaunaSeason, type SpatialFaunaPatchCohortState } from '../../types/spatialFaunaSimulation';
 import type { SpatialFloraRuntimeState, SpatialInsectRuntimeState } from '../../types/spatialEcologySimulation';
 import { applySpatialFloraConsumption, getSpatialFloraProductionByPatch } from './spatialFloraRuntime';
-import { consumeSpatialInsectBiomass, getSpatialInsectBiomassByPatch, getSpatialPollinationByPatch } from './spatialInsectRuntime';
+import { consumeSpatialInsectBiomass, getSpatialInsectAccessibleBiomassByPatch, getSpatialPollinationByPatch } from './spatialInsectRuntime';
 import {
   ensureSpatialFaunaResourcePools,
   getSpatialFaunaResourceModel,
@@ -47,7 +47,7 @@ export function tickSpatialTrophicResources(
   const model = getSpatialFaunaResourceModel(world);
   const pollination = getSpatialPollinationByPatch(insects);
   const floraProduction = getSpatialFloraProductionByPatch(flora, world, season, pollination);
-  const insectBiomass = getSpatialInsectBiomassByPatch(insects);
+  const insectAccessible = getSpatialInsectAccessibleBiomassByPatch(insects);
   let foodRecoveredKg = 0, waterRecoveredUnits = 0;
 
   for (const patch of world.habitatPatches) {
@@ -65,8 +65,6 @@ export function tickSpatialTrophicResources(
       const capacity = profile.foodCapacityKg[resource];
       const demandFloor = profile.baselineFoodDemandAtKPerDay[resource] * 1.22;
       const livingProduction = (dynamicByResource[resource] ?? 0) * plantSeason(resource, season);
-      // Catalog is tracked flora, not every cryptogam/seedling. A small landscape background remains,
-      // but census-K support is never conjured above the living production floor.
       const background = profile.neutralFoodProductionKgPerDay[resource] * .035;
       const recoveryRate = Math.max(demandFloor, livingProduction + background);
       const fill = capacity > 0 ? clamp01(stock[index] / capacity) : 0;
@@ -74,9 +72,9 @@ export function tickSpatialTrophicResources(
       stock[index] = round3(stock[index] + recovery);
       foodRecoveredKg += recovery;
     }
-    // Insects are no longer an anonymous regenerating food bucket: stock is the live insect community.
-    stock[FOOD_INDEX.insects] = round3(Math.min(profile.foodCapacityKg.insects, insectBiomass[patch.id] ?? 0));
-    // Carrion is event-created and decays; no baseline carrion production is invented.
+    // Only exposed live insect biomass is edible. Egg/larval/refugial reserve stays
+    // inside the insect community and can rebuild visible biomass after depletion.
+    stock[FOOD_INDEX.insects] = round3(Math.min(profile.foodCapacityKg.insects, insectAccessible[patch.id] ?? 0));
     const carrionLoss = stock[FOOD_INDEX.carrion] * (season === 'dry' ? .035 : season === 'wet' ? .055 : .07);
     stock[FOOD_INDEX.carrion] = round3(Math.max(0, stock[FOOD_INDEX.carrion] - carrionLoss));
     const waterIndex = world.hydrology.byPatchId[patch.id]?.waterIndex ?? 0;
@@ -115,14 +113,21 @@ export function tickSpatialTrophicResources(
     for (const r of SPATIAL_FAUNA_FOOD_RESOURCE_ORDER) {
       const index = FOOD_INDEX[r];
       const needed = demand.food[r];
+      if (r === 'insects') {
+        const requested = Math.min(stock[index], needed);
+        const actual = requested > 0 ? consumeSpatialInsectBiomass(insects, patchId, requested) : 0;
+        sat[r] = needed > 1e-9 ? clamp01(actual / needed) : 1;
+        insectConsumedKg += actual;
+        foodConsumedKg += actual;
+        stock[index] = round3(getSpatialInsectAccessibleBiomassByPatch(insects)[patchId] ?? 0);
+        continue;
+      }
       const consumed = Math.min(stock[index], needed);
       sat[r] = needed > 1e-9 ? clamp01(consumed / needed) : 1;
       stock[index] = round3(stock[index] - consumed);
       foodConsumedKg += consumed;
-      if (r === 'insects' && consumed > 0) insectConsumedKg += consumeSpatialInsectBiomass(insects, patchId, consumed);
-      else if (r !== 'carrion' && consumed > 0) applySpatialFloraConsumption(flora, patchId, r as 'fruit'|'seeds'|'browse'|'ground_vegetation'|'roots_tubers'|'aquatic_plants', consumed);
+      if (r !== 'carrion' && consumed > 0) applySpatialFloraConsumption(flora, patchId, r as 'fruit'|'seeds'|'browse'|'ground_vegetation'|'roots_tubers'|'aquatic_plants', consumed);
     }
-    if (demand.food.insects > 0) stock[FOOD_INDEX.insects] = round3(getSpatialInsectBiomassByPatch(insects)[patchId] ?? 0);
     const consumedWater = Math.min(stock[FRESH_WATER], demand.water);
     stock[FRESH_WATER] = round3(stock[FRESH_WATER] - consumedWater);
     waterConsumedUnits += consumedWater;
