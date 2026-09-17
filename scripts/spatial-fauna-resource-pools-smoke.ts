@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { SPATIAL_FAUNA_SPECIES_BY_ID } from '../src/data/spatialFauna';
 import { SPATIAL_FAUNA_FOOD_RESOURCE_ORDER } from '../src/types/spatialFaunaSimulation';
 import {
   createSpatialFaunaRuntimeState,
@@ -157,6 +158,7 @@ function assertMaterialScarcityResponse(seed: string): void {
   const world = generateSpatialWorld(seed);
   const runtime = createSpatialFaunaRuntimeState(seed, 1, world);
   ensureSpatialFaunaResourcePools(runtime, world, 'dry');
+  const model = getSpatialFaunaResourceModel(world);
 
   let chosen:
     | { patchId: string; speciesId: string; cohort: [number, number, number, number, number]; k: number }
@@ -175,9 +177,36 @@ function assertMaterialScarcityResponse(seed: string): void {
   }
   assert.ok(chosen, `${seed}: need a populated patch to test material scarcity`);
 
+  const species = SPATIAL_FAUNA_SPECIES_BY_ID[chosen!.speciesId];
+  const profile = model.byPatchId[chosen!.patchId];
+  assert.ok(species && profile, `${seed}: scarcity test needs species and patch resource profile`);
+  const dietEntries = SPATIAL_FAUNA_FOOD_RESOURCE_ORDER
+    .map(resource => ({ resource, share: Math.max(0, species!.diet[resource] ?? 0) }))
+    .filter(entry => entry.share > 0);
+  const dietTotal = dietEntries.reduce((sum, entry) => sum + entry.share, 0);
+  assert.ok(dietTotal > 0, `${seed}: scarcity test species needs a food diet`);
+
+  // Empty the standing crop, then size the artificial population against the
+  // patch's own daily productivity. Dry-season food multipliers never exceed
+  // 1.08, so 1.1 is a conservative upper bound. Requiring 4x that recovered
+  // supply proves the material stock/recovery path can still become limiting
+  // even though ordinary pools are intentionally large for a 120 km² island.
+  let adultsNeededForFood = 0;
+  for (const entry of dietEntries) {
+    const normalizedShare = entry.share / dietTotal;
+    const upperDailySupply = profile!.neutralFoodProductionKgPerDay[entry.resource] * 1.1;
+    adultsNeededForFood = Math.max(
+      adultsNeededForFood,
+      upperDailySupply * 4 / Math.max(1e-9, species!.dailyFoodKgPerAdult * normalizedShare),
+    );
+  }
+  const adultsNeededForWater = profile!.neutralFreshWaterRechargeUnitsPerDay * 1.5 * 4
+    / Math.max(1e-9, species!.dailyWaterNeed);
+  const artificialAdults = Math.ceil(Math.max(chosen!.k * 20, adultsNeededForFood, adultsNeededForWater));
+
   const stock = runtime.resourceStocksByPatch![chosen!.patchId];
   for (let i = 0; i < stock.length; i += 1) stock[i] = 0;
-  chosen!.cohort[1] += chosen!.k * 20;
+  chosen!.cohort[1] += artificialAdults;
   const conditionBefore = chosen!.cohort[3];
   const summary = tickSpatialFaunaResourcePools(runtime, world, 'dry');
   assert.ok(summary.resourceLimitedPopulation > 0, `${seed}: depleted overloaded patch should create resource-limited fauna`);
@@ -185,7 +214,7 @@ function assertMaterialScarcityResponse(seed: string): void {
   assert.ok(chosen!.cohort[3] < conditionBefore, `${seed}: material shortage must reduce cohort condition before demography`);
 
   console.log(
-    `[${seed}] scarcity ${chosen!.speciesId} @ ${chosen!.patchId}: `
+    `[${seed}] scarcity ${chosen!.speciesId} @ ${chosen!.patchId}: artificialAdults=${artificialAdults} `
       + `foodSuff=${summary.meanFoodSufficiency.toFixed(3)} waterSuff=${summary.meanWaterSufficiency.toFixed(3)} `
       + `limitedPop=${summary.resourceLimitedPopulation}`,
   );
