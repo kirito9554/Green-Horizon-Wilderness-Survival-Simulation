@@ -76,8 +76,10 @@ function attachEcosystemTelemetry(runtime: SpatialFaunaRuntimeState, telemetry: 
   telemetry.meanWaterPoolFill = resources.meanWaterPoolFill;
   telemetry.resourceLimitedCohortCount = resources.resourceLimitedCohortCount;
   telemetry.resourceLimitedPopulation = resources.resourceLimitedPopulation;
-  telemetry.meanFoodSufficiency = clamp01(telemetry.meanFoodSufficiency * resources.meanFoodSufficiency);
-  telemetry.meanWaterSufficiency = clamp01(telemetry.meanWaterSufficiency * resources.meanWaterSufficiency);
+  // Conserved material stocks are the authoritative food/water signal. Do not
+  // multiply them by the older density/habitat proxy a second time.
+  telemetry.meanFoodSufficiency = resources.meanFoodSufficiency;
+  telemetry.meanWaterSufficiency = resources.meanWaterSufficiency;
   telemetry.meanRefugeSufficiency = clamp01(telemetry.meanRefugeSufficiency * competition.meanRefugeFactor);
   telemetry.floraBiomassKg = runtime.floraSystem?.telemetry.totalBiomassKg ?? 0;
   telemetry.insectBiomassKg = runtime.insectSystem?.telemetry.totalBiomassKg ?? 0;
@@ -112,7 +114,7 @@ export function tickSpatialFaunaEcosystemDay(runtime: SpatialFaunaRuntimeState, 
   const resources = tickSpatialTrophicResources(runtime, runtime.floraSystem!, runtime.insectSystem!, world, season);
   refreshLivingProducerTelemetry(runtime, world, season);
   const competition = applySpatialFaunaCompetitionPressure(runtime, world, { resourcePoolsOwnFoodWater: true });
-  const telemetry = tickSpatialFaunaDay(runtime, world, day);
+  const telemetry = tickSpatialFaunaDay(runtime, world, day, resources.sufficiencyByPatch);
   tickSpatialPredatorsDay(runtime.predatorSystem!, runtime, world, day, season);
   attachEcosystemTelemetry(runtime, telemetry, competition, resources);
   return telemetry;
