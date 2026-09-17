@@ -11,6 +11,7 @@ import '../types/agricultureSimulation';
 import '../types/ecologySimulation';
 import '../types/aquaticEcology';
 import '../types/hydrologySimulation';
+import '../types/spatialFaunaSimulation';
 import { INITIAL_SURVIVORS } from '../data/survivors';
 import { getDefaultResourcePools } from './resourcePools';
 import { advanceTime } from './timeSystem';
@@ -36,6 +37,7 @@ import { tickWildPredators } from './ecologyPredatorSystem';
 import { createWorldHydrologyState, tickWorldHydrology } from './hydrologySystem';
 import { tickSurfaceWaterHydrology } from './hydrologySurfaceWaterSystem';
 import { tickWaterManagement } from './waterManagementSystem';
+import { tickSpatialFaunaRuntime } from './spatial/spatialFaunaRuntime';
 import {
   finalizeEnvironmentalWaterManagementScale,
   prepareEnvironmentalWaterManagementScale,
@@ -102,6 +104,7 @@ export * from './waterManagementSystem';
 export * from './environmentalScaleSystem';
 export * from './terrestrialEcologyScaleSystem';
 export * from './livingHydrologyBridge';
+export * from './spatial/spatialFaunaRuntime';
 
 const campGroundStorageId = 'storage_ground_AREA_CAMP_CLEARING';
 const rockyShoreGroundStorageId = 'storage_ground_AREA_FISHING_LAGOON';
@@ -237,6 +240,12 @@ export function tickSimulation(state: GameState, deltaRealSeconds: number): Game
   tickCraftingAndResearch(next, deltaGameSeconds);
 
   tickAgriculture(next, deltaGameMinutes, deltaGameSeconds);
+
+  // The metric 120 km² fauna runtime is independent from the compatibility
+  // BuildGrid food web below. It advances sparse patch cohorts only on day
+  // boundaries, so the expanded census can live spatially without multiplying
+  // the obsolete sample-grid food demand inside the legacy ecology system.
+  tickSpatialFaunaRuntime(next, deltaGameMinutes);
 
   // BuildGrid/subarea geometry is a local physical sample. Terrestrial ecology
   // temporarily sees a bounded effective landscape area so flora, prey and
