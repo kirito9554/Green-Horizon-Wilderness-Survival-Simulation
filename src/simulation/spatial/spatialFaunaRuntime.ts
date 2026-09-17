@@ -420,16 +420,21 @@ export function tickSpatialFaunaDay(runtime: SpatialFaunaRuntimeState, world: Ge
         reason = 'group_split'; rangeKm = profile.dispersalRangeKm;
       }
 
-      const currentScore = movementScore(definition, allocation, patch, world.localSiteInfluenceByPatchId[patchId], season, population);
       if (!reason) {
         const crowdingPressure = Math.max(0, densityAfterMortality - .78);
         const stressPressure = Math.max(0, .72 - cohort[CONDITION]);
-        const exploratory = chooseFaunaDestination(definition, patchId, speciesState, allocationByPatch, pendingIncomingByPatch, world, season, profile.foragingRangeKm, 'resource');
-        const gain = exploratory ? exploratory.score - currentScore : 0;
-        if (exploratory && (gain > .025 || crowdingPressure >= .12 || stressPressure >= .08)) {
-          const rate = clamp(movementBaseRate(definition.guild) + crowdingPressure * .075 + stressPressure * .06 + Math.max(0, gain) * .035, 0, .12);
-          moveCount = deterministicRound(runtime.worldSeed, `${day}|${definition.id}|${patchId}|resource-move`, population * rate);
-          if (moveCount > 0) { reason = 'resource'; rangeKm = profile.foragingRangeKm; }
+        const scoutingProbability = clamp(movementBaseRate(definition.guild) * .35 + crowdingPressure * .12 + stressPressure * .1, 0, .16);
+        const shouldScout = crowdingPressure >= .12 || stressPressure >= .08
+          || spatialUnitRandom(runtime.worldSeed, `${day}|${definition.id}|${patchId}|resource-scout`) < scoutingProbability;
+        if (shouldScout) {
+          const currentScore = movementScore(definition, allocation, patch, world.localSiteInfluenceByPatchId[patchId], season, population);
+          const exploratory = chooseFaunaDestination(definition, patchId, speciesState, allocationByPatch, pendingIncomingByPatch, world, season, profile.foragingRangeKm, 'resource');
+          const gain = exploratory ? exploratory.score - currentScore : 0;
+          if (exploratory && (gain > .025 || crowdingPressure >= .12 || stressPressure >= .08)) {
+            const rate = clamp(movementBaseRate(definition.guild) + crowdingPressure * .075 + stressPressure * .06 + Math.max(0, gain) * .035, 0, .12);
+            moveCount = deterministicRound(runtime.worldSeed, `${day}|${definition.id}|${patchId}|resource-move`, population * rate);
+            if (moveCount > 0) { reason = 'resource'; rangeKm = profile.foragingRangeKm; }
+          }
         }
       }
       if (!reason || moveCount <= 0) continue;
