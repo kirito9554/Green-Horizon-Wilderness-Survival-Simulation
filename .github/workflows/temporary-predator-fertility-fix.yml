@@ -1,0 +1,71 @@
+name: One-shot Predator Fertility Fix
+
+on:
+  push:
+    branches:
+      - feature/spatial-world-foundation
+    paths:
+      - '.github/workflows/temporary-predator-fertility-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/spatial-world-foundation
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Patch predator density and mate search semantics
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/simulation/spatial/spatialPredatorRuntime.ts')
+          text = path.read_text()
+
+          old_density = """      const densityFactor = densityFertilityFactor(localPressure.population / localPressure.capacity);"""
+          new_density = """      // A mating unit is not crowding. Solitary/pair predators must be able to overlap\n      // briefly to reproduce without that same pair immediately triggering near-max density\n      // suppression. Only additional animals beyond the two-adult reproductive unit apply\n      // local density pressure; prey depletion and body condition still provide resource feedback.\n      const crowdingPopulation = Math.max(0, localPressure.population - 2);\n      const densityFactor = densityFertilityFactor(crowdingPopulation / localPressure.capacity);"""
+          if text.count(old_density) != 1:
+              raise SystemExit(f'expected one density target, got {text.count(old_density)}')
+          text = text.replace(old_density, new_density)
+
+          old_mate = """          const destination = chooseSettlementPatch(predator, patchId, speciesState.cohortsByPatch, fauna, world, profile.matingRangeKm, breederSnapshotByPatch);"""
+          new_mate = """          // Mate search is a dispersal action: an isolated adult may move farther than its\n          // instantaneous mating radius, while candidate scoring still requires another\n          // breeder to be reachable from the destination within predator.matingRangeKm.\n          const destination = chooseSettlementPatch(predator, patchId, speciesState.cohortsByPatch, fauna, world, profile.dispersalRangeKm, breederSnapshotByPatch);"""
+          if text.count(old_mate) != 1:
+              raise SystemExit(f'expected one mate-search target, got {text.count(old_mate)}')
+          text = text.replace(old_mate, new_mate)
+
+          path.write_text(text)
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Full spatial trophic regression
+        run: npm run test:spatial-trophic
+
+      - name: Commit verified fix
+        shell: bash
+        run: |
+          git config user.name "kirito9554"
+          git config user.email "127989635+kirito9554@users.noreply.github.com"
+          git add src/simulation/spatial/spatialPredatorRuntime.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "Fix predator mating-unit density feedback"
+          git push origin HEAD:feature/spatial-world-foundation
