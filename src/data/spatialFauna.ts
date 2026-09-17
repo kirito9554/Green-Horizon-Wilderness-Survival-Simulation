@@ -43,8 +43,8 @@ export interface SpatialFaunaSpeciesDefinition {
   maxAgeDays: number;
   offspringPerAdultFemalePerYear: number;
   disturbanceTolerance: number;
-  /** True while the old subarea fauna runtime still owns this species' live tick. */
-  legacyRuntime: boolean;
+  /** Data-lineage marker only: authored life-history values were imported from the historical fauna catalog. */
+  legacyCatalogSource: boolean;
 }
 
 interface SpatialMetricOverrides {
@@ -81,12 +81,12 @@ function fromLegacy(id: string, overrides: SpatialMetricOverrides): SpatialFauna
     maxAgeDays: source.maxAgeDays,
     offspringPerAdultFemalePerYear: source.offspringPerAdultFemalePerYear,
     disturbanceTolerance: source.disturbanceTolerance,
-    legacyRuntime: true,
+    legacyCatalogSource: true,
   });
 }
 
-function species(definition: Omit<SpatialFaunaSpeciesDefinition, 'legacyRuntime'>): SpatialFaunaSpeciesDefinition {
-  return Object.freeze({ ...definition, legacyRuntime: false });
+function species(definition: Omit<SpatialFaunaSpeciesDefinition, 'legacyCatalogSource'>): SpatialFaunaSpeciesDefinition {
+  return Object.freeze({ ...definition, legacyCatalogSource: false });
 }
 
 const LEGACY_SPATIAL_FAUNA: readonly SpatialFaunaSpeciesDefinition[] = Object.freeze([
