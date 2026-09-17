@@ -89,7 +89,10 @@ export interface SpatialFaunaDailyTelemetry {
 }
 
 export interface SpatialFaunaRuntimeState {
+  /** Cohort/runtime serialization version. */
   version: number;
+  /** Whole food-web interaction version. Old saves without/currently below this are deterministically regenerated. */
+  interactionVersion?: number;
   worldSeed: string;
   communitySignature: string;
   lastProcessedDay: number;
