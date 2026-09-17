@@ -42,6 +42,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/simulation/spatial/spatialPredatorRuntime.ts scripts/spatial-predator-founder-smoke.ts .github/workflows/typecheck.yml
+          git add src/simulation/spatial/spatialPredatorRuntime.ts scripts/spatial-predator-founder-smoke.ts
           git commit -m "Seed viable predator founder units"
           git push origin HEAD:feature/spatial-world-foundation-founder-work
