@@ -528,7 +528,12 @@ export function tickSpatialPredatorsDay(
       const localBreeders = estimateReachableBreeders(world, patchId, profile.matingRangeKm, breederSnapshotByPatch);
       const mateFactor = mateAvailabilityFactor(localBreeders);
       const localPressure = localPredatorPressure(predator, speciesState.cohortsByPatch, patchId, world);
-      const densityFactor = densityFertilityFactor(localPressure.population / localPressure.capacity);
+      // A mating unit is not crowding. Solitary/pair predators must be able to overlap
+      // briefly to reproduce without that same pair immediately triggering near-max density
+      // suppression. Only additional animals beyond the two-adult reproductive unit apply
+      // local density pressure; prey depletion and body condition still provide resource feedback.
+      const crowdingPopulation = Math.max(0, localPressure.population - 2);
+      const densityFactor = densityFertilityFactor(crowdingPopulation / localPressure.capacity);
       const conditionFactor = conditionFertilityFactor(cohort[CONDITION]);
       if (cohort[ADULTS] > 0 && mateFactor > 0) {
         const expected = cohort[ADULTS] * .5 * predator.offspringPerAdultFemalePerYear / 365
@@ -568,7 +573,10 @@ export function tickSpatialPredatorsDay(
         const searchProbability = profile.mateSearchRatePerDay * (1 - mateFactor);
         const searches = spatialUnitRandom(world.worldSeed, `predator-mate-search|${predator.id}|${patchId}|${day}`) < searchProbability;
         if (searches) {
-          const destination = chooseSettlementPatch(predator, patchId, speciesState.cohortsByPatch, fauna, world, profile.matingRangeKm, breederSnapshotByPatch);
+          // Mate search is a dispersal action: an isolated adult may move farther than its
+          // instantaneous mating radius, while candidate scoring still requires another
+          // breeder to be reachable from the destination within predator.matingRangeKm.
+          const destination = chooseSettlementPatch(predator, patchId, speciesState.cohortsByPatch, fauna, world, profile.dispersalRangeKm, breederSnapshotByPatch);
           if (destination && cohort[ADULTS] + cohort[OLD] > 0) {
             const transfer = extractPredatorTransfer(cohort, 1, true);
             if (cohortPopulation(transfer) > 0) move = { from: patchId, to: destination, cohort: transfer, reason: 'mate_search' };
