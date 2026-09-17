@@ -23,13 +23,14 @@ import { createSpatialPredatorRuntimeState, tickSpatialPredatorsDay } from './sp
 import { tickSpatialTrophicResources } from './spatialTrophicResourceRuntime';
 import { generateSpatialWorld, getSpatialWorldSeed, type GeneratedSpatialWorld } from './worldGeneration';
 
-export const SPATIAL_FAUNA_INTERACTION_VERSION = 3;
+export const SPATIAL_FAUNA_INTERACTION_VERSION = 4;
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
 
 function ensureSpatialTrophicLayers(runtime: SpatialFaunaRuntimeState, world: GeneratedSpatialWorld, day: number): void {
   runtime.floraSystem ??= createSpatialFloraRuntimeState(world, day);
   runtime.insectSystem ??= createSpatialInsectRuntimeState(world, runtime.floraSystem, day);
   runtime.predatorSystem ??= createSpatialPredatorRuntimeState(world, day);
+  runtime.interactionVersion = SPATIAL_FAUNA_INTERACTION_VERSION;
 }
 
 function refreshLivingProducerTelemetry(
@@ -92,6 +93,7 @@ function attachEcosystemTelemetry(runtime: SpatialFaunaRuntimeState, telemetry: 
 
 export function createSpatialFaunaEcosystemState(worldSeed: string, initialDay: number, world: GeneratedSpatialWorld): SpatialFaunaRuntimeState {
   const runtime = createSpatialFaunaRuntimeState(worldSeed, initialDay, world);
+  runtime.interactionVersion = SPATIAL_FAUNA_INTERACTION_VERSION;
   runtime.floraSystem = createSpatialFloraRuntimeState(world, initialDay);
   runtime.insectSystem = createSpatialInsectRuntimeState(world, runtime.floraSystem, initialDay);
   runtime.predatorSystem = createSpatialPredatorRuntimeState(world, initialDay);
@@ -126,7 +128,11 @@ export function tickSpatialFaunaRuntime(state: GameState, _deltaGameMinutes: num
     return;
   }
   const world = generateSpatialWorld(worldSeed);
-  if (state.spatialFaunaSystem.version !== SPATIAL_FAUNA_RUNTIME_VERSION || state.spatialFaunaSystem.communitySignature !== world.faunaCommunity.signature) {
+  if (
+    state.spatialFaunaSystem.version !== SPATIAL_FAUNA_RUNTIME_VERSION
+    || state.spatialFaunaSystem.communitySignature !== world.faunaCommunity.signature
+    || state.spatialFaunaSystem.interactionVersion !== SPATIAL_FAUNA_INTERACTION_VERSION
+  ) {
     state.spatialFaunaSystem = createSpatialFaunaEcosystemState(worldSeed, day, world);
     return;
   }
