@@ -18,7 +18,7 @@ import {
 } from './spatialFaunaResourcePools';
 import type { GeneratedSpatialWorld } from './worldGeneration';
 
-const JUVENILES = 0, ADULTS = 1, OLD = 2, CONDITION = 3, STRESS_DAYS = 4, FRESH_WATER = 8;
+const JUVENILES = 0, ADULTS = 1, OLD = 2, FRESH_WATER = 8;
 const FOOD_INDEX: Readonly<Record<WildFoodResource, number>> = Object.freeze({ fruit: 0, seeds: 1, browse: 2, ground_vegetation: 3, roots_tubers: 4, insects: 5, aquatic_plants: 6, carrion: 7 });
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 const round3 = (v: number): number => Math.max(0, Math.round(v * 1000) / 1000);
@@ -154,8 +154,6 @@ export function tickSpatialTrophicResources(
       for (const r of SPATIAL_FAUNA_FOOD_RESOURCE_ORDER) food += normalized[r] * sat[r];
       food = clamp01(food);
       const water = waterSat.get(patchId) ?? 1;
-      const effective = clamp01(food*.68 + water*.32);
-      if (effective < .999) { cohort[CONDITION] = clamp01(cohort[CONDITION] * (.86 + effective*.14)); if (food < .78 || water < .72) cohort[STRESS_DAYS] += 1; }
       const perSpecies = new Map(sufficiencyByPatch.get(patchId) ?? []);
       perSpecies.set(def.id, { food, water }); sufficiencyByPatch.set(patchId, perSpecies);
       affectedPopulation += pop; foodWeighted += food*pop; waterWeighted += water*pop;
