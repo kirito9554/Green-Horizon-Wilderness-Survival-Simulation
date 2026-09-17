@@ -7,10 +7,12 @@ import { createSpatialFaunaEcosystemState, tickSpatialFaunaEcosystemDay } from '
 import { getSpatialFaunaRuntimePopulation } from '../src/simulation/spatial/spatialFaunaRuntime';
 import { createSpatialFloraRuntimeState } from '../src/simulation/spatial/spatialFloraRuntime';
 import { consumeSpatialInsectBiomass, createSpatialInsectRuntimeState, tickSpatialInsectsDay } from '../src/simulation/spatial/spatialInsectRuntime';
+import { tickSpatialTrophicResources } from '../src/simulation/spatial/spatialTrophicResourceRuntime';
 import { generateSpatialWorld } from '../src/simulation/spatial/worldGeneration';
 
 const REQUIRED_FLORA_STRATA = ['emergent','canopy','subcanopy','understory_tree','shrub','herb','groundcover','fern','vine','epiphyte','reed_sedge','mangrove','aquatic'] as const;
 const REQUIRED_INSECT_GUILDS = ['pollinator','folivore','frugivore','seed_feeder','wood_borer','detritivore','dung_feeder','carrion_feeder','fungivore','predator','blood_feeder','aquatic_larva'] as const;
+const PLANT_RESOURCE_INDEXES = [0, 1, 2, 3, 4, 6] as const;
 
 function catalogCoverage(): void {
   assert.ok(SPATIAL_FLORA_SPECIES.length >= 40, `expected >=40 spatial flora taxa/guilds, got ${SPATIAL_FLORA_SPECIES.length}`);
@@ -56,6 +58,27 @@ function insectReserveRecovery(seed: string): void {
   const eaten = consumeSpatialInsectBiomass(insects, target!.patchId, 1e12);
   assert.ok(eaten > 0, `${seed}: live insects should be consumable by fauna`);
   assert.ok(target!.state[0] > 0 && target!.state[0] < beforePredation, `${seed}: predation must deplete live biomass but preserve hidden/refugial reserve`);
+}
+
+function floraOwnsPlantRenewal(seed: string): void {
+  const world = generateSpatialWorld(seed);
+  const healthy = createSpatialFaunaEcosystemState(seed, 1, world);
+  const bare = structuredClone(healthy);
+  assert.ok(healthy.floraSystem && healthy.insectSystem && bare.floraSystem && bare.insectSystem, `${seed}: trophic layers required`);
+
+  for (const runtime of [healthy, bare]) {
+    for (const stock of Object.values(runtime.resourceStocksByPatch ?? {})) {
+      for (const index of PLANT_RESOURCE_INDEXES) stock[index] = 0;
+    }
+  }
+  for (const species of bare.floraSystem!.species) {
+    for (const state of Object.values(species.patches)) state[0] = 0;
+  }
+
+  const healthySummary = tickSpatialTrophicResources(healthy, healthy.floraSystem!, healthy.insectSystem!, world, 'wet');
+  const bareSummary = tickSpatialTrophicResources(bare, bare.floraSystem!, bare.insectSystem!, world, 'wet');
+  assert.ok(healthySummary.foodRecoveredKg > bareSummary.foodRecoveredKg * 1.05, `${seed}: living flora must materially raise plant-food renewal (${healthySummary.foodRecoveredKg.toFixed(1)} vs ${bareSummary.foodRecoveredKg.toFixed(1)}kg)`);
+  assert.ok(bareSummary.foodRecoveredKg > 0, `${seed}: small untracked background flora should remain represented`);
 }
 
 function runWorld(seed: string, days = 90) {
@@ -112,6 +135,7 @@ function deterministicShortRun(seed: string): void {
 
 catalogCoverage();
 insectReserveRecovery('spatial-trophic-insect-reserve');
+floraOwnsPlantRenewal('spatial-trophic-flora-ownership');
 runWorld('spatial-trophic-alpha', 90);
 runWorld('spatial-trophic-beta', 60);
 deterministicShortRun('spatial-trophic-determinism');
