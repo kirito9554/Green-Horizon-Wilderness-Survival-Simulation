@@ -23,7 +23,7 @@ import {
   type SpatialAnimalMovementReason,
 } from './spatialAnimalBehavior';
 
-export const SPATIAL_PREDATOR_RUNTIME_VERSION = 4;
+export const SPATIAL_PREDATOR_RUNTIME_VERSION = 5;
 const JUVENILES = 0;
 const ADULTS = 1;
 const OLD = 2;
@@ -318,8 +318,10 @@ function chooseSettlementPatch(
     if (entry.patchId === sourcePatchId) continue;
     let score = settlementScore(predator, entry.patchId, sourcePatchId, speciesCohorts, fauna, world, rangeKm);
     if (otherBreeders) {
-      const reachable = estimateReachableBreeders(world, entry.patchId, predator.matingRangeKm, otherBreeders);
-      score += mateAvailabilityFactor(reachable) * .32;
+      const reachableOthers = estimateReachableBreeders(world, entry.patchId, predator.matingRangeKm, otherBreeders);
+      // The dispersing breeder itself is implicit at the candidate destination. One reachable
+      // other breeder is therefore enough to make a true pair; an isolated mover remains at 1.
+      score += mateAvailabilityFactor(reachableOthers + 1) * .32;
     }
     if (score > bestScore) { bestScore = score; bestPatchId = entry.patchId; }
   }
@@ -433,19 +435,26 @@ export function tickSpatialPredatorsDay(
       if (!cohort) continue;
       let population = cohortPopulation(cohort);
       if (population <= 0) continue;
-      const dailyNeed = metabolicPredatorHeads(cohort) * predator.dailyFoodKgPerAdult;
+      const metabolicHeads = metabolicPredatorHeads(cohort);
+      const dailyNeed = metabolicHeads * predator.dailyFoodKgPerAdult;
       const reserveCapacity = clampPredatorReserve(cohort, predator);
-      const coveredFromReserve = Math.min(dailyNeed, cohort[RESERVE]);
-      cohort[RESERVE] = Math.max(0, cohort[RESERVE] - coveredFromReserve);
-      let shortfall = Math.max(0, dailyNeed - coveredFromReserve);
-      const targetReserve = reserveCapacity * .6;
-      const huntDemand = shortfall + Math.max(0, targetReserve - cohort[RESERVE]);
+      const reserveBefore = cohort[RESERVE];
       const candidates = preyCandidates(predator, patchId, fauna, world);
       let huntIndex = 0;
-      const huntLimit = huntDemand > .01
-        ? Math.max(1, Math.min(24, Math.ceil(huntDemand / Math.max(.08, predator.dailyFoodKgPerAdult * 2.5))))
-        : 0;
-      while ((shortfall > .01 || cohort[RESERVE] < targetReserve * .98) && huntIndex < huntLimit && candidates.length) {
+      let huntedEdibleKg = 0;
+      let lastKillPatchId: string | undefined;
+      // maxKillsPerAdultPerDay is an expected successful-kill cadence. Convert it to
+      // encounter attempts through baseline hunt success, then let local density/refuge
+      // modify the realized kill count. Fractional cadence is deterministic by seed/day.
+      const expectedAttempts = metabolicHeads * predator.maxKillsPerAdultPerDay / Math.max(.12, predator.huntSuccessBase);
+      const huntLimit = Math.min(24, deterministicRound(
+        world.worldSeed,
+        `predator-hunt-opportunities|${predator.id}|${patchId}|${day}`,
+        expectedAttempts,
+      ));
+      // P2 semantics: predators attempt to meet this tick's demand. Existing reserve is
+      // not a refill target; it only bridges unsuccessful/intermittent feeding days.
+      while (huntedEdibleKg < dailyNeed * 1.05 && huntIndex < huntLimit && candidates.length) {
         const totalScore = candidates.reduce((sum, entry) => sum + entry.score, 0);
         let roll = spatialUnitRandom(world.worldSeed, `predator-target|${predator.id}|${patchId}|${day}|${huntIndex}`) * totalScore;
         let candidate = candidates[0];
@@ -461,14 +470,11 @@ export function tickSpatialPredatorsDay(
           const removed = removeOnePrey(candidate, predator, spatialUnitRandom(world.worldSeed, `predator-stage|${predator.id}|${candidate.speciesId}|${candidate.patchId}|${day}|${huntIndex}`));
           if (removed.killed) {
             const edible = removed.biomassKg * .62;
-            const currentCoverage = Math.min(edible, shortfall);
-            shortfall = Math.max(0, shortfall - currentCoverage);
-            const reserveRoom = Math.max(0, reserveCapacity - cohort[RESERVE]);
-            const banked = Math.min(Math.max(0, edible - currentCoverage), reserveRoom);
-            cohort[RESERVE] += banked;
-            const retained = currentCoverage + banked;
-            const carrion = Math.max(0, removed.biomassKg - retained);
-            carrionAddedKg += addCarrion(fauna, candidate.patchId, carrion);
+            huntedEdibleKg += edible;
+            lastKillPatchId = candidate.patchId;
+            // The non-edible fraction becomes carrion immediately. Any edible overflow
+            // beyond metabolic demand + reserve capacity is conserved below as carrion.
+            carrionAddedKg += addCarrion(fauna, candidate.patchId, removed.biomassKg - edible);
             preyKilled += 1;
             preyBiomassKilledKg += removed.biomassKg;
           }
@@ -476,7 +482,15 @@ export function tickSpatialPredatorsDay(
         huntIndex += 1;
       }
 
-      const foodRatio = dailyNeed > 0 ? clamp01((dailyNeed - shortfall) / dailyNeed) : 1;
+      const availableEnergyKg = reserveBefore + huntedEdibleKg;
+      const coveredEnergyKg = Math.min(dailyNeed, availableEnergyKg);
+      const shortfall = Math.max(0, dailyNeed - coveredEnergyKg);
+      const reserveAfterDemand = Math.min(reserveCapacity, Math.max(0, availableEnergyKg - coveredEnergyKg));
+      const edibleOverflowKg = Math.max(0, availableEnergyKg - coveredEnergyKg - reserveAfterDemand);
+      cohort[RESERVE] = reserveAfterDemand;
+      if (edibleOverflowKg > 0 && lastKillPatchId) carrionAddedKg += addCarrion(fauna, lastKillPatchId, edibleOverflowKg);
+
+      const foodRatio = dailyNeed > 0 ? clamp01(coveredEnergyKg / dailyNeed) : 1;
       cohort[CONDITION] = clamp01(cohort[CONDITION] + (foodRatio - .72) * .045);
       if (shortfall > dailyNeed * .45) {
         const hungerRate = .0008 + (1 - foodRatio) * .004;
