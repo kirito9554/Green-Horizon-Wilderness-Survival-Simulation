@@ -23,6 +23,7 @@
     "test:spatial-fauna-runtime": "tsx scripts/spatial-fauna-runtime-smoke.ts",
     "test:spatial-fauna-competition": "tsx scripts/spatial-fauna-competition-smoke.ts",
     "test:spatial-fauna-resources": "tsx scripts/spatial-fauna-resource-pools-smoke.ts",
+    "test:spatial-trophic": "tsx scripts/spatial-trophic-ecosystem-smoke.ts",
     "test:ecology": "tsx scripts/ecology-simulation-smoke.ts",
     "test:ecology-fauna": "tsx scripts/ecology-fauna-smoke.ts",
     "test:ecology-predators": "tsx scripts/ecology-predator-smoke.ts",
