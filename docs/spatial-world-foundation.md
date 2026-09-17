@@ -36,7 +36,9 @@ Main Island
         -> Local Site instances (seeded position and properties)
           -> Gameplay / ecology / resource semantics
           -> Dynamic local resource state
-      -> Metric fauna community census
+      -> Metric fauna carrying-capacity map
+        -> Persistent living patch cohorts
+        -> Shared food / water / refuge competition
       -> Future trails / crossings / encounter spaces
 ```
 
@@ -110,12 +112,7 @@ Every repeatable local resource has:
 
 The reserve floor is **not harvestable emergency stock**. Harvest can reach the floor but cannot cross it. Continuing to extract at the floor returns no free resource; instead it raises depletion pressure and damages condition.
 
-Critical depletion strongly penalizes:
-
-- harvest yield;
-- average material/food quality;
-- labor efficiency;
-- recovery speed.
+Critical depletion strongly penalizes harvest yield, average material/food quality, labor efficiency and recovery speed.
 
 This means a small primitive community cannot permanently erase a natural resource, but it can make a local source economically useless and ecologically degraded for a long time.
 
@@ -134,24 +131,32 @@ All six families therefore have a non-zero restock path, but their timescales an
 
 The resource state is not yet wired into legacy gathering UI/actions. That migration is intentionally separate so this PR cannot silently rebalance the existing game loop.
 
-## Metric spatial fauna community
+## Metric spatial fauna ecosystem
 
-`src/data/spatialFauna.ts` and `src/simulation/spatial/spatialFaunaCommunity.ts` add the first whole-island fauna census based on the metric patch world.
+`src/data/spatialFauna.ts` and `src/simulation/spatial/spatialFaunaCommunity.ts` define the whole-island fauna census based on the metric patch world.
 
-The tracked terrestrial catalog now contains **24 species**: all seven legacy herbivore/omnivore species plus seventeen additional mammals, birds, bats, reptiles, amphibians and large invertebrates. Each species has a prime-habitat `densityPerKm2`, region affinity, habitat target profile, minimum patch suitability and starting occupancy range.
+The tracked terrestrial catalog contains **24 species**: all seven legacy herbivore/omnivore species plus seventeen additional mammals, birds, bats, reptiles, amphibians and large invertebrates. Each species has a prime-habitat `densityPerKm2`, region affinity, habitat target profile, minimum patch suitability and starting occupancy range.
 
-Carrying capacity is derived from actual patch area and generated habitat quality rather than the legacy sample-grid `maxInitialPopulation` caps. Local Site ecology signals also contribute to patch suitability, so breeding/refuge/feeding/water features influence the spatial census without hardcoding site names.
+Carrying capacity is derived from actual patch area and generated habitat quality rather than legacy sample-grid population caps. Local Site ecology signals contribute to patch suitability, so breeding/refuge/feeding/water features influence the spatial census without hardcoding site names.
 
-Counts remain aggregate cohort counts rather than one runtime object per animal. A campaign can therefore support tens of thousands of tracked individuals without materializing every animal.
-
-The current deterministic CI census produces:
+The deterministic census produces:
 
 - `spatial-fauna-alpha`: **23/24 species, 49,347 initial individuals, K 66,193**;
 - `spatial-fauna-beta`: **23/24 species, 46,438 initial individuals, K 65,472**.
 
-These counts exclude aquatic populations, predators and untracked background insects/microfauna. See `docs/spatial-fauna-community.md` for the full design and compatibility boundary.
+Counts remain aggregate cohorts rather than runtime objects per animal.
 
-The old seven-species `ecologyFaunaSystem` still owns live feeding/reproduction/movement until that runtime is migrated coherently to patch-scale food and water. The new census is deliberately not injected into the old food-web loop, because doing only the population increase would multiply demand while retaining sample-grid resource assumptions.
+`src/simulation/spatial/spatialFaunaRuntime.ts` now materializes that census into persistent patch cohorts with juvenile/adult/old stages, condition, stress, breeding, natural mortality, seasonal resource response and adjacency dispersal. Alpha begins with about **4,699 occupied patch cohorts** while the serialized fauna state remains around **282 KiB**.
+
+`src/simulation/spatial/spatialFaunaCompetition.ts` adds shared patch pressure so co-located species no longer receive private copies of food, water and refuge. Food pressure uses diet overlap and metabolic food demand, water uses shared metabolic demand, and refuge uses ecological guild overlap. Census K is the coexistence baseline: ordinary communities below that load are not penalized a second time, while local over-crowding or niche skew creates pressure above 1.
+
+`src/simulation/spatial/spatialFaunaEcosystemRuntime.ts` applies the shared interaction before every demographic day. Condition, breeding, mortality and stress-driven movement therefore respond to local competition without materializing individual animals.
+
+The current one-year regression retains all 23 present species in both deterministic worlds. Alpha finishes at **46,109 / K 66,193** and beta at **45,241 / K 65,472**. Population-weighted mean competition remains below baseline across the normal world, while an intentional Wild Boar/Agouti overload raises focal food pressure from **0.863** to **1.996** and lowers its food factor to **0.477**.
+
+These counts exclude aquatic populations, predators and untracked background insects/microfauna. See `docs/spatial-fauna-community.md` for the detailed compatibility and resource-model boundaries.
+
+The metric fauna ecosystem is now the living world-scale terrestrial population model. The old seven-species fauna/predator food web still runs only as a compatibility layer for systems that have not migrated and must not be added to metric island totals.
 
 ## Travel foundation
 
@@ -159,9 +164,9 @@ The old seven-species `ecologyFaunaSystem` still owns live feeding/reproduction/
 
 ## Ecology integration plan
 
-Fauna and predator populations should now migrate from macro-region/subarea compatibility buckets toward patch-aware cohorts. The spatial layer is intended to support local density, habitat-specific carrying capacity, home-range overlap, spatial predator competition, terrain/site refugia, breeding/nesting/wallow/feeding-site effects, water-linked movement, extraction-driven degradation and local extirpation/recolonization.
+The prey side now has metric census, persistent patch cohorts and shared local competition. The next ecology migration should replace K-inferred shared capacity with persistent patch food/water/productivity stocks where real resource families exist, then connect player extraction and fauna demand to those same stocks.
 
-The metric census is the population baseline for that migration; it does not yet replace legacy live fauna/predator balance.
+Predators should migrate only after that prey/resource layer is stable. Their future hunt loop should operate on spatial search/home-range overlap and actual encounter candidates rather than an omniscient macro-region prey menu. Regional movement, local refugia, local extirpation/recolonization and predator competition can then emerge from the same patch topology.
 
 ## Reproducibility contract
 
@@ -171,6 +176,8 @@ Procedural generation must obey:
 2. **different seed = materially different local terrain/site topology, vocabulary and fauna spatial distribution while preserving the macro map**;
 3. **a natural local site may spawn only if its archetype is enabled for that world and its patch satisfies local requirements**;
 4. **repeatable local resources may be locally devastated but may never cross the ecological reserve floor**;
-5. **fauna patch and region allocations must exactly conserve island carrying capacity and headcount**.
+5. **fauna patch and region allocations must exactly conserve island carrying capacity and starting headcount**;
+6. **same seed + same day horizon reproduces the same living aggregate fauna state**;
+7. **shared fauna competition must respond to local overload without applying an island-wide penalty to a normal below-K community**.
 
-The spatial and fauna smoke tests verify those rules plus complete local-site profile coverage, valid item references, critical depletion/hysteresis, recovery-family behavior, exact 120 km² area conservation, polygon containment, drainage direction, patch-fauna suitability and cross-region route connectivity.
+The spatial and fauna smoke tests verify those rules plus complete Local Site profile coverage, valid item references, resource depletion/recovery behavior, exact 120 km² area conservation, polygon containment, drainage direction, patch-fauna suitability, cohort demography, adjacency dispersal, shared niche pressure and cross-region route connectivity.
