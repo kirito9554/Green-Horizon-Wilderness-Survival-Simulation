@@ -20,8 +20,20 @@ import type { SpatialFaunaPatchAllocation } from './spatialFaunaCommunity';
 import { spatialUnitRandom } from './spatialRandom';
 import { generateSpatialWorld, getSpatialWorldSeed, type GeneratedSpatialWorld } from './worldGeneration';
 
-export const SPATIAL_FAUNA_RUNTIME_VERSION = 1;
+export const SPATIAL_FAUNA_RUNTIME_VERSION = 2;
 export const SPATIAL_FAUNA_HISTORY_DAYS = 30;
+
+const JUVENILES = 0;
+const ADULTS = 1;
+const OLD = 2;
+const CONDITION = 3;
+const STRESS_DAYS = 4;
+
+const STAGE_INDEXES = [
+  [JUVENILES, 'juveniles'],
+  [ADULTS, 'adults'],
+  [OLD, 'old'],
+] as const;
 
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
@@ -34,12 +46,13 @@ export function getSpatialFaunaSeason(day: number): SpatialFaunaSeason {
 }
 
 export function getSpatialFaunaCohortPopulation(cohort: SpatialFaunaPatchCohortState): number {
-  return cohort.stages.juveniles + cohort.stages.adults + cohort.stages.old;
+  return cohort[JUVENILES] + cohort[ADULTS] + cohort[OLD];
 }
 
 export function getSpatialFaunaRuntimePopulation(runtime: SpatialFaunaRuntimeState): number {
   return runtime.species.reduce(
-    (sum, species) => sum + species.cohorts.reduce((cohortSum, cohort) => cohortSum + getSpatialFaunaCohortPopulation(cohort), 0),
+    (sum, species) => sum + Object.values(species.cohortsByPatch)
+      .reduce((cohortSum, cohort) => cohortSum + getSpatialFaunaCohortPopulation(cohort), 0),
     0,
   );
 }
@@ -67,16 +80,16 @@ function allocateIntegerByWeights(total: number, weights: readonly number[]): nu
   return result;
 }
 
-function initialStageCounts(
+function initialCohortState(
   population: number,
   species: SpatialFaunaSpeciesDefinition,
-): SpatialFaunaStageCounts {
-  if (population <= 0) return { juveniles: 0, adults: 0, old: 0 };
+  condition: number,
+): SpatialFaunaPatchCohortState {
   const juvenileShare = clamp(.1 + species.offspringPerAdultFemalePerYear * .018, .1, .34);
   const oldShare = clamp(.18 - species.offspringPerAdultFemalePerYear * .007, .06, .18);
   const adultShare = Math.max(.45, 1 - juvenileShare - oldShare);
   const [juveniles, adults, old] = allocateIntegerByWeights(population, [juvenileShare, adultShare, oldShare]);
-  return { juveniles, adults, old };
+  return [juveniles, adults, old, clamp01(condition), 0];
 }
 
 interface PatchResourceScores {
@@ -160,8 +173,8 @@ function dailyResourceState(
   return { food, water, refuge, breeding };
 }
 
-function effectiveBreeders(stages: SpatialFaunaStageCounts): number {
-  return stages.adults + stages.old * .32;
+function effectiveBreeders(cohort: SpatialFaunaPatchCohortState): number {
+  return cohort[ADULTS] + cohort[OLD] * .32;
 }
 
 function dailyMortalityRates(
@@ -187,14 +200,15 @@ function removeDeaths(
   runtimeSeed: string,
   day: number,
   speciesId: string,
+  patchId: string,
   cohort: SpatialFaunaPatchCohortState,
   rates: SpatialFaunaStageCounts,
 ): number {
   let deaths = 0;
-  for (const stage of ['juveniles', 'adults', 'old'] as const) {
-    const count = cohort.stages[stage];
-    const dead = Math.min(count, deterministicRound(runtimeSeed, `${day}|${speciesId}|${cohort.patchId}|death|${stage}`, count * rates[stage]));
-    cohort.stages[stage] -= dead;
+  for (const [index, stage] of STAGE_INDEXES) {
+    const count = cohort[index];
+    const dead = Math.min(count, deterministicRound(runtimeSeed, `${day}|${speciesId}|${patchId}|death|${stage}`, count * rates[stage]));
+    cohort[index] -= dead;
     deaths += dead;
   }
   return deaths;
@@ -204,48 +218,49 @@ function transitionStages(
   runtimeSeed: string,
   day: number,
   species: SpatialFaunaSpeciesDefinition,
+  patchId: string,
   cohort: SpatialFaunaPatchCohortState,
 ): { matured: number; aged: number } {
   const matured = Math.min(
-    cohort.stages.juveniles,
-    deterministicRound(runtimeSeed, `${day}|${species.id}|${cohort.patchId}|mature`, cohort.stages.juveniles / Math.max(30, species.maturityDays)),
+    cohort[JUVENILES],
+    deterministicRound(runtimeSeed, `${day}|${species.id}|${patchId}|mature`, cohort[JUVENILES] / Math.max(30, species.maturityDays)),
   );
-  cohort.stages.juveniles -= matured;
-  cohort.stages.adults += matured;
+  cohort[JUVENILES] -= matured;
+  cohort[ADULTS] += matured;
 
   const oldStartDays = species.maxAgeDays * .78;
   const adultDurationDays = Math.max(180, oldStartDays - species.maturityDays);
   const aged = Math.min(
-    cohort.stages.adults,
-    deterministicRound(runtimeSeed, `${day}|${species.id}|${cohort.patchId}|old`, cohort.stages.adults / adultDurationDays),
+    cohort[ADULTS],
+    deterministicRound(runtimeSeed, `${day}|${species.id}|${patchId}|old`, cohort[ADULTS] / adultDurationDays),
   );
-  cohort.stages.adults -= aged;
-  cohort.stages.old += aged;
+  cohort[ADULTS] -= aged;
+  cohort[OLD] += aged;
   return { matured, aged };
 }
 
-function stageSliceForMovement(stages: SpatialFaunaStageCounts, totalToMove: number): SpatialFaunaStageCounts {
-  const population = stages.juveniles + stages.adults + stages.old;
+function stageSliceForMovement(cohort: SpatialFaunaPatchCohortState, totalToMove: number): SpatialFaunaStageCounts {
+  const population = getSpatialFaunaCohortPopulation(cohort);
   if (population <= 0 || totalToMove <= 0) return { juveniles: 0, adults: 0, old: 0 };
   const move = Math.min(population, totalToMove);
-  const [juveniles, adults, old] = allocateIntegerByWeights(move, [stages.juveniles, stages.adults, stages.old]);
+  const [juveniles, adults, old] = allocateIntegerByWeights(move, [cohort[JUVENILES], cohort[ADULTS], cohort[OLD]]);
   return {
-    juveniles: Math.min(stages.juveniles, juveniles),
-    adults: Math.min(stages.adults, adults),
-    old: Math.min(stages.old, old),
+    juveniles: Math.min(cohort[JUVENILES], juveniles),
+    adults: Math.min(cohort[ADULTS], adults),
+    old: Math.min(cohort[OLD], old),
   };
 }
 
-function addStages(target: SpatialFaunaStageCounts, addition: SpatialFaunaStageCounts): void {
-  target.juveniles += addition.juveniles;
-  target.adults += addition.adults;
-  target.old += addition.old;
+function addStages(cohort: SpatialFaunaPatchCohortState, addition: SpatialFaunaStageCounts): void {
+  cohort[JUVENILES] += addition.juveniles;
+  cohort[ADULTS] += addition.adults;
+  cohort[OLD] += addition.old;
 }
 
-function subtractStages(target: SpatialFaunaStageCounts, removal: SpatialFaunaStageCounts): void {
-  target.juveniles -= removal.juveniles;
-  target.adults -= removal.adults;
-  target.old -= removal.old;
+function subtractStages(cohort: SpatialFaunaPatchCohortState, removal: SpatialFaunaStageCounts): void {
+  cohort[JUVENILES] -= removal.juveniles;
+  cohort[ADULTS] -= removal.adults;
+  cohort[OLD] -= removal.old;
 }
 
 function movementBaseRate(guild: SpatialFaunaGuild): number {
@@ -276,12 +291,6 @@ function breedingNeighborReachMeters(guild: SpatialFaunaGuild): number {
   }
 }
 
-/**
- * A 600 m habitat patch is a bookkeeping cell, not a hard mating boundary.
- * Estimate mate availability across directly adjacent habitat when the species'
- * movement guild can plausibly cross that distance. The snapshot makes the
- * estimate simultaneous for the day rather than dependent on cohort iteration order.
- */
 function estimateLocalBreederPool(
   species: SpatialFaunaSpeciesDefinition,
   patchId: string,
@@ -302,7 +311,6 @@ function estimateLocalBreederPool(
   return localBreeders;
 }
 
-/** Probability that an aggregate breeder pool contains both sexes under a 1:1 sex ratio. */
 function mateAvailabilityFactor(localBreeders: number): number {
   if (localBreeders <= 1) return 0;
   return clamp01(1 - Math.pow(2, 1 - localBreeders));
@@ -323,58 +331,64 @@ function movementScore(
   return allocation.suitability * .42 + resources.food * .2 + resources.water * .14 + resources.refuge * .14 + freeCapacity * .1;
 }
 
-function resetDailyCohortTelemetry(cohort: SpatialFaunaPatchCohortState): void {
-  cohort.lastBirths = 0;
-  cohort.lastDeaths = 0;
-  cohort.lastImmigrants = 0;
-  cohort.lastEmigrants = 0;
+function createEmptyCohort(condition = .78): SpatialFaunaPatchCohortState {
+  return [0, 0, 0, clamp01(condition), 0];
 }
 
-function createEmptyCohort(patchId: string): SpatialFaunaPatchCohortState {
-  return {
-    patchId,
-    stages: { juveniles: 0, adults: 0, old: 0 },
-    condition: .78,
-    stressDays: 0,
-    foodSufficiency: .75,
-    waterSufficiency: .75,
-    refugeSufficiency: .75,
-    breedingReadiness: 0,
-    lastBirths: 0,
-    lastDeaths: 0,
-    lastImmigrants: 0,
-    lastEmigrants: 0,
-  };
+function metabolicAdults(cohort: SpatialFaunaPatchCohortState): number {
+  return cohort[ADULTS] + cohort[OLD] * .9 + cohort[JUVENILES] * .55;
 }
 
 function buildInitialTelemetry(
   day: number,
   season: SpatialFaunaSeason,
   speciesStates: readonly SpatialFaunaSpeciesRuntimeState[],
+  world: GeneratedSpatialWorld,
 ): SpatialFaunaDailyTelemetry {
+  const planBySpecies = new Map(world.faunaCommunity.species.map(plan => [plan.speciesId, plan] as const));
   let totalPopulation = 0;
   let occupied = 0;
   let conditionWeighted = 0;
   let foodWeighted = 0;
   let waterWeighted = 0;
   let refugeWeighted = 0;
-  for (const species of speciesStates) {
-    for (const cohort of species.cohorts) {
+  let foodDemandKg = 0;
+  let waterDemandUnits = 0;
+
+  for (const speciesState of speciesStates) {
+    const definition = SPATIAL_FAUNA_SPECIES_BY_ID[speciesState.speciesId];
+    const plan = planBySpecies.get(speciesState.speciesId);
+    if (!definition || !plan) continue;
+    const allocationByPatch = new Map(plan.patchAllocations.map(allocation => [allocation.patchId, allocation] as const));
+    for (const [patchId, cohort] of Object.entries(speciesState.cohortsByPatch)) {
       const population = getSpatialFaunaCohortPopulation(cohort);
-      if (population <= 0) continue;
+      const patch = world.routeGraph.patchesById[patchId];
+      const allocation = allocationByPatch.get(patchId);
+      if (population <= 0 || !patch || !allocation) continue;
+      const resources = dailyResourceState(
+        definition,
+        patch,
+        world.localSiteInfluenceByPatchId[patchId],
+        season,
+        population,
+        allocation.carryingCapacity,
+      );
       occupied += 1;
       totalPopulation += population;
-      conditionWeighted += cohort.condition * population;
-      foodWeighted += cohort.foodSufficiency * population;
-      waterWeighted += cohort.waterSufficiency * population;
-      refugeWeighted += cohort.refugeSufficiency * population;
+      conditionWeighted += cohort[CONDITION] * population;
+      foodWeighted += resources.food * population;
+      waterWeighted += resources.water * population;
+      refugeWeighted += resources.refuge * population;
+      foodDemandKg += metabolicAdults(cohort) * definition.dailyFoodKgPerAdult;
+      waterDemandUnits += metabolicAdults(cohort) * definition.dailyWaterNeed;
     }
   }
+
   return {
     day,
     season,
     totalPopulation,
-    presentSpeciesCount: speciesStates.filter(species => species.cohorts.some(cohort => getSpatialFaunaCohortPopulation(cohort) > 0)).length,
+    presentSpeciesCount: speciesStates.filter(species => Object.keys(species.cohortsByPatch).length > 0).length,
     occupiedCohortCount: occupied,
     births: 0,
     deaths: 0,
@@ -382,8 +396,8 @@ function buildInitialTelemetry(
     agedIntoOld: 0,
     moved: 0,
     crossRegionMoved: 0,
-    foodDemandKg: 0,
-    waterDemandUnits: 0,
+    foodDemandKg,
+    waterDemandUnits,
     meanCondition: totalPopulation > 0 ? conditionWeighted / totalPopulation : 0,
     meanFoodSufficiency: totalPopulation > 0 ? foodWeighted / totalPopulation : 0,
     meanWaterSufficiency: totalPopulation > 0 ? waterWeighted / totalPopulation : 0,
@@ -403,32 +417,19 @@ export function createSpatialFaunaRuntimeState(
     if (!plan.present || plan.initialPopulation <= 0) continue;
     const definition = SPATIAL_FAUNA_SPECIES_BY_ID[plan.speciesId];
     if (!definition) continue;
-    const cohorts = plan.patchAllocations
-      .filter(allocation => allocation.initialPopulation > 0)
-      .map(allocation => {
-        const patch = world.routeGraph.patchesById[allocation.patchId];
-        const resources = patch
-          ? dailyResourceState(definition, patch, world.localSiteInfluenceByPatchId[allocation.patchId], season, allocation.initialPopulation, allocation.carryingCapacity)
-          : { food: .7, water: .7, refuge: .7, breeding: .5 };
-        return {
-          patchId: allocation.patchId,
-          stages: initialStageCounts(allocation.initialPopulation, definition),
-          condition: clamp01(.76 + allocation.suitability * .16),
-          stressDays: 0,
-          foodSufficiency: resources.food,
-          waterSufficiency: resources.water,
-          refugeSufficiency: resources.refuge,
-          breedingReadiness: 0,
-          lastBirths: 0,
-          lastDeaths: 0,
-          lastImmigrants: 0,
-          lastEmigrants: 0,
-        } satisfies SpatialFaunaPatchCohortState;
-      });
-    speciesStates.push({ speciesId: plan.speciesId, cohorts });
+    const cohortsByPatch: Record<string, SpatialFaunaPatchCohortState> = {};
+    for (const allocation of plan.patchAllocations) {
+      if (allocation.initialPopulation <= 0) continue;
+      cohortsByPatch[allocation.patchId] = initialCohortState(
+        allocation.initialPopulation,
+        definition,
+        .76 + allocation.suitability * .16,
+      );
+    }
+    speciesStates.push({ speciesId: plan.speciesId, cohortsByPatch });
   }
 
-  const telemetry = buildInitialTelemetry(initialDay, season, speciesStates);
+  const telemetry = buildInitialTelemetry(initialDay, season, speciesStates, world);
   return {
     version: SPATIAL_FAUNA_RUNTIME_VERSION,
     worldSeed,
@@ -477,10 +478,10 @@ export function tickSpatialFaunaDay(
     meanRefugeSufficiency: 0,
   };
 
-  let conditionWeighted = 0;
   let foodWeighted = 0;
   let waterWeighted = 0;
   let refugeWeighted = 0;
+  let resourceWeightPopulation = 0;
   const pendingMovements: PendingMovement[] = [];
 
   for (const speciesState of runtime.species) {
@@ -488,20 +489,17 @@ export function tickSpatialFaunaDay(
     const plan = planBySpecies.get(speciesState.speciesId);
     if (!definition || !plan?.present) continue;
     const allocationByPatch = new Map(plan.patchAllocations.map(allocation => [allocation.patchId, allocation] as const));
-    const cohortByPatch = new Map(speciesState.cohorts.map(cohort => [cohort.patchId, cohort] as const));
     const breederSnapshotByPatch = new Map(
-      speciesState.cohorts.map(cohort => [cohort.patchId, effectiveBreeders(cohort.stages)] as const),
+      Object.entries(speciesState.cohortsByPatch).map(([patchId, cohort]) => [patchId, effectiveBreeders(cohort)] as const),
     );
-    // Movement is resolved simultaneously after all cohorts choose destinations.
-    // Reserve incoming capacity as choices are queued so multiple source patches
-    // cannot all claim the same local K headroom during one day.
     const pendingIncomingByPatch = new Map<string, number>();
+    const patchIds = Object.keys(speciesState.cohortsByPatch).sort();
 
-    for (const cohort of speciesState.cohorts) {
-      resetDailyCohortTelemetry(cohort);
-      const allocation = allocationByPatch.get(cohort.patchId);
-      const patch = world.routeGraph.patchesById[cohort.patchId];
-      if (!allocation || !patch) continue;
+    for (const patchId of patchIds) {
+      const cohort = speciesState.cohortsByPatch[patchId];
+      const allocation = allocationByPatch.get(patchId);
+      const patch = world.routeGraph.patchesById[patchId];
+      if (!cohort || !allocation || !patch) continue;
 
       const startPopulation = getSpatialFaunaCohortPopulation(cohort);
       if (startPopulation <= 0) continue;
@@ -509,35 +507,30 @@ export function tickSpatialFaunaDay(
       const resources = dailyResourceState(
         definition,
         patch,
-        world.localSiteInfluenceByPatchId[cohort.patchId],
+        world.localSiteInfluenceByPatchId[patchId],
         season,
         startPopulation,
         allocation.carryingCapacity,
       );
-      cohort.foodSufficiency = resources.food;
-      cohort.waterSufficiency = resources.water;
-      cohort.refugeSufficiency = resources.refuge;
 
       const targetCondition = clamp01(resources.food * .48 + resources.water * .3 + resources.refuge * .22);
-      cohort.condition = clamp01(cohort.condition * .84 + targetCondition * .16);
-      cohort.stressDays = cohort.condition < .56
-        ? cohort.stressDays + 1
-        : Math.max(0, cohort.stressDays - 1);
+      cohort[CONDITION] = clamp01(cohort[CONDITION] * .84 + targetCondition * .16);
+      cohort[STRESS_DAYS] = cohort[CONDITION] < .56
+        ? cohort[STRESS_DAYS] + 1
+        : Math.max(0, cohort[STRESS_DAYS] - 1);
 
-      const mortality = dailyMortalityRates(definition, cohort.condition, resources.refuge, densityRatio);
-      const deaths = removeDeaths(runtime.worldSeed, day, definition.id, cohort, mortality);
-      cohort.lastDeaths = deaths;
-      telemetry.deaths += deaths;
+      const mortality = dailyMortalityRates(definition, cohort[CONDITION], resources.refuge, densityRatio);
+      telemetry.deaths += removeDeaths(runtime.worldSeed, day, definition.id, patchId, cohort, mortality);
 
-      const transitions = transitionStages(runtime.worldSeed, day, definition, cohort);
+      const transitions = transitionStages(runtime.worldSeed, day, definition, patchId, cohort);
       telemetry.matured += transitions.matured;
       telemetry.agedIntoOld += transitions.aged;
 
       const afterMortality = getSpatialFaunaCohortPopulation(cohort);
-      const breeders = effectiveBreeders(cohort.stages);
+      const breeders = effectiveBreeders(cohort);
       const localBreeders = estimateLocalBreederPool(
         definition,
-        cohort.patchId,
+        patchId,
         breeders,
         breederSnapshotByPatch,
         world,
@@ -546,46 +539,45 @@ export function tickSpatialFaunaDay(
       const densityAfterMortality = afterMortality / Math.max(1, allocation.carryingCapacity);
       const breedingReadiness = clamp01(
         resources.breeding
-        * cohort.condition
+        * cohort[CONDITION]
         * Math.max(.04, 1.2 - densityAfterMortality)
         * mateFactor,
       );
-      cohort.breedingReadiness = breedingReadiness;
       const breedingFemales = breeders * .5;
       const expectedBirths = breedingFemales * definition.offspringPerAdultFemalePerYear / 365 * breedingReadiness;
-      const births = deterministicRound(runtime.worldSeed, `${day}|${definition.id}|${cohort.patchId}|birth`, expectedBirths);
-      cohort.stages.juveniles += births;
-      cohort.lastBirths = births;
+      const births = deterministicRound(runtime.worldSeed, `${day}|${definition.id}|${patchId}|birth`, expectedBirths);
+      cohort[JUVENILES] += births;
       telemetry.births += births;
 
       const population = getSpatialFaunaCohortPopulation(cohort);
-      const juvenileEquivalent = cohort.stages.juveniles * .55;
-      const oldEquivalent = cohort.stages.old * .9;
-      const metabolicAdults = cohort.stages.adults + oldEquivalent + juvenileEquivalent;
-      telemetry.foodDemandKg += metabolicAdults * definition.dailyFoodKgPerAdult;
-      telemetry.waterDemandUnits += metabolicAdults * definition.dailyWaterNeed;
+      const metabolic = metabolicAdults(cohort);
+      telemetry.foodDemandKg += metabolic * definition.dailyFoodKgPerAdult;
+      telemetry.waterDemandUnits += metabolic * definition.dailyWaterNeed;
+      foodWeighted += resources.food * population;
+      waterWeighted += resources.water * population;
+      refugeWeighted += resources.refuge * population;
+      resourceWeightPopulation += population;
 
       if (population <= 1) continue;
       const currentScore = movementScore(
         definition,
         allocation,
         patch,
-        world.localSiteInfluenceByPatchId[cohort.patchId],
+        world.localSiteInfluenceByPatchId[patchId],
         season,
         population,
       );
       let best:
-        | { allocation: SpatialFaunaPatchAllocation; patch: HabitatPatch; score: number; edgeCost: number }
+        | { allocation: SpatialFaunaPatchAllocation; patch: HabitatPatch; score: number }
         | undefined;
-      for (const edge of world.routeGraph.edgesByPatchId[cohort.patchId] ?? []) {
+      for (const edge of world.routeGraph.edgesByPatchId[patchId] ?? []) {
         const destinationAllocation = allocationByPatch.get(edge.toPatchId);
         const destinationPatch = world.routeGraph.patchesById[edge.toPatchId];
         if (!destinationAllocation || !destinationPatch || destinationAllocation.carryingCapacity <= 0) continue;
-        const destinationPopulation = (cohortByPatch.has(edge.toPatchId)
-          ? getSpatialFaunaCohortPopulation(cohortByPatch.get(edge.toPatchId)!)
-          : 0) + (pendingIncomingByPatch.get(edge.toPatchId) ?? 0);
-        const freeCapacity = destinationAllocation.carryingCapacity - destinationPopulation;
-        if (freeCapacity <= 0) continue;
+        const destinationCohort = speciesState.cohortsByPatch[edge.toPatchId];
+        const destinationPopulation = (destinationCohort ? getSpatialFaunaCohortPopulation(destinationCohort) : 0)
+          + (pendingIncomingByPatch.get(edge.toPatchId) ?? 0);
+        if (destinationAllocation.carryingCapacity - destinationPopulation <= 0) continue;
         const routePenalty = clamp01(edge.weightedDistanceMeters / 1800) * .12;
         const score = movementScore(
           definition,
@@ -595,12 +587,12 @@ export function tickSpatialFaunaDay(
           season,
           destinationPopulation,
         ) - routePenalty;
-        if (!best || score > best.score) best = { allocation: destinationAllocation, patch: destinationPatch, score, edgeCost: edge.weightedDistanceMeters };
+        if (!best || score > best.score) best = { allocation: destinationAllocation, patch: destinationPatch, score };
       }
       if (!best) continue;
 
       const crowdingPressure = Math.max(0, densityAfterMortality - .78);
-      const stressPressure = Math.max(0, .72 - cohort.condition);
+      const stressPressure = Math.max(0, .72 - cohort[CONDITION]);
       const destinationGain = best.score - currentScore;
       if (destinationGain <= .025 && crowdingPressure < .12 && stressPressure < .08) continue;
       const dispersalRate = clamp(
@@ -611,18 +603,18 @@ export function tickSpatialFaunaDay(
         0,
         .12,
       );
-      let moveCount = deterministicRound(runtime.worldSeed, `${day}|${definition.id}|${cohort.patchId}|move`, population * dispersalRate);
-      const destinationPopulation = (cohortByPatch.has(best.patch.id)
-        ? getSpatialFaunaCohortPopulation(cohortByPatch.get(best.patch.id)!)
-        : 0) + (pendingIncomingByPatch.get(best.patch.id) ?? 0);
+      let moveCount = deterministicRound(runtime.worldSeed, `${day}|${definition.id}|${patchId}|move`, population * dispersalRate);
+      const destinationCohort = speciesState.cohortsByPatch[best.patch.id];
+      const destinationPopulation = (destinationCohort ? getSpatialFaunaCohortPopulation(destinationCohort) : 0)
+        + (pendingIncomingByPatch.get(best.patch.id) ?? 0);
       moveCount = Math.min(moveCount, Math.max(0, best.allocation.carryingCapacity - destinationPopulation));
       if (moveCount <= 0) continue;
-      const stages = stageSliceForMovement(cohort.stages, moveCount);
+      const stages = stageSliceForMovement(cohort, moveCount);
       const actualMove = stages.juveniles + stages.adults + stages.old;
       if (actualMove <= 0) continue;
       pendingMovements.push({
         speciesId: definition.id,
-        fromPatchId: cohort.patchId,
+        fromPatchId: patchId,
         toPatchId: best.patch.id,
         stages,
         count: actualMove,
@@ -632,46 +624,55 @@ export function tickSpatialFaunaDay(
     }
   }
 
+  const speciesStateById = new Map(runtime.species.map(species => [species.speciesId, species] as const));
   for (const move of pendingMovements) {
-    const speciesState = runtime.species.find(species => species.speciesId === move.speciesId);
+    const speciesState = speciesStateById.get(move.speciesId);
     if (!speciesState) continue;
-    const source = speciesState.cohorts.find(cohort => cohort.patchId === move.fromPatchId);
+    const source = speciesState.cohortsByPatch[move.fromPatchId];
     if (!source) continue;
-    let destination = speciesState.cohorts.find(cohort => cohort.patchId === move.toPatchId);
+    let destination = speciesState.cohortsByPatch[move.toPatchId];
+    const destinationPopulationBefore = destination ? getSpatialFaunaCohortPopulation(destination) : 0;
     if (!destination) {
-      destination = createEmptyCohort(move.toPatchId);
-      speciesState.cohorts.push(destination);
+      destination = createEmptyCohort(source[CONDITION]);
+      speciesState.cohortsByPatch[move.toPatchId] = destination;
     }
-    subtractStages(source.stages, move.stages);
-    addStages(destination.stages, move.stages);
-    source.lastEmigrants += move.count;
-    destination.lastImmigrants += move.count;
-    destination.condition = clamp01((destination.condition + source.condition) / 2);
+    subtractStages(source, move.stages);
+    const mixedPopulation = destinationPopulationBefore + move.count;
+    if (mixedPopulation > 0) {
+      destination[CONDITION] = destinationPopulationBefore > 0
+        ? clamp01((destination[CONDITION] * destinationPopulationBefore + source[CONDITION] * move.count) / mixedPopulation)
+        : source[CONDITION];
+      destination[STRESS_DAYS] = destinationPopulationBefore > 0
+        ? Math.max(0, Math.round((destination[STRESS_DAYS] * destinationPopulationBefore + source[STRESS_DAYS] * move.count) / mixedPopulation))
+        : source[STRESS_DAYS];
+    }
+    addStages(destination, move.stages);
     telemetry.moved += move.count;
     if (move.crossRegion) telemetry.crossRegionMoved += move.count;
   }
 
+  let conditionWeighted = 0;
   for (const speciesState of runtime.species) {
-    speciesState.cohorts = speciesState.cohorts.filter(cohort => getSpatialFaunaCohortPopulation(cohort) > 0);
-    speciesState.cohorts.sort((a, b) => a.patchId.localeCompare(b.patchId));
-    if (speciesState.cohorts.length > 0) telemetry.presentSpeciesCount += 1;
-    for (const cohort of speciesState.cohorts) {
+    for (const [patchId, cohort] of Object.entries(speciesState.cohortsByPatch)) {
       const population = getSpatialFaunaCohortPopulation(cohort);
-      if (population <= 0) continue;
+      if (population <= 0) {
+        delete speciesState.cohortsByPatch[patchId];
+        continue;
+      }
       telemetry.occupiedCohortCount += 1;
       telemetry.totalPopulation += population;
-      conditionWeighted += cohort.condition * population;
-      foodWeighted += cohort.foodSufficiency * population;
-      waterWeighted += cohort.waterSufficiency * population;
-      refugeWeighted += cohort.refugeSufficiency * population;
+      conditionWeighted += cohort[CONDITION] * population;
     }
+    if (Object.keys(speciesState.cohortsByPatch).length > 0) telemetry.presentSpeciesCount += 1;
   }
 
   if (telemetry.totalPopulation > 0) {
     telemetry.meanCondition = conditionWeighted / telemetry.totalPopulation;
-    telemetry.meanFoodSufficiency = foodWeighted / telemetry.totalPopulation;
-    telemetry.meanWaterSufficiency = waterWeighted / telemetry.totalPopulation;
-    telemetry.meanRefugeSufficiency = refugeWeighted / telemetry.totalPopulation;
+  }
+  if (resourceWeightPopulation > 0) {
+    telemetry.meanFoodSufficiency = foodWeighted / resourceWeightPopulation;
+    telemetry.meanWaterSufficiency = waterWeighted / resourceWeightPopulation;
+    telemetry.meanRefugeSufficiency = refugeWeighted / resourceWeightPopulation;
   }
 
   runtime.lastProcessedDay = day;
@@ -685,9 +686,10 @@ export function tickSpatialFaunaDay(
 }
 
 /**
- * Live bridge for GameState. The world geometry/community remains deterministic
- * from the persisted world seed, while only sparse cohort state is serialized.
- * Ecology advances once per completed in-game day rather than every render tick.
+ * Live bridge for GameState. Static metric geometry/community is regenerated
+ * from the persistent world seed only when fauna needs a daily tick. GameState
+ * stores compact patch-keyed cohorts, not derived resource/telemetry fields for
+ * every occupied patch.
  */
 export function tickSpatialFaunaRuntime(state: GameState, _deltaGameMinutes: number): void {
   const day = Math.max(1, Math.floor(state.gameTime.day));
