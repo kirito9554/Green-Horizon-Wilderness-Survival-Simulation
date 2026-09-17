@@ -10,8 +10,20 @@ import type { EcologyTargetProfile } from '../../data/ecologyProfiles';
 import type { HabitatPatch } from './habitatPatches';
 import type { GeneratedSpatialWorld } from './worldGeneration';
 import { spatialUnitRandom } from './spatialRandom';
+import {
+  conditionFertilityFactor,
+  densityFertilityFactor,
+  deterministicFounderCount,
+  distanceAccessFactor,
+  estimateReachableBreeders,
+  getBehaviorPatchesWithinRange,
+  getPredatorBehaviorProfile,
+  mateAvailabilityFactor,
+  recolonizationReadiness,
+  type SpatialAnimalMovementReason,
+} from './spatialAnimalBehavior';
 
-export const SPATIAL_PREDATOR_RUNTIME_VERSION = 2;
+export const SPATIAL_PREDATOR_RUNTIME_VERSION = 3;
 const JUVENILES = 0;
 const ADULTS = 1;
 const OLD = 2;
@@ -63,6 +75,10 @@ function cohortPopulation(cohort: SpatialPredatorPatchCohortState | SpatialFauna
   return Math.max(0, Math.round(cohort[0] + cohort[1] + cohort[2]));
 }
 
+function effectivePredatorBreeders(cohort: SpatialPredatorPatchCohortState): number {
+  return cohort[ADULTS] + cohort[OLD] * .3;
+}
+
 export function createSpatialPredatorRuntimeState(world: GeneratedSpatialWorld, day = 1): SpatialPredatorRuntimeState {
   const speciesStates = SPATIAL_PREDATOR_SPECIES.map(def => {
     const cohortsByPatch: Record<string, SpatialPredatorPatchCohortState> = {};
@@ -92,36 +108,22 @@ export function createSpatialPredatorRuntimeState(world: GeneratedSpatialWorld, 
         cohortsByPatch[bestPatch.id] = [Math.max(0, Math.floor(count * .15)), Math.max(1, Math.ceil(count * .77)), Math.floor(count * .08), .86, def.dailyFoodKgPerAdult * count * 1.5];
       }
     }
-    return { speciesId: def.id, cohortsByPatch };
+    return { speciesId: def.id, cohortsByPatch, globalAbsenceDays: 0 };
   });
   const runtime: SpatialPredatorRuntimeState = {
     version: SPATIAL_PREDATOR_RUNTIME_VERSION,
     worldSeed: world.worldSeed,
     lastProcessedDay: day,
     species: speciesStates,
-    telemetry: { day, season: 'dry', totalPopulation: 0, presentSpecies: 0, occupiedCohorts: 0, preyKilled: 0, preyBiomassKilledKg: 0, carrionAddedKg: 0, births: 0, deaths: 0, moved: 0, meanCondition: 0, unsuccessfulHunts: 0 },
+    telemetry: {
+      day, season: 'dry', totalPopulation: 0, presentSpecies: 0, occupiedCohorts: 0,
+      preyKilled: 0, preyBiomassKilledKg: 0, carrionAddedKg: 0, births: 0, deaths: 0, moved: 0,
+      mateSearchMoved: 0, natalDispersed: 0, territorySettled: 0, groupSplitMoved: 0, immigrants: 0,
+      meanCondition: 0, unsuccessfulHunts: 0,
+    },
   };
   runtime.telemetry = summarizePredators(runtime, day, 'dry');
   return runtime;
-}
-
-function patchesWithinHomeRange(startPatchId: string, homeRangeKm: number, world: GeneratedSpatialWorld): Array<{ patchId: string; distanceKm: number }> {
-  const maxMeters = homeRangeKm * 1000;
-  const best = new Map<string, number>([[startPatchId, 0]]);
-  const queue: Array<{ patchId: string; distance: number }> = [{ patchId: startPatchId, distance: 0 }];
-  while (queue.length) {
-    queue.sort((a, b) => a.distance - b.distance);
-    const current = queue.shift()!;
-    if (current.distance > (best.get(current.patchId) ?? Number.POSITIVE_INFINITY)) continue;
-    for (const edge of world.routeGraph.edgesByPatchId[current.patchId] ?? []) {
-      const distance = current.distance + edge.distanceMeters;
-      if (distance > maxMeters) continue;
-      if (distance >= (best.get(edge.toPatchId) ?? Number.POSITIVE_INFINITY)) continue;
-      best.set(edge.toPatchId, distance);
-      queue.push({ patchId: edge.toPatchId, distance });
-    }
-  }
-  return [...best.entries()].map(([patchId, distance]) => ({ patchId, distanceKm: distance / 1000 }));
 }
 
 interface PreyCandidate {
@@ -138,7 +140,7 @@ function preyCandidates(
   fauna: SpatialFaunaRuntimeState,
   world: GeneratedSpatialWorld,
 ): PreyCandidate[] {
-  const accessible = patchesWithinHomeRange(startPatchId, predator.homeRangeKm, world);
+  const accessible = getBehaviorPatchesWithinRange(world, startPatchId, predator.homeRangeKm);
   const distanceByPatch = new Map(accessible.map(entry => [entry.patchId, entry.distanceKm]));
   const result: PreyCandidate[] = [];
   for (const preyState of fauna.species) {
@@ -194,6 +196,167 @@ function addCarrion(fauna: SpatialFaunaRuntimeState, patchId: string, kg: number
   return kg;
 }
 
+function localPredatorPressure(
+  predator: SpatialPredatorSpeciesDefinition,
+  cohortsByPatch: Readonly<Record<string, SpatialPredatorPatchCohortState>>,
+  patchId: string,
+  world: GeneratedSpatialWorld,
+): { population: number; capacity: number } {
+  let population = 0;
+  let capacity = 0;
+  for (const entry of getBehaviorPatchesWithinRange(world, patchId, predator.homeRangeKm)) {
+    const patch = world.routeGraph.patchesById[entry.patchId];
+    if (!patch) continue;
+    population += cohortPopulation(cohortsByPatch[entry.patchId] ?? [0, 0, 0, 0, 0]);
+    const suitability = predatorSuitability(predator, patch, world);
+    if (suitability >= predator.minPatchSuitability * .8) {
+      capacity += patch.areaKm2 * predator.densityPerKm2 * Math.pow(suitability, 1.35);
+    }
+  }
+  return { population, capacity: Math.max(1, capacity) };
+}
+
+interface PredatorMove {
+  from: string;
+  to: string;
+  cohort: SpatialPredatorPatchCohortState;
+  reason: SpatialAnimalMovementReason;
+}
+
+function extractPredatorTransfer(
+  cohort: SpatialPredatorPatchCohortState,
+  requested: number,
+  adultFirst: boolean,
+): SpatialPredatorPatchCohortState {
+  const transfer: SpatialPredatorPatchCohortState = [0, 0, 0, cohort[CONDITION], 0];
+  let remaining = Math.min(Math.max(0, requested), cohortPopulation(cohort));
+  const order = adultFirst ? [ADULTS, OLD, JUVENILES] as const : [JUVENILES, ADULTS, OLD] as const;
+  for (const stage of order) {
+    const taken = Math.min(cohort[stage], remaining);
+    cohort[stage] -= taken;
+    transfer[stage] += taken;
+    remaining -= taken;
+  }
+  const heads = cohortPopulation(transfer);
+  if (heads > 0) {
+    const reserveShare = Math.min(cohort[RESERVE], Math.max(0, cohort[RESERVE]) * heads / Math.max(1, heads + cohortPopulation(cohort)));
+    cohort[RESERVE] -= reserveShare;
+    transfer[RESERVE] = reserveShare;
+  }
+  return transfer;
+}
+
+function settlementScore(
+  predator: SpatialPredatorSpeciesDefinition,
+  patchId: string,
+  sourcePatchId: string,
+  speciesCohorts: Readonly<Record<string, SpatialPredatorPatchCohortState>>,
+  fauna: SpatialFaunaRuntimeState,
+  world: GeneratedSpatialWorld,
+  rangeKm: number,
+): number {
+  const patch = world.routeGraph.patchesById[patchId];
+  if (!patch) return -Infinity;
+  const suitability = predatorSuitability(predator, patch, world);
+  if (suitability < predator.minPatchSuitability * .82) return -Infinity;
+  const entry = getBehaviorPatchesWithinRange(world, sourcePatchId, rangeKm).find(item => item.patchId === patchId);
+  if (!entry) return -Infinity;
+  const preyScore = preyCandidates(predator, patchId, fauna, world).reduce((sum, candidate) => sum + candidate.score, 0);
+  const prey = 1 - Math.exp(-preyScore / 45);
+  const local = localPredatorPressure(predator, speciesCohorts, patchId, world);
+  const freeTerritory = clamp01(1 - local.population / Math.max(1, local.capacity));
+  return suitability * .46 + prey * .3 + freeTerritory * .18 + distanceAccessFactor(entry.weightedDistanceKm, rangeKm) * .06;
+}
+
+function chooseSettlementPatch(
+  predator: SpatialPredatorSpeciesDefinition,
+  sourcePatchId: string,
+  speciesCohorts: Readonly<Record<string, SpatialPredatorPatchCohortState>>,
+  fauna: SpatialFaunaRuntimeState,
+  world: GeneratedSpatialWorld,
+  rangeKm: number,
+  breederSnapshot?: ReadonlyMap<string, number>,
+): string | undefined {
+  let bestPatchId: string | undefined;
+  let bestScore = -Infinity;
+  for (const entry of getBehaviorPatchesWithinRange(world, sourcePatchId, rangeKm)) {
+    if (entry.patchId === sourcePatchId) continue;
+    let score = settlementScore(predator, entry.patchId, sourcePatchId, speciesCohorts, fauna, world, rangeKm);
+    if (breederSnapshot) score += clamp01((breederSnapshot.get(entry.patchId) ?? 0) / 2) * .32;
+    if (score > bestScore) { bestScore = score; bestPatchId = entry.patchId; }
+  }
+  return bestScore > .28 ? bestPatchId : undefined;
+}
+
+function applyPredatorMove(
+  speciesCohorts: Record<string, SpatialPredatorPatchCohortState>,
+  move: PredatorMove,
+): number {
+  const moved = cohortPopulation(move.cohort);
+  if (moved <= 0) return 0;
+  const existing = speciesCohorts[move.to];
+  if (existing) {
+    const existingPop = cohortPopulation(existing);
+    existing[JUVENILES] += move.cohort[JUVENILES];
+    existing[ADULTS] += move.cohort[ADULTS];
+    existing[OLD] += move.cohort[OLD];
+    existing[RESERVE] += move.cohort[RESERVE];
+    existing[CONDITION] = (existing[CONDITION] * existingPop + move.cohort[CONDITION] * moved) / Math.max(1, existingPop + moved);
+  } else speciesCohorts[move.to] = move.cohort;
+  return moved;
+}
+
+function maybeRecolonizePredator(
+  speciesState: SpatialPredatorRuntimeState['species'][number],
+  predator: SpatialPredatorSpeciesDefinition,
+  fauna: SpatialFaunaRuntimeState,
+  world: GeneratedSpatialWorld,
+  day: number,
+): number {
+  const total = Object.values(speciesState.cohortsByPatch).reduce((sum, cohort) => sum + cohortPopulation(cohort), 0);
+  const minimumViable = Math.min(3, Math.max(2, predator.minIslandCapacity));
+  if (total >= minimumViable) {
+    speciesState.globalAbsenceDays = 0;
+    return 0;
+  }
+  speciesState.globalAbsenceDays = (speciesState.globalAbsenceDays ?? 0) + 1;
+  const profile = getPredatorBehaviorProfile(predator);
+  const readiness = recolonizationReadiness(speciesState.globalAbsenceDays, profile.recolonizationDelayDays);
+  if (readiness <= 0) return 0;
+  const opportunity = readiness >= 1
+    || spatialUnitRandom(world.worldSeed, `predator-immigration-opportunity|${predator.id}|${day}`) < readiness * .018;
+  if (!opportunity) return 0;
+
+  let best: { patchId: string; score: number } | undefined;
+  for (const patch of world.habitatPatches) {
+    const suitability = predatorSuitability(predator, patch, world);
+    if (suitability < predator.minPatchSuitability) continue;
+    const preyScore = preyCandidates(predator, patch.id, fauna, world).reduce((sum, candidate) => sum + candidate.score, 0);
+    if (preyScore <= 0) continue;
+    const edgeSignal = 1 / Math.max(2, (world.routeGraph.edgesByPatchId[patch.id]?.length ?? 0) + 1);
+    const score = suitability * .58 + (1 - Math.exp(-preyScore / 40)) * .32 + edgeSignal * .1;
+    if (!best || score > best.score) best = { patchId: patch.id, score };
+  }
+  if (!best) return 0;
+  const founders = deterministicFounderCount(
+    spatialUnitRandom(world.worldSeed, `predator-immigration-count|${predator.id}|${day}`),
+    profile.recolonizationFounderCount,
+  );
+  const needed = Math.max(1, minimumViable - total);
+  const count = Math.min(founders, needed);
+  const existing = speciesState.cohortsByPatch[best.patchId];
+  if (existing) {
+    existing[ADULTS] += count;
+    existing[CONDITION] = Math.max(existing[CONDITION], .78);
+    existing[RESERVE] += predator.dailyFoodKgPerAdult * count * 2;
+  } else {
+    speciesState.cohortsByPatch[best.patchId] = [0, count, 0, .8, predator.dailyFoodKgPerAdult * count * 2];
+  }
+  speciesState.lastImmigrationDay = day;
+  speciesState.globalAbsenceDays = 0;
+  return count;
+}
+
 export function tickSpatialPredatorsDay(
   predators: SpatialPredatorRuntimeState,
   fauna: SpatialFaunaRuntimeState,
@@ -207,13 +370,26 @@ export function tickSpatialPredatorsDay(
   let births = 0;
   let deaths = 0;
   let moved = 0;
+  let mateSearchMoved = 0;
+  let natalDispersed = 0;
+  let territorySettled = 0;
+  let groupSplitMoved = 0;
+  let immigrants = 0;
   let unsuccessfulHunts = 0;
 
   for (const speciesState of predators.species) {
     const predator = SPATIAL_PREDATOR_BY_ID[speciesState.speciesId];
     if (!predator) continue;
-    const moves: Array<{ from: string; to: string; cohort: SpatialPredatorPatchCohortState }> = [];
-    for (const [patchId, cohort] of Object.entries(speciesState.cohortsByPatch)) {
+    const profile = getPredatorBehaviorProfile(predator);
+    const breederSnapshotByPatch = new Map(
+      Object.entries(speciesState.cohortsByPatch).map(([patchId, cohort]) => [patchId, effectivePredatorBreeders(cohort)] as const),
+    );
+    const moves: PredatorMove[] = [];
+    const patchIds = Object.keys(speciesState.cohortsByPatch).sort();
+
+    for (const patchId of patchIds) {
+      const cohort = speciesState.cohortsByPatch[patchId];
+      if (!cohort) continue;
       let population = cohortPopulation(cohort);
       if (population <= 0) continue;
       const metabolicHeads = cohort[ADULTS] + cohort[OLD] * .9 + cohort[JUVENILES] * .55;
@@ -284,11 +460,16 @@ export function tickSpatialPredatorsDay(
       }
 
       population = cohortPopulation(cohort);
-      if (population > 1 && cohort[CONDITION] > .68) {
-        const expected = cohort[ADULTS] * .5 * predator.offspringPerAdultFemalePerYear / 365 * (.55 + cohort[CONDITION] * .45);
-        const whole = Math.floor(expected);
-        const extra = spatialUnitRandom(world.worldSeed, `predator-birth|${predator.id}|${patchId}|${day}`) < expected - whole ? 1 : 0;
-        const born = whole + extra;
+      if (population <= 0) continue;
+      const localBreeders = estimateReachableBreeders(world, patchId, profile.matingRangeKm, breederSnapshotByPatch);
+      const mateFactor = mateAvailabilityFactor(localBreeders);
+      const localPressure = localPredatorPressure(predator, speciesState.cohortsByPatch, patchId, world);
+      const densityFactor = densityFertilityFactor(localPressure.population / localPressure.capacity);
+      const conditionFactor = conditionFertilityFactor(cohort[CONDITION]);
+      if (cohort[ADULTS] > 0 && mateFactor > 0) {
+        const expected = cohort[ADULTS] * .5 * predator.offspringPerAdultFemalePerYear / 365
+          * mateFactor * conditionFactor * densityFactor;
+        const born = deterministicRound(world.worldSeed, `predator-birth|${predator.id}|${patchId}|${day}`, expected);
         cohort[JUVENILES] += born;
         births += born;
       }
@@ -306,38 +487,69 @@ export function tickSpatialPredatorsDay(
       cohort[ADULTS] -= aging;
       cohort[OLD] += aging;
 
-      if ((foodRatio < .62 || cohort[CONDITION] < .55) && cohortPopulation(cohort) > 0) {
-        const nearby = patchesWithinHomeRange(patchId, Math.min(predator.homeRangeKm, 1.5), world)
-          .filter(entry => entry.patchId !== patchId)
-          .map(entry => ({ ...entry, candidates: preyCandidates(predator, entry.patchId, fauna, world) }))
-          .sort((a, b) => b.candidates.reduce((s, c) => s + c.score, 0) - a.candidates.reduce((s, c) => s + c.score, 0));
-        const destination = nearby[0];
-        if (destination && destination.candidates.length) {
-          const migrants = Math.max(1, Math.floor(cohortPopulation(cohort) * .12));
-          const transfer: SpatialPredatorPatchCohortState = [0, 0, 0, cohort[CONDITION], 0];
-          let remaining = migrants;
-          for (const stage of [JUVENILES, ADULTS, OLD] as const) {
-            const taken = Math.min(cohort[stage], remaining);
-            cohort[stage] -= taken;
-            transfer[stage] += taken;
-            remaining -= taken;
-          }
-          if (cohortPopulation(transfer) > 0) { moves.push({ from: patchId, to: destination.patchId, cohort: transfer }); moved += cohortPopulation(transfer); }
+      let move: PredatorMove | undefined;
+      if (mature > 0 && cohort[ADULTS] > 0) {
+        const disperse = Math.min(cohort[ADULTS], deterministicRound(world.worldSeed, `predator-natal-dispersal|${predator.id}|${patchId}|${day}`, mature * profile.natalDispersalFraction));
+        const destination = disperse > 0
+          ? chooseSettlementPatch(predator, patchId, speciesState.cohortsByPatch, fauna, world, profile.dispersalRangeKm)
+          : undefined;
+        if (destination) {
+          const transfer = extractPredatorTransfer(cohort, disperse, true);
+          if (cohortPopulation(transfer) > 0) move = { from: patchId, to: destination, cohort: transfer, reason: 'natal_dispersal' };
         }
       }
+
+      if (!move && mateFactor < .58 && effectivePredatorBreeders(cohort) > 0) {
+        const searchProbability = profile.mateSearchRatePerDay * (1 - mateFactor);
+        const searches = spatialUnitRandom(world.worldSeed, `predator-mate-search|${predator.id}|${patchId}|${day}`) < searchProbability;
+        if (searches) {
+          const destination = chooseSettlementPatch(predator, patchId, speciesState.cohortsByPatch, fauna, world, profile.matingRangeKm, breederSnapshotByPatch);
+          if (destination && cohort[ADULTS] + cohort[OLD] > 0) {
+            const transfer = extractPredatorTransfer(cohort, 1, true);
+            if (cohortPopulation(transfer) > 0) move = { from: patchId, to: destination, cohort: transfer, reason: 'mate_search' };
+          }
+        }
+      }
+
+      const currentPopulation = cohortPopulation(cohort);
+      if (!move && currentPopulation > profile.groupTargetSize * profile.groupSplitRatio) {
+        const requested = Math.max(1, Math.floor((currentPopulation - profile.groupTargetSize) * .35));
+        const destination = chooseSettlementPatch(predator, patchId, speciesState.cohortsByPatch, fauna, world, profile.dispersalRangeKm);
+        if (destination) {
+          const transfer = extractPredatorTransfer(cohort, requested, false);
+          if (cohortPopulation(transfer) > 0) move = { from: patchId, to: destination, cohort: transfer, reason: 'group_split' };
+        }
+      }
+
+      if (!move && (foodRatio < .62 || cohort[CONDITION] < .55) && cohortPopulation(cohort) > 0) {
+        const destination = chooseSettlementPatch(predator, patchId, speciesState.cohortsByPatch, fauna, world, Math.min(profile.foragingRangeKm, 1.8));
+        if (destination) {
+          const migrants = Math.max(1, Math.floor(cohortPopulation(cohort) * .12));
+          const transfer = extractPredatorTransfer(cohort, migrants, false);
+          if (cohortPopulation(transfer) > 0) move = { from: patchId, to: destination, cohort: transfer, reason: 'resource' };
+        }
+      }
+
+      if (move) moves.push(move);
     }
+
     for (const move of moves) {
-      const existing = speciesState.cohortsByPatch[move.to];
-      if (existing) {
-        existing[JUVENILES] += move.cohort[JUVENILES]; existing[ADULTS] += move.cohort[ADULTS]; existing[OLD] += move.cohort[OLD];
-        existing[CONDITION] = (existing[CONDITION] + move.cohort[CONDITION]) / 2;
-      } else speciesState.cohortsByPatch[move.to] = move.cohort;
+      const count = applyPredatorMove(speciesState.cohortsByPatch, move);
+      moved += count;
+      if (move.reason === 'mate_search') mateSearchMoved += count;
+      else if (move.reason === 'natal_dispersal') { natalDispersed += count; territorySettled += count; }
+      else if (move.reason === 'group_split') { groupSplitMoved += count; territorySettled += count; }
+      else if (move.reason === 'territory_settlement') territorySettled += count;
     }
     for (const [patchId, cohort] of Object.entries(speciesState.cohortsByPatch)) if (cohortPopulation(cohort) <= 0) delete speciesState.cohortsByPatch[patchId];
+    immigrants += maybeRecolonizePredator(speciesState, predator, fauna, world, day);
   }
 
   predators.lastProcessedDay = day;
-  predators.telemetry = summarizePredators(predators, day, season, { preyKilled, preyBiomassKilledKg, carrionAddedKg, births, deaths, moved, unsuccessfulHunts });
+  predators.telemetry = summarizePredators(predators, day, season, {
+    preyKilled, preyBiomassKilledKg, carrionAddedKg, births, deaths, moved,
+    mateSearchMoved, natalDispersed, territorySettled, groupSplitMoved, immigrants, unsuccessfulHunts,
+  });
   return predators.telemetry;
 }
 
@@ -374,6 +586,11 @@ function summarizePredators(
     births: event.births ?? 0,
     deaths: event.deaths ?? 0,
     moved: event.moved ?? 0,
+    mateSearchMoved: event.mateSearchMoved ?? 0,
+    natalDispersed: event.natalDispersed ?? 0,
+    territorySettled: event.territorySettled ?? 0,
+    groupSplitMoved: event.groupSplitMoved ?? 0,
+    immigrants: event.immigrants ?? 0,
     meanCondition: totalPopulation > 0 ? conditionWeighted / totalPopulation : 0,
     unsuccessfulHunts: event.unsuccessfulHunts ?? 0,
   };
