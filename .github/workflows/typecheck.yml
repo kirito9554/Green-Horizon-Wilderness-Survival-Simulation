@@ -41,6 +41,9 @@ jobs:
       - name: Living spatial fauna cohort runtime smoke test
         run: npm run test:spatial-fauna-runtime
 
+      - name: Shared spatial fauna competition smoke test
+        run: npm run test:spatial-fauna-competition
+
       - name: World ecology foundation smoke test
         run: npm run test:ecology
 
