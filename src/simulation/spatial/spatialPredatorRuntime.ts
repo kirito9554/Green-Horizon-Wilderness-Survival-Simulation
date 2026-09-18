@@ -803,6 +803,86 @@ export function tickSpatialPredatorsDay(
         Math.max(0, cohort[BIO_RESERVE_ENERGY] ?? bioReserveCapacityKJ * legacyReserveFraction),
       );
 
+      let alternativeFoodMassKg = 0;
+      let alternativeFoodEnergyKJ = 0;
+      let alternativeFruitKg = 0;
+      let alternativeInsectKg = 0;
+      let alternativeCarrionKg = 0;
+
+      if (behavior.bioenergeticFeeding && behavior.alternativeDiet) {
+        const initialFeedingPlan = calculatePredatorFeedingBoutPlan({
+          speciesId: predator.id,
+          metabolicHeads,
+          fmrDemandKJ,
+          bioReserveKJ: bioReserveBeforeKJ,
+          gutEnergyKJ: shadowGutStartKJ,
+          maxKillsPerAdultPerDay: predator.maxKillsPerAdultPerDay,
+          candidates: candidates.map(candidate => ({
+            encounterScore: candidate.score,
+            expectedEdibleKg: candidate.expectedEdibleKg,
+            successProbability: candidateHuntSuccess(predator, cohort, candidate, world),
+          })),
+        });
+
+        if (initialFeedingPlan.storedUsableEnergyKJ < fmrDemandKJ) {
+          const sdaNet = Math.max(.05, 1 - predatorShadowSdaFraction(predator.id));
+          let remainingGrossEnergyKJ = initialFeedingPlan.feedingGapKJ / sdaNet;
+          const allowed = predatorAlternativeFoodResources(predator.id);
+          const opportunities: Array<{
+            patchId: string;
+            resource: typeof allowed[number];
+            availableKg: number;
+            energyDensityKJPerKg: number;
+            score: number;
+          }> = [];
+
+          for (const entry of getBehaviorPatchesWithinRange(world, patchId, predator.homeRangeKm)) {
+            const distanceFit = distanceAccessFactor(entry.weightedDistanceKm, predator.homeRangeKm);
+            for (const resource of allowed) {
+              const availableKg = getSpatialSharedFoodStockKg(fauna, entry.patchId, resource);
+              if (availableKg <= 0) continue;
+              const energyDensityKJPerKg = PREDATOR_ALTERNATIVE_FOOD_ENERGY_KJ_PER_KG[resource];
+              opportunities.push({
+                patchId: entry.patchId,
+                resource,
+                availableKg,
+                energyDensityKJPerKg,
+                score: availableKg * energyDensityKJPerKg * Math.max(.05, distanceFit),
+              });
+            }
+          }
+          opportunities.sort((a, b) => b.score - a.score || a.patchId.localeCompare(b.patchId) || a.resource.localeCompare(b.resource));
+
+          for (const opportunity of opportunities) {
+            if (remainingGrossEnergyKJ <= 1e-6) break;
+            const requestedKg = Math.min(
+              opportunity.availableKg,
+              remainingGrossEnergyKJ / Math.max(1, opportunity.energyDensityKJPerKg),
+            );
+            const consumedKg = consumeSpatialSharedFoodKg(
+              fauna,
+              opportunity.patchId,
+              opportunity.resource,
+              requestedKg,
+            );
+            if (consumedKg <= 0) continue;
+            const energyKJ = consumedKg * opportunity.energyDensityKJPerKg;
+            alternativeFoodMassKg += consumedKg;
+            alternativeFoodEnergyKJ += energyKJ;
+            remainingGrossEnergyKJ = Math.max(0, remainingGrossEnergyKJ - energyKJ);
+            if (opportunity.resource === 'fruit') alternativeFruitKg += consumedKg;
+            else if (opportunity.resource === 'insects') alternativeInsectKg += consumedKg;
+            else alternativeCarrionKg += consumedKg;
+          }
+        }
+      }
+
+      speciesEvent.alternativeFoodConsumedKg += alternativeFoodMassKg;
+      speciesEvent.alternativeFoodEnergyKJ += alternativeFoodEnergyKJ;
+      speciesEvent.alternativeFruitKg += alternativeFruitKg;
+      speciesEvent.alternativeInsectKg += alternativeInsectKg;
+      speciesEvent.alternativeCarrionKg += alternativeCarrionKg;
+
       const p8HuntPlan = behavior.bioenergeticFeeding ? undefined : calculatePredatorHuntPlan({
         metabolicHeads,
         dailyNeedKg: dailyNeed,
@@ -820,7 +900,7 @@ export function tickSpatialPredatorsDay(
         metabolicHeads,
         fmrDemandKJ,
         bioReserveKJ: bioReserveBeforeKJ,
-        gutEnergyKJ: shadowGutStartKJ,
+        gutEnergyKJ: shadowGutStartKJ + alternativeFoodEnergyKJ,
         maxKillsPerAdultPerDay: predator.maxKillsPerAdultPerDay,
         candidates: candidates.map(candidate => ({
           encounterScore: candidate.score,
@@ -944,8 +1024,8 @@ export function tickSpatialPredatorsDay(
         },
         predator.id,
         predator.adultWeightKg * Math.max(.25, metabolicHeads),
-        huntedBiomassKg,
-        huntedEdibleKg * REFERENCE_WET_PREY_ENERGY_KJ_PER_KG,
+        alternativeFoodMassKg + huntedEdibleKg,
+        alternativeFoodEnergyKJ + huntedEdibleKg * REFERENCE_WET_PREY_ENERGY_KJ_PER_KG,
       );
       cohort[SHADOW_GUT_ENERGY] = digestion.state.gutEnergyKJ;
       cohort[SHADOW_GUT_MASS] = digestion.state.gutMassKg;
@@ -955,7 +1035,7 @@ export function tickSpatialPredatorsDay(
       speciesEvent.shadowGutEndKJ += digestion.state.gutEnergyKJ;
       speciesEvent.shadowAssimilatedEnergyKJ += digestion.assimilatedEnergyKJ;
       speciesEvent.shadowDigestionCostKJ += digestion.digestionCostKJ;
-      if (shadowGutStartKJ > 0 || huntedEdibleKg > 0) {
+      if (shadowGutStartKJ > 0 || huntedEdibleKg > 0 || alternativeFoodEnergyKJ > 0) {
         speciesEvent.shadowDigestingPredatorDays += population;
       }
 
