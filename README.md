@@ -284,7 +284,7 @@ Repository hiện **chưa có project-wide LICENSE**.
 
 Điều đó có nghĩa là việc repository có thể được xem công khai **không tự động cấp quyền tái sử dụng, phân phối hoặc relicensing toàn bộ source/art asset**.
 
-Một số dependency như Lucide có license riêng của chúng. Các asset nằm trong `public/` bao gồm project-specific UI art, map art, portraits, POI imagery và generated/stylized visuals; provenance và ghi chú asset được theo dõi tại [docs/ASSET_MANIFEST.md](docs/ASSET_MANIFEST.md).
+Một số dependency như Lucide có license riêng của chúng. Các visual asset project-specific trong `public/` — bao gồm map art, POI imagery, weather cards, portraits, item/icon art và UI artwork — được tạo cho dự án bằng **ChatGPT / OpenAI image generation**. Không có stock-image pack hay third-party game-art pack nào được chủ ý đưa vào repo. Chi tiết provenance được ghi tại [docs/ASSET_MANIFEST.md](docs/ASSET_MANIFEST.md).
 
 Nếu sau này dự án được mở theo một open-source license cụ thể, source code và art assets có thể cần được cấp license riêng thay vì gom chung một license.
 
