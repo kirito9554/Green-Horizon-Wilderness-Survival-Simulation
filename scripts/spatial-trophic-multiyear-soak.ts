@@ -443,6 +443,13 @@ function runFiveYearSoak(): void {
         && species.mateAccessAfterSum <= species.mateAccessEvaluated + 1e-9,
       `samples=${species.mateAccessEvaluated} beforeSum=${species.mateAccessBeforeSum.toFixed(3)} afterSum=${species.mateAccessAfterSum.toFixed(3)}`,
     );
+    check(
+      `predator-feeding-day-accounting:${species.speciesId}`,
+      species.huntingPredatorDays >= 0
+        && species.reserveCoveredPredatorDays >= 0
+        && species.huntingPredatorDays + species.reserveCoveredPredatorDays <= species.predatorDays + energyTolerance,
+      `hunting=${species.huntingPredatorDays.toFixed(1)} reserve=${species.reserveCoveredPredatorDays.toFixed(1)} predatorDays=${species.predatorDays.toFixed(1)}`,
+    );
   }
   for (const bucket of annual) {
     const expected = bucket.startPopulation + bucket.births + bucket.faunaImmigrants - bucket.nonPredatorDeaths - bucket.predatorKills;
