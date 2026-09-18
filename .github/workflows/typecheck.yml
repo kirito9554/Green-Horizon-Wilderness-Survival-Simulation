@@ -56,6 +56,9 @@ jobs:
       - name: Predator P7 energy-accounting smoke test
         run: npm run test:spatial-predator-p7
 
+      - name: Predator P8 intermittent-feeding/hunt-plan smoke test
+        run: npm run test:spatial-predator-p8
+
       - name: Full spatial trophic ecosystem smoke test
         run: npm run test:spatial-trophic
 
