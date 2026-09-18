@@ -43,14 +43,20 @@ import {
   getPredatorEnergyWeightedTargetScore,
 } from './spatialPredatorP8';
 import {
+  PREDATOR_ALTERNATIVE_FOOD_ENERGY_KJ_PER_KG,
   REFERENCE_WET_PREY_ENERGY_KJ_PER_KG,
   advancePredatorDigestion,
   advancePredatorShadowDigestion,
   calculatePredatorBioenergeticLedger,
   calculatePredatorBioenergeticShadow,
   calculatePredatorFeedingBoutPlan,
+  predatorAlternativeFoodResources,
   predatorShadowSdaFraction,
 } from './spatialPredatorP9';
+import {
+  consumeSpatialSharedFoodKg,
+  getSpatialSharedFoodStockKg,
+} from './spatialTrophicResourceRuntime';
 
 export const SPATIAL_PREDATOR_RUNTIME_VERSION = 8;
 const JUVENILES = 0;
@@ -74,6 +80,8 @@ export interface SpatialPredatorRuntimeOptions {
   controlledRecovery?: boolean;
   /** P9.3 diagnostic flag: gut/FMR energy becomes authoritative for feeding and hunger. */
   bioenergeticFeeding?: boolean;
+  /** P9.4 diagnostic flag: generalists can forage conserved fruit/insect/carrion pools before hunting. */
+  alternativeDiet?: boolean;
 }
 
 function normalizedOptions(options?: SpatialPredatorRuntimeOptions): Required<SpatialPredatorRuntimeOptions> {
@@ -81,6 +89,7 @@ function normalizedOptions(options?: SpatialPredatorRuntimeOptions): Required<Sp
     maintainMateConnectivity: options?.maintainMateConnectivity ?? true,
     controlledRecovery: options?.controlledRecovery ?? true,
     bioenergeticFeeding: options?.bioenergeticFeeding ?? false,
+    alternativeDiet: options?.alternativeDiet ?? false,
   };
 }
 
@@ -598,6 +607,11 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     bioReserveGainKJ: 0,
     bioEnergyOverflowKJ: 0,
     feedingBoutPredatorDays: 0,
+    alternativeFoodConsumedKg: 0,
+    alternativeFoodEnergyKJ: 0,
+    alternativeFruitKg: 0,
+    alternativeInsectKg: 0,
+    alternativeCarrionKg: 0,
     hungerRiskPredatorDays: 0,
     huntingPredatorDays: 0,
     reserveCoveredPredatorDays: 0,
