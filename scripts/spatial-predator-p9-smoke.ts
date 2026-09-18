@@ -6,9 +6,11 @@ import {
   advancePredatorShadowDigestion,
   calculateFieldMetabolicRateKJPerDay,
   calculatePredatorBioenergeticLedger,
+  calculatePredatorCalibratedFmrKJPerAdultDay,
   calculatePredatorFeedingBoutPlan,
   getPredatorP95TargetScore,
   predatorAlternativeFoodResources,
+  predatorConsumedPreyFraction,
   predatorLocalDensitySwitchFactor,
   PREDATOR_ALTERNATIVE_FOOD_ENERGY_KJ_PER_KG,
   calculatePredatorBioenergeticShadow,
@@ -63,6 +65,28 @@ close(
 );
 assert.ok(day1.state.daysRemaining >= 6 && day1.state.daysRemaining <= 7, 'python meal must retain multi-day gut state after day one');
 assert.ok(day1.digestionCostKJ > 0 && day1.assimilatedEnergyKJ > 0, 'digestion must split released energy into SDA cost and assimilated energy');
+
+close(
+  calculatePredatorCalibratedFmrKJPerAdultDay('PREDATOR_RAPTOR', 4.8),
+  1323,
+  1e-9,
+  'P9.6 raptor analogue demand should match adult Ferruginous Hawk expenditure calibration',
+);
+assert.equal(
+  predatorConsumedPreyFraction('PREDATOR_PYTHON', 3.6, 24),
+  1,
+  'P9.6 python must ingest whole prey rather than inherit the 0.62 carcass fraction',
+);
+assert.ok(
+  predatorConsumedPreyFraction('PREDATOR_RAPTOR', .34, 4.8)
+    > predatorConsumedPreyFraction('PREDATOR_RAPTOR', 3.6, 4.8),
+  'P9.6 raptor should consume a larger fraction of small prey than large prey',
+);
+assert.ok(
+  predatorConsumedPreyFraction('PREDATOR_ESTUARINE_CROCODILE', 1.25, 180)
+    > predatorConsumedPreyFraction('PREDATOR_ESTUARINE_CROCODILE', 68, 180),
+  'P9.6 crocodilian should swallow small prey more completely than large prey',
+);
 
 close(
   predatorLocalDensitySwitchFactor(100, 100),
