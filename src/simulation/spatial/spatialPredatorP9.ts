@@ -19,6 +19,7 @@ export interface PredatorBioenergeticShadow {
 
 export interface PredatorShadowDigestionState {
   gutEnergyKJ: number;
+  gutMassKg: number;
   daysRemaining: number;
   daysSinceMeal: number;
   lastMealEnergyKJ: number;
@@ -27,6 +28,7 @@ export interface PredatorShadowDigestionState {
 export interface PredatorShadowDigestionStep {
   state: PredatorShadowDigestionState;
   grossReleasedKJ: number;
+  grossReleasedMassKg: number;
   digestionCostKJ: number;
   assimilatedEnergyKJ: number;
 }
@@ -140,6 +142,7 @@ export function advancePredatorShadowDigestion(
   const addedEnergy = nonNegative(newMealEnergyKJ);
   const addedMealMass = nonNegative(newMealMassKg);
   const incomingGutEnergy = nonNegative(previous.gutEnergyKJ) + addedEnergy;
+  const incomingGutMass = nonNegative(previous.gutMassKg) + addedMealMass;
   const newMealDays = addedEnergy > 0
     ? estimatePredatorShadowDigestionDays(speciesId, addedMealMass, adultWeightKg)
     : 0;
@@ -149,30 +152,36 @@ export function advancePredatorShadowDigestion(
     return {
       state: {
         gutEnergyKJ: 0,
+        gutMassKg: 0,
         daysRemaining: 0,
         daysSinceMeal: addedEnergy > 0 ? 0 : nonNegative(previous.daysSinceMeal) + 1,
         lastMealEnergyKJ: addedEnergy > 0 ? addedEnergy : nonNegative(previous.lastMealEnergyKJ),
       },
       grossReleasedKJ: 0,
+      grossReleasedMassKg: 0,
       digestionCostKJ: 0,
       assimilatedEnergyKJ: 0,
     };
   }
 
   const grossReleasedKJ = Math.min(incomingGutEnergy, incomingGutEnergy / Math.max(1, daysRemaining));
+  const grossReleasedMassKg = Math.min(incomingGutMass, incomingGutMass / Math.max(1, daysRemaining));
   const digestionCostKJ = grossReleasedKJ * predatorShadowSdaFraction(speciesId);
   const assimilatedEnergyKJ = grossReleasedKJ - digestionCostKJ;
   const nextGutEnergyKJ = Math.max(0, incomingGutEnergy - grossReleasedKJ);
+  const nextGutMassKg = Math.max(0, incomingGutMass - grossReleasedMassKg);
   const nextDaysRemaining = nextGutEnergyKJ > 1e-9 ? Math.max(0, daysRemaining - 1) : 0;
 
   return {
     state: {
       gutEnergyKJ: nextGutEnergyKJ,
+      gutMassKg: nextGutMassKg,
       daysRemaining: nextDaysRemaining,
       daysSinceMeal: addedEnergy > 0 ? 0 : nonNegative(previous.daysSinceMeal) + 1,
       lastMealEnergyKJ: addedEnergy > 0 ? addedEnergy : nonNegative(previous.lastMealEnergyKJ),
     },
     grossReleasedKJ,
+    grossReleasedMassKg,
     digestionCostKJ,
     assimilatedEnergyKJ,
   };
