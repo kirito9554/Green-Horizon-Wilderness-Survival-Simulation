@@ -7,6 +7,8 @@ import {
   calculateFieldMetabolicRateKJPerDay,
   calculatePredatorBioenergeticLedger,
   calculatePredatorFeedingBoutPlan,
+  predatorAlternativeFoodResources,
+  PREDATOR_ALTERNATIVE_FOOD_ENERGY_KJ_PER_KG,
   calculatePredatorBioenergeticShadow,
   estimatePredatorShadowDigestionDays,
 } from '../src/simulation/spatial/spatialPredatorP9';
@@ -59,6 +61,22 @@ close(
 );
 assert.ok(day1.state.daysRemaining >= 6 && day1.state.daysRemaining <= 7, 'python meal must retain multi-day gut state after day one');
 assert.ok(day1.digestionCostKJ > 0 && day1.assimilatedEnergyKJ > 0, 'digestion must split released energy into SDA cost and assimilated energy');
+
+assert.deepEqual(
+  predatorAlternativeFoodResources('PREDATOR_MONITOR_LIZARD'),
+  ['insects', 'carrion'],
+  'monitor alternative diet must remain invertebrate/carrion rather than inventing plant feeding',
+);
+assert.deepEqual(
+  predatorAlternativeFoodResources('PREDATOR_CIVET'),
+  ['fruit', 'insects', 'carrion'],
+  'civet alternative diet must expose generalist channels',
+);
+assert.ok(
+  PREDATOR_ALTERNATIVE_FOOD_ENERGY_KJ_PER_KG.insects
+    > PREDATOR_ALTERNATIVE_FOOD_ENERGY_KJ_PER_KG.fruit,
+  'fresh insects should remain more energy dense than fruit in P9.4',
+);
 
 const p93SmallPrey = calculatePredatorFeedingBoutPlan({
   speciesId: 'PREDATOR_MONITOR_LIZARD',
