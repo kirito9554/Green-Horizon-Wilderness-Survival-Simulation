@@ -1,33 +1,63 @@
-# DANH MỤC TÀI NGUYÊN (ASSET MANIFEST)
-## Dự án: Canopy - Tropical Survival Management
+# ASSET MANIFEST
+## Green Horizon — Wilderness Survival Simulation
+
+This document records the provenance of visual assets currently shipped with the project.
 
 ---
 
-### 1. PHÂN BỔ NGUỒN TÀI NGUYÊN & BẢN QUYỀN (LICENSE)
+## 1. Asset provenance
 
-| Hạng mục | Nguồn gốc | License | Ghi chú kỹ thuật |
-| :--- | :--- | :--- | :--- |
-| **System & Action Icons** | Lucide React Icons | ISC License | Sử dụng trực tiếp từ thư viện cài sẵn, vector SVG sắc nét |
-| **Camp & Biome Visuals** | Project-specific / generated / edited assets | No separate license declared | Đồ họa phong cách tropical survival bán tả thực; provenance cần được ghi lại khi nhập asset bên ngoài |
-| **Survivor Portraits** | Project-specific / procedural stylized assets | No separate license declared | Chân dung nhân vật phong cách sinh tồn |
-| **UI Components (Bars, Badges, Panels)** | Procedural Tailwind CSS / in-repo implementation | Project license not yet selected | Thanh sinh tồn, đồng hồ chu kỳ, tải trọng kho |
+| Category | Source | Licensing / provenance note |
+| :--- | :--- | :--- |
+| **System & action icons** | Lucide React Icons | Uses the upstream Lucide package and its license. |
+| **Maps & biome visuals** | Generated specifically for this project with ChatGPT / OpenAI image generation | No stock-image or third-party art source was used for these project assets. |
+| **POI backgrounds & cards** | Generated specifically for this project with ChatGPT / OpenAI image generation | Project-specific generated artwork. |
+| **Weather cards** | Generated specifically for this project with ChatGPT / OpenAI image generation | Project-specific generated artwork. |
+| **Raw-material & item icon art** | Generated specifically for this project with ChatGPT / OpenAI image generation | Project-specific generated artwork. |
+| **Survivor portraits** | Generated specifically for this project with ChatGPT / OpenAI image generation | Project-specific generated artwork. |
+| **UI background / decorative art** | Generated specifically for this project with ChatGPT / OpenAI image generation | Project-specific generated artwork. |
+| **Code-based UI components** | In-repository React / CSS / Tailwind implementation | Covered only by whatever project source license is selected in the future. |
+
+The current contents of `public/` are therefore either:
+
+1. project-specific visuals generated with ChatGPT / OpenAI image generation; or
+2. library-provided icons such as Lucide, which retain their upstream license.
+
+No third-party stock-image pack, scraped artwork, commercial game asset pack, or externally sourced character artwork is intentionally included.
 
 ---
 
-### 2. BẢNG BIỂU TƯỢNG LUCIDE (TIER A)
-* **Sinh tồn & Chỉ số**:
-  * `Heart` (Sức khỏe), `Utensils` / `Apple` (Đói / Thức ăn), `Droplets` / `GlassWater` (Khát / Nước ngọt), `Moon` / `Bed` (Mệt mỏi / Ngủ), `Sparkles` (Tinh thần / Morale), `ShieldAlert` (Thương tích / Bệnh tật).
-* **Thời tiết & Thời gian**:
-  * `Sun` (Nắng trong), `Cloud` (Mây), `CloudRain` (Mưa nhiệt đới), `CloudLightning` (Dông bão), `Flame` (Nắng gắt / Lửa trại), `Clock` (Thời gian), `Play` / `Pause` / `FastForward` (Tốc độ game).
-* **Phân loại Kho & Tài nguyên**:
-  * `Package` (Kho chung), `TreePine` / `Trees` (Gỗ & Rừng), `Shovel` (Đất đá), `Fish` (Thủy sản), `Leaf` (Sợi thực vật, thảo mộc), `Nut` (Dừa, hạt giống), `Hammer` / `Axe` / `Wrench` (Công cụ), `Wheat` (Nông nghiệp), `Weight` (Trọng lượng), `Maximize2` (Thể tích).
-* **Điều hướng & Quản lý**:
-  * `Tent` (Trại chính), `Compass` / `Map` (Bản đồ thám hiểm), `Anvil` (Chế tạo), `Users` (Người sống sót & Phân quyền), `Save` / `Upload` / `Download` (Hệ thống Save Slot).
+## 2. Lucide icons
+
+UI navigation and status indicators use icons from `lucide-react`, including categories such as:
+
+- survival and status;
+- weather and time;
+- inventory and resources;
+- camp/building actions;
+- navigation and management controls.
+
+Lucide remains subject to its own upstream license and is not reclassified as project-generated art.
 
 ---
 
-### 3. QUY TRÌNH KIỂM CHỨNG TÀI NGUYÊN
-* Asset nhập từ bên ngoài cần ghi rõ nguồn gốc và điều khoản sử dụng trước khi commit.
-* Asset project-specific / generated / edited trong repo hiện chưa được cấp một project-wide open-source license riêng.
-* Lucide React giữ nguyên license upstream của thư viện.
-* Public visibility của repository không đồng nghĩa với việc tự động cấp quyền tái sử dụng cho các asset gốc của dự án.
+## 3. Public repository note
+
+The repository currently has **no project-wide LICENSE**.
+
+Making the repository public therefore documents and exposes the work, but does not by itself declare the source code or project-specific art assets to be released under an open-source or open-asset license.
+
+If a project-wide license is added later, source code and generated art assets can be licensed separately if desired.
+
+---
+
+## 4. Adding future assets
+
+Before committing a future visual asset:
+
+- record its source if it was not generated specifically for Green Horizon;
+- retain the original license/attribution when required;
+- do not commit stock, copyrighted, or third-party game art without clear permission;
+- prefer project-specific generated or original assets when possible.
+
+If an externally sourced asset is ever introduced, this manifest should be updated with its exact provenance and license.
