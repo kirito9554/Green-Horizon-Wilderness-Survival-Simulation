@@ -236,6 +236,9 @@ function accumulatePredators(aggregates: Record<string, PredatorAggregate>, dail
     total.reserveDrawKg += daily.reserveDrawKg;
     total.reserveGainKg += daily.reserveGainKg;
     total.edibleOverflowKg += daily.edibleOverflowKg;
+    total.fmrDemandKJ += daily.fmrDemandKJ;
+    total.legacyDemandEquivalentKJ += daily.legacyDemandEquivalentKJ;
+    total.ingestedPreyEnergyKJ += daily.ingestedPreyEnergyKJ;
     total.hungerRiskPredatorDays += daily.hungerRiskPredatorDays;
     total.huntingPredatorDays += daily.huntingPredatorDays;
     total.reserveCoveredPredatorDays += daily.reserveCoveredPredatorDays;
@@ -450,6 +453,16 @@ function runFiveYearSoak(): void {
         && species.huntingPredatorDays + species.reserveCoveredPredatorDays <= species.predatorDays + energyTolerance,
       `hunting=${species.huntingPredatorDays.toFixed(1)} reserve=${species.reserveCoveredPredatorDays.toFixed(1)} predatorDays=${species.predatorDays.toFixed(1)}`,
     );
+    check(
+      `predator-p9-shadow-energy-bounds:${species.speciesId}`,
+      Number.isFinite(species.fmrDemandKJ)
+        && Number.isFinite(species.legacyDemandEquivalentKJ)
+        && Number.isFinite(species.ingestedPreyEnergyKJ)
+        && species.fmrDemandKJ >= 0
+        && species.legacyDemandEquivalentKJ >= 0
+        && species.ingestedPreyEnergyKJ >= 0,
+      `fmr=${species.fmrDemandKJ.toFixed(1)} legacy=${species.legacyDemandEquivalentKJ.toFixed(1)} intake=${species.ingestedPreyEnergyKJ.toFixed(1)}`,
+    );
   }
   for (const bucket of annual) {
     const expected = bucket.startPopulation + bucket.births + bucket.faunaImmigrants - bucket.nonPredatorDeaths - bucket.predatorKills;
@@ -503,6 +516,8 @@ function runFiveYearSoak(): void {
     const huntingDayShare = species.predatorDays > 0 ? species.huntingPredatorDays / species.predatorDays : 0;
     const reserveCoveredDayShare = species.predatorDays > 0 ? species.reserveCoveredPredatorDays / species.predatorDays : 0;
     const reserveDeltaKgPerPredatorDay = species.predatorDays > 0 ? (species.reserveEndKg - species.reserveStartKg) / species.predatorDays : 0;
+    const p9ShadowIntakeVsFmr = species.fmrDemandKJ > 0 ? species.ingestedPreyEnergyKJ / species.fmrDemandKJ : 1;
+    const p9ShadowLegacyVsFmr = species.fmrDemandKJ > 0 ? species.legacyDemandEquivalentKJ / species.fmrDemandKJ : 1;
     console.log(
       `[${label}] ${speciesId} pop=${species.startPopulation}->${species.endPopulation} births=${species.births} immigrants=${species.immigrants} deaths=${species.deaths} `
         + `hunger=${species.hungerDeaths} natural=${species.naturalDeaths} deathAge=${species.deathJuveniles}/${species.deathAdults}/${species.deathOld} `
@@ -518,6 +533,11 @@ function runFiveYearSoak(): void {
         + `killKg=${preyBiomassPerKillKg.toFixed(2)} edible/kill=${edibleKgPerKill.toFixed(2)} edible/demand=${edibleYieldVsDemand.toFixed(3)} `
         + `coverage=${demandCoverage.toFixed(3)} shortfall=${shortfallRatio.toFixed(3)} reserveDelta/predDay=${reserveDeltaKgPerPredatorDay.toFixed(4)} `
         + `hungerRisk=${hungerRiskShare.toFixed(3)} huntingDays=${huntingDayShare.toFixed(3)} reserveDays=${reserveCoveredDayShare.toFixed(3)}`,
+    );
+    console.log(
+      `[${label}] ${speciesId} p9-shadow fmr=${(species.fmrDemandKJ / 1000).toFixed(1)}MJ `
+        + `legacyEq=${(species.legacyDemandEquivalentKJ / 1000).toFixed(1)}MJ intake=${(species.ingestedPreyEnergyKJ / 1000).toFixed(1)}MJ `
+        + `intake/fmr=${p9ShadowIntakeVsFmr.toFixed(3)} legacy/fmr=${p9ShadowLegacyVsFmr.toFixed(3)}`,
     );
     return [speciesId, {
       ...species,
@@ -585,7 +605,7 @@ function runFiveYearSoak(): void {
   };
   mkdirSync('artifacts', { recursive: true });
   const safeSeed = seed.replace(/[^a-zA-Z0-9_-]+/g, '-');
-  const reportPath = `artifacts/predator-p8-${mode}-${safeSeed}.json`;
+  const reportPath = `artifacts/predator-p9-shadow-${mode}-${safeSeed}.json`;
   writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(`[${label}] report=${reportPath}`);
 
