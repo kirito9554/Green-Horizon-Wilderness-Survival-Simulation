@@ -1,256 +1,238 @@
-# Green Horizon: Tropical Survival Colony
-*(Dự án mã hiệu: Canopy - Tropical Survival Management)*
+# Green Horizon Wilderness Survival Simulation
 
-> Một tựa game mô phỏng quản lý định cư và sinh tồn chiến thuật thời gian thực (Real-time Tactical Survival Colony Simulation) trên đảo hoang nhiệt đới. Xây dựng trên nền tảng web hiện đại với React 19, TypeScript, Tailwind CSS và hệ thống Shader đồ họa Canvas.
+> A personal, systems-heavy tropical rainforest survival and colony simulation prototype built for the browser.
 
----
+![Green Horizon main world map](public/maps/main.png)
 
-## 1. Giới thiệu tổng quan
+Green Horizon is an experimental survival game project focused on **long-term wilderness simulation rather than scripted survival set pieces**. The player begins with limited resources in a hostile tropical environment, explores and learns the island, builds a camp, manages equipment and logistics, and can eventually grow a small self-sustaining settlement.
 
-**Green Horizon: Tropical Survival Colony** đưa người chơi vào vai người chỉ huy một nhóm người sống sót sau thảm họa đắm tàu, dạt vào bờ biển của một hòn đảo nhiệt đới hoang sơ chưa có tên trên bản đồ hàng hải.
+This repository is primarily a **personal development sandbox**. It is public for transparency, experimentation, and easier CI usage; it should not be treated as a finished game or stable framework.
 
-Không đặt nặng yếu tố giao tranh quân sự hay quái vật viễn tưởng, trọng tâm của trò chơi xoay quanh cuộc chiến sinh tồn thực tế: đối mặt với thời tiết khắc nghiệt, tìm kiếm nguồn nước ngọt, khai thác tài nguyên tự nhiên có kiểm soát, phân công nhân sự và từng bước xây dựng một khu định cư kiên cố, tự cung tự cấp (*Self-Sustaining Colony*).
+## Project status
 
----
+**Active prototype / pre-release.**
 
-## 2. Triết lý thiết kế & 5 Trụ cột cốt lõi
+Systems, data models, balance values, save formats, UI, and art are still changing frequently. The current development focus is the authoritative spatial world and living ecology simulation.
 
-Trò chơi được xây dựng xoay quanh 5 trụ cột phát triển liên hoàn:
+### Current spatial world foundation
 
-1. **Survive (Sinh tồn)**: Đảm bảo nhu cầu thiết yếu hàng đầu: nước sạch, thức ăn, giấc ngủ, duy trì thân nhiệt và tinh thần (morale) cho từng người sống sót.
-2. **Explore (Khảo sát)**: Mở rộng thám hiểm bản đồ dạng điểm mốc (POI - Points of Interest). Mỗi lần thám hiểm nâng cao tỷ lệ am hiểu (*Knowledge %*), mở ra các nguồn tài nguyên quý và lối đi an toàn.
-3. **Gather (Thu hoạch sinh thái)**: Thu lượm tài nguyên gắn liền với chu kỳ hồi phục của tự nhiên. Khai thác quá mức sẽ làm cạn kiệt cục bộ, đòi hỏi người chơi phân bổ khu vực luân phiên.
-4. **Improve (Cải tiến & Nâng cấp)**: Lắp ráp công cụ từ từng bộ phận chi tiết (*Head + Handle + Binding*), xây dựng công trình xử lý nước, bếp lửa, chòi quan sát và kho bãi chứa hàng.
-5. **Sustain (Bền vững)**: Thiết lập chuỗi sản xuất tự động qua hàng đợi lệnh chế tác, phân bổ công việc theo mức độ ưu tiên và chuẩn bị kho dự trữ cho những đợt bão nhiệt đới dài ngày.
+The current world model uses:
 
----
+- a canonical **120 km² tropical island**;
+- **10 stable authored macro regions** used for navigation and game-facing identity;
+- a seeded habitat lattice at roughly **600 m** spatial resolution;
+- **70 generated natural Local Sites + 3 required landmarks**;
+- generated terrain, hydrology, habitat suitability, travel cost, and local ecological influence;
+- deterministic world generation from a campaign seed.
 
-## 3. Kiến trúc giao diện chiến thuật (Tactical Interface)
+Macro regions remain recognizable between campaigns while the local wilderness underneath them can vary.
 
-Giao diện được thiết kế theo tỷ lệ chuẩn **16:9** khóa khung (Aspect-Locked Tactical Frame), lấy cảm hứng từ bàn chỉ huy dã chiến với chất liệu gỗ mộc, giấy da và kim loại đồng phong hóa:
+### Living terrestrial ecology
 
-* **Thanh điều khiển trên cùng (Top Header Bar)**: 
-  * Đồng hồ thời gian thực trong ngày, ngày sinh tồn, nút chuyển tốc độ mô phỏng (Pause, 1x, 2x, 4x).
-  * Dự báo thời tiết hiện tại và sắp tới, tốc độ và hướng gió nhiệt đới.
-  * Chỉ số tổng quan về nhân sự, thể tích và tải trọng kho.
-  * Lối tắt mở trình lưu game (Save/Load) và bảng điều khiển nhà phát triển (Dev Panel).
-* **Cột bản đồ chiến thuật bên trái (Tactical World Map - 55% độ rộng)**:
-  * Bản đồ tương tác trực quan với các vùng địa hình (Biomes): Bãi cát ven biển, Rừng tre, Vùng ngập mặn, Bờ suối, Rừng già, Gờ đá, Vách núi...
-  * Tích hợp hiệu ứng Canvas/WebGL: mặt nước biển dập dềnh phản chiếu ánh sáng (*MapWaterShader*), dòng chảy thác nước (*MapWaterfallFlow*), sương mù nhiệt đới (*MapAmbientEffects*) và hạt bụi phấn bay trong gió (*MapParticleEffects*).
-  * Đồng hồ định vị la bàn nhiệt đới (*TropicalMapClock*).
-* **Cột tác vụ trung tâm (Tactical Center Column - 27% độ rộng)**:
-  * **Thẻ địa điểm hiện tại (POI Card)**: Hình ảnh minh họa chất lượng cao theo từng khu vực, chỉ số an toàn, độ ẩm, độ hiểu biết (*Knowledge %*) và nút mở chi tiết địa bàn (*Inspect Location*).
-  * **Hành trang đội (Party Inventory)**: 15 ô trang bị hiển thị trực quan biểu tượng vật phẩm, số lượng, cấp phẩm chất (*Crude, Standard, Prime, Masterwork*) và độ bền. Hỗ trợ dùng trực tiếp, sửa chữa hoặc vứt bỏ.
-  * **Nhật ký sự kiện (Colony Event Logs)**: Ghi lại từng biến động thời gian thực theo thời khắc trong ngày.
-* **Cột đội ngũ người sống sót bên phải (Tactical Party Column - 13% độ rộng)**:
-  * Chân dung đại diện, trạng thái hành động tức thời, thanh sinh tồn rút gọn.
-  * Chức năng nghỉ ngơi hồi sức cấp tốc hoặc tuyển mộ thêm thành viên dạt vào bờ.
-* **Các bảng điều khiển chuyên sâu (Modals)**:
-  * **Quản lý khu trại (Manage Camp Modal)**: Xây dựng công trình, điều phối hàng đợi chế tác, phân công nhiệm vụ nhân sự (*Job Priorities*) và chính sách khẩu phần (*Policies*).
-  * **Khảo sát chi tiết địa điểm (Inspect Location Modal)**: Quản lý kho bãi ngoại vi (POI Storage), chuyển đổi đồ đạc hai chiều, xây tiền đồn và cử đội viễn chinh.
-  * **Lưu & Tải game (Save/Load Modal)**: 3 vị trí lưu độc lập, tính năng tự động lưu và xuất/nhập tệp JSON.
-  * **Bảng công cụ Sandbox (Dev Panel)**: Công cụ can thiệp chỉ số phục vụ kiểm thử nhanh.
-
----
-
-## 4. Các hệ thống mô phỏng chi tiết
-
-### 4.1. Cỗ máy mô phỏng thời gian thực (Deterministic Sim Engine)
-* Hệ thống chạy theo nhịp tick đều đặn (1 giây thực = 10 giây game ở tốc độ 1x, có thể tăng tốc lên 2x, 4x hoặc tạm dừng).
-* Tách biệt hoàn toàn giữa dữ liệu tĩnh (Database: vật phẩm, công thức, khu vực, công trình) và trạng thái động (`GameState`), giúp việc đồng bộ và lưu trữ diễn ra mượt mà.
-
-### 4.2. Quản lý nhân sự & Chỉ số sinh tồn (Survivors System)
-* **Chỉ số sinh tồn**:
-  * Máu (Health: 0 - 100)
-  * Đơn vị đói (Hunger: 0 - 100) & Khát (Thirst: 0 - 100)
-  * Thể lực & Mệt mỏi (Fatigue: 0 - 100)
-  * Tinh thần sống sót (Morale: 0 - 100)
-  * Thân nhiệt & Khả năng chịu thời tiết
-* **Kỹ năng nghề nghiệp**: Khảo sát & hái lượm (*Foraging*), Săn bắt (*Hunting*), Câu cá (*Fishing*), Chế tác (*Crafting*), Xây dựng (*Building*), Y tế (*Medicine*), Thám hiểm (*Exploration*). Kỹ năng tăng dần thông qua thực hành thực tế.
-* **Cơ chế tự động hóa**: Hệ thống phân công việc làm ma trận 5 cấp độ (*Highest, High, Normal, Low, Disabled*) giúp người sống sót tự động tìm việc phù hợp khi rảnh rỗi.
-
-### 4.3. Kho chứa hai tầng & Cơ chế Logistics thực tế
-* Không sử dụng ô chứa vô tận. Mọi vật phẩm đều có hai tham số vật lý:
-  * **Khối lượng (Weight - kg)**
-  * **Thể tích (Volume - L)**
-* **Hệ thống kho kép**:
-  * **Kho di động (Party Backpack)**: Giới hạn theo sức mang của đoàn thám hiểm.
-  * **Kho bãi ngoại vi (POI Outpost Storage)**: Cho phép dựng hòm đồ, giỏ chứa tại từng địa điểm trên đảo để tích trữ tài nguyên tại chỗ, giảm tải việc đi lại liên tục.
-  * Hỗ trợ chuyển từng món hoặc nút bấm *Dỡ toàn bộ vào kho / Lấy toàn bộ vào túi* nhanh gọn.
-
-### 4.4. Hệ thống vật phẩm & Phân tầng phẩm chất (Item & Quality)
-* **4 bậc phẩm chất**:
-  * 🟤 *Crude (Thô sơ)*: Tạo từ vật liệu tạp, độ bền thấp, hiệu suất trung bình.
-  * 🟢 *Standard (Đạt chuẩn)*: Cân bằng, đáp ứng tốt nhu cầu sinh tồn thường nhật.
-  * 🔵 *Prime (Tuyển chọn)*: Vật liệu chất lượng cao, độ bền vượt trội (+25%), tăng tốc độ thu hoạch.
-  * 🟡 *Masterwork (Thượng phẩm)*: Chế tác bởi thợ lành nghề, tối ưu độ bền (+50%), cộng điểm tinh thần khi sở hữu.
-* **Độ bền & Tái chế**: Công cụ giảm độ bền theo số lần sử dụng. Khi hỏng có thể thu hồi phế liệu (*Salvage*) hoặc dùng nguyên liệu mài sắc/sửa chữa (*Repair*).
-* **Độ tươi thực phẩm (Freshness & Spoilage)**: Đồ ăn tươi sống bị ôi thiu theo thời gian nếu không được sơ chế, nướng chín, sấy khô hoặc hun khói.
-
-### 4.5. Chế tác đa tầng, Hàng đợi sản xuất & Nghiên cứu
-* Chế tác từ các linh kiện cơ bản: Lưỡi rìu đá + Thân gỗ/cán tre + Dây bện từ vỏ cây.
-* **Hàng đợi sản xuất linh hoạt (Crafting Queue)**:
-  * Chế tác 1 lần (*Once*)
-  * Chế tác theo số lượng chỉ định (*Quantity*)
-  * Duy trì mức dự trữ trong kho (*Produce until stock X*)
-  * Chế tác liên tục không ngừng (*Produce forever*)
-* Có thể chỉ định đích danh thợ thủ công phụ trách từng đơn hàng để tối ưu chất lượng thành phẩm.
-* **Bảng nghiên cứu công nghệ**: Đầu tư thời gian và nhân lực mở khóa các kỹ thuật sinh tồn mới như lọc than hoạt tính, hun khói bảo quản, lò nung đất sét...
-
-### 4.6. Bản đồ, Điểm mốc (POIs) & Khả năng tái sinh sinh thái
-* Hệ thống bản đồ dạng lưới 18 địa điểm đặc trưng.
-* Mỗi khu vực sở hữu các mỏ tài nguyên với **hồ chứa sinh thái (Ecological Regeneration Pools)**. Càng hiểu rõ khu vực, người chơi càng tìm thấy nhiều tài nguyên ẩn và lối đi tắt giảm thời gian di chuyển.
-* Tài nguyên sau khi khai thác cạn kiệt sẽ cần một chu kỳ ngày nhất định để nảy mầm hoặc hồi phục tự nhiên.
-
-### 4.7. Thời tiết nhiệt đới biến động (Dynamic Weather)
-* Mô phỏng chuyển biến liên tục: *Nắng ráo (Clear), Nhiều mây (Cloudy), Mưa nhẹ (Light Rain), Mưa lớn (Heavy Rain), Bão nhiệt đới (Tropical Storm), Đợt nắng nóng (Heat Wave)*.
-* Thời tiết ảnh hưởng trực tiếp đến tốc độ di chuyển của đội viễn chinh, nguy cơ hạ/tăng thân nhiệt, tốc độ hỏng của thực phẩm và lượng nước mưa có thể thu gom được tại trại.
-
-### 4.8. Lưu trữ & Khôi phục dữ liệu an toàn (Save System)
-* Quản lý 3 khe lưu thủ công (`Slot 1`, `Slot 2`, `Slot 3`).
-* Cơ chế tự động lưu ngầm (*Autosave*) mỗi 30 giây trong quá trình mô phỏng.
-* Hỗ trợ xuất file mã hóa `Save_Game_Canopy.json` tải về máy và nhập lại bất cứ lúc nào.
-* Có cơ chế xác thực phiên bản dữ liệu (*Save Migration*) đảm bảo không gãy cấu trúc khi cập nhật phiên bản mới.
-
----
-
-## 5. Cấu trúc thư mục dự án
+The authoritative spatial terrestrial stack is designed as one connected food web:
 
 ```text
-/
-├── public/                       # Tài nguyên đồ họa tĩnh
-│   ├── UI-BG.png                 # Khung hình nền giao diện chuẩn 16:9
-│   ├── tropical-clock-frame.png  # Khung đồng hồ la bàn nhiệt đới
-│   ├── maps/                     # Bản đồ nền và các mảnh ghép địa hình
-│   ├── poi-bg/                   # Tranh nền phong cảnh chi tiết của từng POI
-│   ├── poi-card/                 # Thẻ minh họa 18 địa điểm sinh tồn
-│   ├── iconsets/                 # Bộ biểu tượng nguyên vật liệu & tài nguyên
-│   ├── portraits/                # Chân dung người sống sót
-│   └── ui/buildings/             # Ảnh minh họa công trình và trại
-│
-├── docs/                         # Tài liệu thiết kế & quy chuẩn kỹ thuật
-│   ├── GAME_DESIGN.md            # Tài liệu thiết kế trò chơi (GDD)
-│   ├── SYSTEM_ARCHITECTURE.md   # Kiến trúc hệ thống & quy chuẩn module
-│   ├── ART_BIBLE.md              # Quy chuẩn bảng màu, nghệ thuật & typography
-│   ├── DATA_SCHEMA.md            # Đặc tả cấu trúc Types & Interface dữ liệu
-│   ├── ASSET_MANIFEST.md         # Danh mục tổng hợp tài nguyên hình ảnh
-│   └── SHADER_OVERHAUL_PLAN.md   # Kế hoạch tối ưu hóa hiệu ứng Shader
-│
-├── src/                          # Mã nguồn chính của ứng dụng
-│   ├── components/               # Các React Component giao diện
-│   │   ├── common/               # Thành phần dùng chung (ItemIcon, QualityBadge, Portrait)
-│   │   ├── layout/               # Khung bố cục chiến thuật (TopHeader, Center, Party)
-│   │   ├── world/                # Bản đồ thế giới, Shader nước, hạt và đồng hồ
-│   │   ├── camp/                 # Giao diện tổng quan trại
-│   │   ├── crafting/             # Bảng chế tạo công cụ & chế biến
-│   │   ├── inventory/            # Bảng quản lý kho đồ & phân loại
-│   │   ├── buildings/            # Danh sách công trình & tiến độ thi công
-│   │   ├── survivors/            # Quản lý nhân khẩu & phân bổ công việc
-│   │   └── modals/               # Hộp thoại popup (ManageCamp, Inspect, Save, Dev...)
-│   │
-│   ├── data/                     # Dữ liệu tĩnh của trò chơi
-│   │   ├── items/                # Cơ sở dữ liệu vật phẩm (Nguyên liệu, Công cụ, Cứu sinh)
-│   │   ├── areas.ts              # Dữ liệu 18 khu vực trên đảo và tài nguyên gắn kèm
-│   │   ├── buildings.ts          # Danh mục công trình và yêu cầu vật tư
-│   │   ├── recipes.ts            # Công thức chế tạo & cây công nghệ nghiên cứu
-│   │   └── survivors.ts          # Hồ sơ người sống sót ban đầu và tân binh
-│   │
-│   ├── simulation/               # Logic mô phỏng trò chơi (Simulation Engine)
-│   │   ├── simEngine.ts          # Bộ điều phối nhịp tick trung tâm
-│   │   ├── survivorSystem.ts     # Tính toán chỉ số sinh tồn và chuyển đổi trạng thái
-│   │   ├── inventorySystem.ts    # Logic tải trọng, thể tích, luân chuyển kho
-│   │   ├── craftingSystem.ts     # Xử lý hàng đợi chế tác và kỹ năng thợ
-│   │   ├── expeditionSystem.ts   # Tính toán thời gian thám hiểm và chiến lợi phẩm
-│   │   ├── resourcePools.ts      # Khả năng tái sinh tự nhiên của mỏ tài nguyên
-│   │   ├── weatherSystem.ts      # Vòng tuần hoàn thời tiết và tác động môi trường
-│   │   └── timeSystem.ts         # Chu kỳ ngày đêm và chuyển đổi thời gian
-│   │
-│   ├── save/                     # Quản lý lưu trữ
-│   │   └── saveManager.ts        # Lưu/tải LocalStorage, Autosave, Export/Import JSON
-│   │
-│   ├── types/                    # Định nghĩa kiểu dữ liệu TypeScript
-│   │   └── index.ts              # Toàn bộ Type & Interface hệ thống
-│   │
-│   ├── utils/                    # Các hàm tiện ích
-│   │   ├── qualityUtils.ts       # Tính toán tỷ lệ phẩm chất vật phẩm
-│   │   ├── poiImageManager.ts    # Quản lý nạp ảnh POI
-│   │   └── portraitManager.ts    # Quản lý ảnh đại diện
-│   │
-│   ├── App.tsx                   # Điểm lắp ghép ứng dụng chính
-│   ├── main.tsx                  # Điểm khởi chạy React DOM
-│   └── index.css                 # Thiết lập Tailwind CSS
-│
-├── index.html                    # Trang HTML chuẩn
-├── metadata.json                 # Thông tin cấu hình môi trường AI Studio
-├── package.json                  # Khai báo thư viện & kịch bản lệnh
-├── tsconfig.json                 # Cấu hình TypeScript
-└── vite.config.ts                # Cấu hình đóng gói Vite
+living flora
+    ↓
+insects + shared material resource pools
+    ↓
+non-predator fauna
+    ↓
+spatial predators
 ```
 
----
+Current spatial ecology data includes:
 
-## 6. Công nghệ sử dụng
+- **40+ flora taxa/guilds** across 13 structural strata;
+- **20+ insect taxa/guilds**;
+- **24 non-predator terrestrial fauna species**;
+- **5 spatial predator species**;
+- conserved per-patch plant food, insect biomass, carrion, and fresh-water resources;
+- habitat-dependent movement, competition, breeding, mortality, carrying capacity, predator home ranges, energy reserve, and recovery behavior.
 
-* **Nền tảng giao diện**: [React 19](https://react.dev/)
-* **Ngôn ngữ**: [TypeScript 5.8](https://www.typescriptlang.org/) (Strict Mode)
-* **Trình biên dịch & Bundler**: [Vite 6](https://vitejs.dev/)
-* **Hệ thống Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
-* **Bộ Icon**: [Lucide React](https://lucide.dev/)
-* **Xử lý Đồ họa & Hiệu ứng**: HTML5 Canvas 2D Context & WebGL Shaders (mặt nước biển, phản xạ ánh sáng, dòng chảy hạt).
-* **Lưu trữ dữ liệu**: Web Storage API (LocalStorage) kết hợp Serialization JSON tương thích đa nền tảng.
+Legacy terrestrial ecology modules are still present for compatibility and data bridging, but the active spatial implementation lives primarily under `src/simulation/spatial/`.
 
----
+## Gameplay direction
 
-## 7. Hướng dẫn cài đặt & Khởi chạy
+The project is intended to move gradually from difficult solo survival toward settlement management.
 
-### Yêu cầu môi trường
-* **Node.js**: Phiên bản 18.x hoặc mới hơn (khuyên dùng Node 20 LTS).
-* **Trình quản lý gói**: `npm`, `pnpm` hoặc `bun`.
+Core design goals include:
 
-### Các bước khởi chạy
+- **Exploration** — inspect terrain, discover Local Sites, evaluate routes, and learn where resources actually exist.
+- **Survival** — food, water, fatigue, health, weather exposure, equipment condition, and environmental risk matter over time.
+- **Physical logistics** — inventory, storage, hauling, weight, volume, freshness, and material movement are modeled instead of abstracted into one global stockpile.
+- **Crafting & equipment** — tools are built, repaired, modified, and upgraded from physical materials and components.
+- **Camp development** — construction, storage, utilities, food production, farming, defenses, and work assignment grow in importance as the settlement expands.
+- **Living ecology** — plants, prey, predators, water, harvesting pressure, and regeneration are intended to interact rather than exist as isolated resource nodes.
+- **Long simulation horizons** — ecology and colony systems are tested over months and years, not only short gameplay ticks.
 
-1. **Cài đặt các gói phụ thuộc**:
-   ```bash
-   npm install
-   ```
+The design deliberately favors understandable ecological mechanisms over hidden balance buffs where possible.
 
-2. **Chạy máy chủ phát triển (Development Server)**:
-   ```bash
-   npm run dev
-   ```
-   Ứng dụng sẽ được khởi chạy tại địa chỉ: `http://localhost:3000`
+## Major implemented systems
 
-3. **Kiểm tra cú pháp & tính toàn vẹn kiểu (Type Checking / Lint)**:
-   ```bash
-   npm run lint
-   ```
+The repository currently contains working or actively developed foundations for:
 
-4. **Đóng gói sản phẩm cho môi trường Production (Build)**:
-   ```bash
-   npm run build
-   ```
-   Tệp tĩnh sau khi biên dịch sẽ nằm trong thư mục `/dist`.
+- survivor state and party management;
+- inventory, storage networks, hauling, and reservation;
+- component-based items, wear, repair, crafting, research, and upgrades;
+- construction, building clusters, workstations, utilities, and maintenance;
+- agriculture and food-production simulation;
+- save migration and persistence;
+- dynamic weather and environmental simulation;
+- hydrology and surface-water systems;
+- terrestrial and aquatic ecology;
+- seeded spatial world generation and Local Sites;
+- living flora, insects, fauna, predators, and trophic resource accounting;
+- encounter/UI prototypes;
+- Canvas/WebGL map effects and tropical survival UI.
 
-5. **Xem trước bản đóng gói (Preview)**:
-   ```bash
-   npm run preview
-   ```
+See `docs/` for design notes, architecture documents, spatial-world notes, and simulation reports.
 
----
+## Tech stack
 
-## 8. Hộp công cụ kiểm thử nhanh (Dev Sandbox Panel)
+- **React 19**
+- **TypeScript 5.8**
+- **Vite 6**
+- **Tailwind CSS 4**
+- **Lucide React**
+- HTML Canvas / WebGL-based map effects
+- Browser LocalStorage / JSON save serialization
+- Node/TypeScript simulation smoke tests
 
-Trong quá trình phát triển và cân bằng cơ chế, có thể bấm vào nút **Dev** ở góc trên cùng bên phải giao diện để kích hoạt bảng điều khiển gỡ lỗi:
-* **Tua nhanh thời gian (Fast Forward)**: Nhảy cóc 2 giờ, 6 giờ, 12 giờ hoặc 24 giờ để kiểm tra chu kỳ sinh tồn và độ tươi thực phẩm.
-* **Hồi phục tức thời (Heal & Revitalize)**: Khôi phục toàn bộ Máu, Thể lực, bù đầy Nước và Đồ ăn cho toàn đội người sống sót.
-* **Bơm tài nguyên (Resource Spawner)**: Thêm ngay lập tức các gói nguyên liệu thô (gỗ tre, đá, dây bện, dừa, cá khô) vào kho để thử nghiệm xây dựng và chế tạo nhanh.
-* **Thay đổi thời tiết lập tức**: Ép hệ thống chuyển sang Trời trong, Mưa bão hoặc Sóng nhiệt để quan sát phản ứng của môi trường và hiệu ứng đồ họa.
+## Running locally
 
----
+CI currently targets **Node.js 22**.
 
-## 9. Định hướng phát triển tiếp theo (Roadmap)
+```bash
+git clone https://github.com/kirito9554/Green-Horizon-Wilderness-Survival-Simulation.git
+cd Green-Horizon-Wilderness-Survival-Simulation
+npm ci
+npm run dev
+```
 
-* [ ] **Hệ thống Nông nghiệp & Thổ nhưỡng (Farming Phase)**: Gieo trồng các giống cây nhiệt đới (sắn củ, chuối rừng, khoai lang), ủ phân hữu cơ và tưới tiêu phụ thuộc vào lượng nước mưa.
-* [ ] **Thuần dưỡng & Chăn nuôi (Husbandry Phase)**: Bẫy động vật hoang dã, xây chuồng chăn nuôi gà rừng, lợn lòi để thu hoạch trứng, sữa và phân bón.
-* [ ] **Công sự phòng vệ & Bẫy thú (Defense & Hazards)**: Dựng hàng rào chông tre, bẫy báo động quanh trại để đề phòng thú dữ và xua đuổi dã thú trong đêm bão.
-* [ ] **Tín hiệu cứu hộ & Kết thúc hành trình (Rescue Endgame)**: Sửa chữa tháp thu phát vô tuyến trên đỉnh núi đá (*Hill Lookout*), đốt đống lửa tín hiệu lớn ven biển để thu hút tàu tuần tra biển khơi.
+The development server runs on port `3000` by default.
+
+Production build:
+
+```bash
+npm run lint
+npm run build
+```
+
+### Environment files
+
+Real environment files are intentionally ignored by Git:
+
+```text
+.env*
+!.env.example
+```
+
+`.env.example` contains placeholders only. **Do not commit real API keys, tokens, credentials, or local secrets.**
+
+The core simulation does not require secrets to run its normal local smoke tests.
+
+## Testing
+
+The project relies heavily on deterministic smoke tests and long-running simulation checks.
+
+Useful commands:
+
+```bash
+# TypeScript
+npm run lint
+
+# World / fauna foundations
+npm run test:spatial-world
+npm run test:spatial-fauna
+npm run test:spatial-fauna-runtime
+npm run test:spatial-fauna-competition
+npm run test:spatial-fauna-resources
+
+# Predator regressions and full trophic runtime
+npm run test:spatial-predator-founders
+npm run test:spatial-predator-p6
+npm run test:spatial-predator-p7
+npm run test:spatial-predator-p8
+npm run test:spatial-trophic
+
+# Multi-year ecology soak
+npm run test:spatial-trophic-soak
+
+# Other simulation suites
+npm run test:production
+npm run test:building
+npm run test:storage
+npm run test:agriculture
+npm run test:hydrology
+npm run test:ecology
+```
+
+The multi-year trophic soak is intentionally much heavier than the normal smoke tests. It is used to inspect population trajectories, resource pressure, predator energy accounting, extinction/recovery behavior, and long-term ecological stability.
+
+## Repository layout
+
+```text
+public/
+  maps/               World-map artwork
+  poi-bg/             POI environment artwork
+  poi-card/           POI cards
+  iconsets/           Item/resource icons
+  weather-card/       Weather artwork
+  ui/                 UI artwork
+
+docs/
+  GAME_DESIGN.md
+  SYSTEM_ARCHITECTURE.md
+  DATA_SCHEMA.md
+  ART_BIBLE.md
+  ASSET_MANIFEST.md
+  spatial-world-foundation.md
+  spatial-fauna-community.md
+  spatial-trophic-multiyear-soak.md
+
+src/
+  components/         React UI
+  data/               Static game/ecology definitions
+  encounter/          Encounter prototype
+  save/               Save + migration logic
+  simulation/         Simulation systems
+  simulation/spatial/ Seeded world and authoritative spatial ecology
+  types/              TypeScript state/contracts
+  utils/              Shared utilities
+
+scripts/              Deterministic smoke tests and simulation soaks
+.github/workflows/    CI and long-run ecology workflows
+```
+
+## Art and asset notes
+
+Most project-specific visual assets are stored directly under `public/`. Lucide icons are provided by the `lucide-react` dependency and retain their upstream license.
+
+The project is still experimental, and asset provenance/licensing documentation should be treated separately from code architecture. See `docs/ASSET_MANIFEST.md` for the current inventory.
+
+If an asset is replaced or imported from another source, its provenance and reuse terms should be documented before committing it.
+
+## Security / public-repository hygiene
+
+Before publishing or sharing a build:
+
+- keep real `.env` files out of Git;
+- never hard-code API keys or access tokens;
+- avoid committing machine-specific paths, private logs, or personal exports;
+- keep generated simulation artifacts out of the repository unless they are intentionally part of documentation;
+- treat save files as potentially user-specific data.
+
+## License
+
+There is currently **no project-wide open-source license** attached to Green Horizon.
+
+Public visibility does **not** automatically grant reuse rights to the source code or original project assets. Third-party dependencies and assets retain their respective licenses.
+
+A project-wide license can be chosen later if the repository is intended to become reusable/open source rather than simply publicly viewable.
+
+## Development philosophy
+
+Green Horizon is intentionally being built as a simulation-first personal project. The priority is not rapid feature count; it is making the systems underneath survival — ecology, logistics, resources, equipment, weather, and settlement growth — interact in ways that remain believable over long time horizons.
+
+Expect experiments, discarded approaches, migration code, diagnostics, and unusually detailed simulation tests. That is part of the project.
