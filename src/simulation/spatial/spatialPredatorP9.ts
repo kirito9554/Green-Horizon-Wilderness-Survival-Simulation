@@ -346,15 +346,24 @@ export function calculatePredatorBioenergeticLedger(
   const capacity = nonNegative(reserveCapacityKJ);
   const reserveBefore = Math.min(capacity, nonNegative(reserveBeforeKJ));
   const assimilated = nonNegative(assimilatedKJ);
-  const availableKJ = reserveBefore + assimilated;
-  const coveredDemandKJ = Math.min(demand, availableKJ);
+
+  // Newly assimilated energy serves current expenditure before body reserve is
+  // drawn. Surplus assimilation can refill reserve up to its capacity.
+  const freshToDemandKJ = Math.min(assimilated, demand);
+  const remainingDemandKJ = Math.max(0, demand - freshToDemandKJ);
+  const reserveDrawKJ = Math.min(reserveBefore, remainingDemandKJ);
+  const coveredDemandKJ = freshToDemandKJ + reserveDrawKJ;
   const shortfallKJ = Math.max(0, demand - coveredDemandKJ);
-  const afterDemand = Math.max(0, availableKJ - coveredDemandKJ);
-  const reserveAfterKJ = Math.min(capacity, afterDemand);
-  const overflowKJ = Math.max(0, afterDemand - reserveAfterKJ);
-  const reserveDrawKJ = Math.min(reserveBefore, coveredDemandKJ);
-  const freshToDemandKJ = Math.min(assimilated, coveredDemandKJ);
-  const reserveGainKJ = Math.max(0, reserveAfterKJ - Math.max(0, reserveBefore - reserveDrawKJ));
+
+  const reserveAfterDrawKJ = Math.max(0, reserveBefore - reserveDrawKJ);
+  const freshSurplusKJ = Math.max(0, assimilated - freshToDemandKJ);
+  const reserveGainKJ = Math.min(
+    Math.max(0, capacity - reserveAfterDrawKJ),
+    freshSurplusKJ,
+  );
+  const reserveAfterKJ = reserveAfterDrawKJ + reserveGainKJ;
+  const overflowKJ = Math.max(0, freshSurplusKJ - reserveGainKJ);
+  const availableKJ = reserveBefore + assimilated;
 
   return {
     demandKJ: demand,
