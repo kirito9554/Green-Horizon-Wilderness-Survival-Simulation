@@ -125,7 +125,15 @@ export function tickSpatialFaunaEcosystemDay(
   refreshLivingProducerTelemetry(runtime, world, season);
   const competition = applySpatialFaunaCompetitionPressure(runtime, world, { resourcePoolsOwnFoodWater: true });
   const telemetry = tickSpatialFaunaDay(runtime, world, day, resources.sufficiencyByPatch);
-  tickSpatialPredatorsDay(runtime.predatorSystem!, runtime, world, day, season, predatorOptions);
+  const predatorTelemetry = tickSpatialPredatorsDay(runtime.predatorSystem!, runtime, world, day, season, predatorOptions);
+  const predatorAlternativeFoodKg = predatorTelemetry.alternativeFoodConsumedKg ?? 0;
+  if (predatorAlternativeFoodKg > 0) {
+    resources.foodConsumedKg += predatorAlternativeFoodKg;
+    resources.foodStockKg = Math.max(0, resources.foodStockKg - predatorAlternativeFoodKg);
+    // Predator alternative foraging mutates flora/insect material after the prey
+    // resource pass, so refresh producer telemetry before publishing the day.
+    refreshLivingProducerTelemetry(runtime, world, season);
+  }
   attachEcosystemTelemetry(runtime, telemetry, competition, resources);
   return telemetry;
 }
