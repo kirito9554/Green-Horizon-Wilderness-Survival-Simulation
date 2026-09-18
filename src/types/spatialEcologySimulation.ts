@@ -207,6 +207,8 @@ export interface SpatialPredatorSpeciesTelemetry {
   reserveGainKg: number;
   edibleOverflowKg: number;
   hungerRiskPredatorDays: number;
+  huntingPredatorDays: number;
+  reserveCoveredPredatorDays: number;
   predatorDays: number;
   foodCoveragePredatorDays: number;
   reserveFillPredatorDays: number;
