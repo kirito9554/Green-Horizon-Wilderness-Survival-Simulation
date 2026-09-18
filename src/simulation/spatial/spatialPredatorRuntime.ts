@@ -50,6 +50,7 @@ import {
   calculatePredatorBioenergeticLedger,
   calculatePredatorBioenergeticShadow,
   calculatePredatorFeedingBoutPlan,
+  getPredatorP95TargetScore,
   predatorAlternativeFoodResources,
   predatorShadowSdaFraction,
 } from './spatialPredatorP9';
@@ -82,6 +83,8 @@ export interface SpatialPredatorRuntimeOptions {
   bioenergeticFeeding?: boolean;
   /** P9.4 diagnostic flag: generalists can forage conserved fruit/insect/carrion pools before hunting. */
   alternativeDiet?: boolean;
+  /** P9.5 diagnostic flag: target selection uses local density switching and expected energetic profitability. */
+  densitySwitching?: boolean;
 }
 
 function normalizedOptions(options?: SpatialPredatorRuntimeOptions): Required<SpatialPredatorRuntimeOptions> {
@@ -90,6 +93,7 @@ function normalizedOptions(options?: SpatialPredatorRuntimeOptions): Required<Sp
     controlledRecovery: options?.controlledRecovery ?? true,
     bioenergeticFeeding: options?.bioenergeticFeeding ?? false,
     alternativeDiet: options?.alternativeDiet ?? false,
+    densitySwitching: options?.densitySwitching ?? false,
   };
 }
 
@@ -283,6 +287,8 @@ interface PreyCandidate {
   score: number;
   adultWeightKg: number;
   expectedEdibleKg: number;
+  localPopulation: number;
+  localCarryingCapacity: number;
 }
 
 function preyCandidates(
@@ -293,6 +299,7 @@ function preyCandidates(
 ): PreyCandidate[] {
   const accessible = getBehaviorPatchesWithinRange(world, startPatchId, predator.homeRangeKm);
   const distanceByPatch = new Map(accessible.map(entry => [entry.patchId, entry.distanceKm]));
+  const planBySpecies = new Map(world.faunaCommunity.species.map(plan => [plan.speciesId, plan] as const));
   const result: PreyCandidate[] = [];
   for (const preyState of fauna.species) {
     const preyDef = SPATIAL_FAUNA_SPECIES_BY_ID[preyState.speciesId];
@@ -311,14 +318,20 @@ function preyCandidates(
       const refuge = world.localSiteInfluenceByPatchId[patchId]?.preyRefuge ?? .25;
       const encounter = world.localSiteInfluenceByPatchId[patchId]?.predatorOpportunity ?? .25;
       const score = population * preference * sizeFit * distanceFit * (.78 + encounter * .38) * (1 - refuge * .32);
-      if (score > 0) result.push({
-        speciesId: preyDef.id,
-        patchId,
-        cohort,
-        score,
-        adultWeightKg: preyDef.adultWeightKg,
-        expectedEdibleKg: preyMass * .62,
-      });
+      if (score > 0) {
+        const localCarryingCapacity = planBySpecies.get(preyDef.id)?.patchAllocations
+          .find(allocation => allocation.patchId === patchId)?.carryingCapacity ?? Math.max(1, population);
+        result.push({
+          speciesId: preyDef.id,
+          patchId,
+          cohort,
+          score,
+          adultWeightKg: preyDef.adultWeightKg,
+          expectedEdibleKg: preyMass * .62,
+          localPopulation: population,
+          localCarryingCapacity,
+        });
+      }
     }
   }
   return result.sort((a, b) => b.score - a.score);
@@ -930,6 +943,24 @@ export function tickSpatialPredatorsDay(
         ? Math.max(.001, p9FeedingPlan?.mealUtilityCapacityKg ?? 0)
         : Math.max(.001, p8HuntPlan?.usableEnergyCapacityKg ?? 0);
 
+      const targetScore = (entry: PreyCandidate): number => {
+        if (behavior.bioenergeticFeeding && behavior.densitySwitching) {
+          return getPredatorP95TargetScore({
+            encounterScore: entry.score,
+            successProbability: candidateHuntSuccess(predator, cohort, entry, world),
+            expectedEdibleKg: entry.expectedEdibleKg,
+            mealUtilityCapacityKg: targetUtilityCapacityKg,
+            localPopulation: entry.localPopulation,
+            localCarryingCapacity: entry.localCarryingCapacity,
+          });
+        }
+        return getPredatorEnergyWeightedTargetScore(
+          entry.score,
+          entry.expectedEdibleKg,
+          targetUtilityCapacityKg,
+        );
+      };
+
       const shouldContinueFeeding = (): boolean => {
         if (huntIndex >= huntLimit || candidates.length === 0) return false;
         if (behavior.bioenergeticFeeding) {
@@ -944,22 +975,14 @@ export function tickSpatialPredatorsDay(
 
       while (shouldContinueFeeding()) {
         const totalScore = candidates.reduce(
-          (sum, entry) => sum + getPredatorEnergyWeightedTargetScore(
-            entry.score,
-            entry.expectedEdibleKg,
-            targetUtilityCapacityKg,
-          ),
+          (sum, entry) => sum + targetScore(entry),
           0,
         );
         if (totalScore <= 0) break;
         let roll = spatialUnitRandom(world.worldSeed, `predator-target|${predator.id}|${patchId}|${day}|${huntIndex}`) * totalScore;
         let candidate = candidates[0];
         for (const entry of candidates) {
-          roll -= getPredatorEnergyWeightedTargetScore(
-            entry.score,
-            entry.expectedEdibleKg,
-            targetUtilityCapacityKg,
-          );
+          roll -= targetScore(entry);
           if (roll <= 0) { candidate = entry; break; }
         }
         const preyPopulation = cohortPopulation(candidate.cohort);
