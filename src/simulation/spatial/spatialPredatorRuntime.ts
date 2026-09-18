@@ -38,8 +38,12 @@ import {
   registerPredatorImmigrationPulse,
 } from './spatialPredatorP6';
 import { calculatePredatorEnergyLedger } from './spatialPredatorP7';
+import {
+  calculatePredatorHuntPlan,
+  getPredatorEnergyWeightedTargetScore,
+} from './spatialPredatorP8';
 
-export const SPATIAL_PREDATOR_RUNTIME_VERSION = 7;
+export const SPATIAL_PREDATOR_RUNTIME_VERSION = 8;
 const JUVENILES = 0;
 const ADULTS = 1;
 const OLD = 2;
@@ -255,10 +259,6 @@ interface PreyCandidate {
   expectedEdibleKg: number;
 }
 
-export function getPredatorEnergyWeightedTargetScore(encounterScore: number, expectedEdibleKg: number): number {
-  return Math.max(0, encounterScore) * Math.max(0, expectedEdibleKg);
-}
-
 function preyCandidates(
   predator: SpatialPredatorSpeciesDefinition,
   startPatchId: string,
@@ -332,6 +332,26 @@ function islandPreferredPreyMetrics(
     }
   }
   return { heads, biomassKg };
+}
+
+function candidateHuntSuccess(
+  predator: SpatialPredatorSpeciesDefinition,
+  cohort: SpatialPredatorPatchCohortState,
+  candidate: PreyCandidate,
+  world: GeneratedSpatialWorld,
+): number {
+  const preyPopulation = cohortPopulation(candidate.cohort);
+  if (preyPopulation <= 0) return 0;
+  const encounterDensity = clamp01(Math.log1p(preyPopulation) / Math.log(80));
+  const predatorOpportunity = world.localSiteInfluenceByPatchId[candidate.patchId]?.predatorOpportunity ?? .25;
+  const refuge = world.localSiteInfluenceByPatchId[candidate.patchId]?.preyRefuge ?? .25;
+  return clamp01(
+    predator.huntSuccessBase
+      * (.55 + encounterDensity * .75)
+      * (.7 + cohort[CONDITION] * .3)
+      * (1 + predatorOpportunity * .22)
+      * (1 - refuge * .28),
+  );
 }
 
 function removeOnePrey(candidate: PreyCandidate, predator: SpatialPredatorSpeciesDefinition, random: number): { biomassKg: number; killed: boolean } {
@@ -545,6 +565,8 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     reserveGainKg: 0,
     edibleOverflowKg: 0,
     hungerRiskPredatorDays: 0,
+    huntingPredatorDays: 0,
+    reserveCoveredPredatorDays: 0,
     predatorDays: 0,
     foodCoveragePredatorDays: 0,
     reserveFillPredatorDays: 0,
@@ -707,29 +729,42 @@ export function tickSpatialPredatorsDay(
       let successfulHunts = 0;
       let huntedEdibleKg = 0;
       let lastKillPatchId: string | undefined;
-      const expectedAttempts = metabolicHeads * predator.maxKillsPerAdultPerDay / Math.max(.12, predator.huntSuccessBase);
-      const huntLimit = Math.min(24, deterministicRound(
-        world.worldSeed,
-        `predator-hunt-opportunities|${predator.id}|${patchId}|${day}`,
-        expectedAttempts,
-      ));
-      while (huntedEdibleKg < dailyNeed * 1.05 && huntIndex < huntLimit && candidates.length) {
+      const huntPlan = calculatePredatorHuntPlan({
+        metabolicHeads,
+        dailyNeedKg: dailyNeed,
+        reserveBeforeKg: reserveBefore,
+        reserveCapacityKg: reserveCapacity,
+        maxKillsPerAdultPerDay: predator.maxKillsPerAdultPerDay,
+        candidates: candidates.map(candidate => ({
+          encounterScore: candidate.score,
+          expectedEdibleKg: candidate.expectedEdibleKg,
+          successProbability: candidateHuntSuccess(predator, cohort, candidate, world),
+        })),
+      });
+      if (huntPlan.freshFoodTargetKg <= 0) speciesEvent.reserveCoveredPredatorDays += population;
+      while (huntedEdibleKg < huntPlan.freshFoodTargetKg * 1.05 && huntIndex < huntPlan.huntLimit && candidates.length) {
         const totalScore = candidates.reduce(
-          (sum, entry) => sum + getPredatorEnergyWeightedTargetScore(entry.score, entry.expectedEdibleKg),
+          (sum, entry) => sum + getPredatorEnergyWeightedTargetScore(
+            entry.score,
+            entry.expectedEdibleKg,
+            huntPlan.usableEnergyCapacityKg,
+          ),
           0,
         );
+        if (totalScore <= 0) break;
         let roll = spatialUnitRandom(world.worldSeed, `predator-target|${predator.id}|${patchId}|${day}|${huntIndex}`) * totalScore;
         let candidate = candidates[0];
         for (const entry of candidates) {
-          roll -= getPredatorEnergyWeightedTargetScore(entry.score, entry.expectedEdibleKg);
+          roll -= getPredatorEnergyWeightedTargetScore(
+            entry.score,
+            entry.expectedEdibleKg,
+            huntPlan.usableEnergyCapacityKg,
+          );
           if (roll <= 0) { candidate = entry; break; }
         }
         const preyPopulation = cohortPopulation(candidate.cohort);
         if (preyPopulation <= 0) { huntIndex += 1; continue; }
-        const encounterDensity = clamp01(Math.log1p(preyPopulation) / Math.log(80));
-        const predatorOpportunity = world.localSiteInfluenceByPatchId[candidate.patchId]?.predatorOpportunity ?? .25;
-        const refuge = world.localSiteInfluenceByPatchId[candidate.patchId]?.preyRefuge ?? .25;
-        const success = clamp01(predator.huntSuccessBase * (.55 + encounterDensity * .75) * (.7 + cohort[CONDITION] * .3) * (1 + predatorOpportunity * .22) * (1 - refuge * .28));
+        const success = candidateHuntSuccess(predator, cohort, candidate, world);
         const successRoll = spatialUnitRandom(world.worldSeed, `predator-hunt|${predator.id}|${patchId}|${day}|${huntIndex}`);
         if (successRoll <= success) {
           const removed = removeOnePrey(candidate, predator, spatialUnitRandom(world.worldSeed, `predator-stage|${predator.id}|${candidate.speciesId}|${candidate.patchId}|${day}|${huntIndex}`));
@@ -750,6 +785,7 @@ export function tickSpatialPredatorsDay(
       }
 
       speciesEvent.huntAttempts += huntIndex;
+      if (huntIndex > 0) speciesEvent.huntingPredatorDays += population;
       speciesEvent.successfulHunts += successfulHunts;
       speciesEvent.unsuccessfulHunts += Math.max(0, huntIndex - successfulHunts);
       const energy = calculatePredatorEnergyLedger(reserveBefore, reserveCapacity, huntedEdibleKg, dailyNeed);
