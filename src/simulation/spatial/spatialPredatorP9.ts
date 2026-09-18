@@ -410,3 +410,54 @@ export function predatorAlternativeFoodResources(speciesId: string): readonly Pr
   if (speciesId === 'PREDATOR_CIVET') return ['fruit', 'insects', 'carrion'];
   return [];
 }
+
+
+/**
+ * P9.5 local-density switching.
+ *
+ * The response uses local N/K instead of absolute head count so naturally
+ * low-density large prey are not treated as "rare" merely because rats have
+ * higher carrying density. At K the multiplier is 1; below K it falls
+ * sigmoid-like and approaches a quadratic response once multiplied by the
+ * existing encounter score (which already contains N).
+ *
+ * h=0.5 means half-saturation at half of authored local carrying capacity.
+ * This remains a generic functional-response parameter pending species-level
+ * calibration; it is deliberately not tied to the global prey-collapse gate.
+ */
+export function predatorLocalDensitySwitchFactor(
+  population: number,
+  localCarryingCapacity: number,
+  halfSaturationFraction = .5,
+): number {
+  const k = Math.max(1e-9, nonNegative(localCarryingCapacity));
+  const h = Math.max(.01, nonNegative(halfSaturationFraction));
+  const relativeDensity = nonNegative(population) / k;
+  if (relativeDensity <= 0) return 0;
+  return clamp((relativeDensity / (relativeDensity + h)) * (1 + h), 0, 1.5);
+}
+
+export interface PredatorP95TargetScoreInput {
+  encounterScore: number;
+  successProbability: number;
+  expectedEdibleKg: number;
+  mealUtilityCapacityKg: number;
+  localPopulation: number;
+  localCarryingCapacity: number;
+}
+
+/**
+ * Expected usable return per encounter, modulated by local density switching.
+ * No global population/K knowledge is used.
+ */
+export function getPredatorP95TargetScore(input: PredatorP95TargetScoreInput): number {
+  const encounter = nonNegative(input.encounterScore);
+  const success = clamp(input.successProbability, 0, 1);
+  const edible = nonNegative(input.expectedEdibleKg);
+  const capacity = Math.max(.001, nonNegative(input.mealUtilityCapacityKg));
+  const densitySwitch = predatorLocalDensitySwitchFactor(
+    input.localPopulation,
+    input.localCarryingCapacity,
+  );
+  return encounter * densitySwitch * success * Math.min(edible, capacity);
+}
