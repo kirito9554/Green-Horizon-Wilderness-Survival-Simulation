@@ -19,6 +19,9 @@ interface Aggregate {
   startPopulation: number;
   endPopulation: number;
   preyKilled: number;
+  preyBiomassKilledKg: number;
+  preyKillsBySpecies: Record<string, number>;
+  preyKillBiomassBySpeciesKg: Record<string, number>;
   huntAttempts: number;
   successfulHunts: number;
   unsuccessfulHunts: number;
@@ -58,6 +61,9 @@ for (const telemetry of Object.values(runtime.predatorSystem?.telemetry.bySpecie
     startPopulation: telemetry.endPopulation,
     endPopulation: telemetry.endPopulation,
     preyKilled: 0,
+    preyBiomassKilledKg: 0,
+    preyKillsBySpecies: {},
+    preyKillBiomassBySpeciesKg: {},
     huntAttempts: 0,
     successfulHunts: 0,
     unsuccessfulHunts: 0,
@@ -96,6 +102,13 @@ function accumulate(daily: SpatialPredatorSpeciesTelemetry): void {
   if (!total) return;
   total.endPopulation = daily.endPopulation;
   total.preyKilled += daily.preyKilled;
+  total.preyBiomassKilledKg += daily.preyBiomassKilledKg;
+  for (const [preyId, kills] of Object.entries(daily.preyKillsBySpecies)) {
+    total.preyKillsBySpecies[preyId] = (total.preyKillsBySpecies[preyId] ?? 0) + kills;
+  }
+  for (const [preyId, biomass] of Object.entries(daily.preyKillBiomassBySpeciesKg)) {
+    total.preyKillBiomassBySpeciesKg[preyId] = (total.preyKillBiomassBySpeciesKg[preyId] ?? 0) + biomass;
+  }
   total.huntAttempts += daily.huntAttempts;
   total.successfulHunts += daily.successfulHunts;
   total.unsuccessfulHunts += daily.unsuccessfulHunts;
@@ -173,6 +186,11 @@ const species = Object.fromEntries(Object.entries(aggregates).map(([speciesId, a
     assimilatedVsDemand: a.shadowAssimilatedEnergyKJ / demand,
     intakeVsDemand: a.ingestedPreyEnergyKJ / demand,
     totalGrossIntakeVsDemand: (a.ingestedPreyEnergyKJ + a.alternativeFoodEnergyKJ) / demand,
+    averageKillBiomassKg: a.preyKilled > 0 ? a.preyBiomassKilledKg / a.preyKilled : 0,
+    topPrey: Object.entries(a.preyKillsBySpecies)
+      .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))
+      .slice(0, 5)
+      .map(([preyId, kills]) => ({ preyId, kills, biomassKg: a.preyKillBiomassBySpeciesKg[preyId] ?? 0 })),
   }];
 }));
 
@@ -208,10 +226,16 @@ for (const [speciesId, value] of Object.entries(species)) {
       + `attempts/predDay=${value.attemptsPerPredatorDay.toFixed(3)} kills/predDay=${value.killsPerPredatorDay.toFixed(3)} `
       + `success=${value.huntSuccessRate.toFixed(3)} coverage=${value.bioCoverage.toFixed(3)} shortfall=${value.bioShortfall.toFixed(3)} `
       + `hungerRisk=${value.hungerRiskShare.toFixed(3)} huntDays=${value.huntingDayShare.toFixed(3)} `
-      + `digestDays=${value.digestingDayShare.toFixed(3)} totalGross/demand=${value.totalGrossIntakeVsDemand.toFixed(3)} altKg=${value.alternativeFoodConsumedKg.toFixed(1)} `
+      + `digestDays=${value.digestingDayShare.toFixed(3)} totalGross/demand=${value.totalGrossIntakeVsDemand.toFixed(3)} avgKillKg=${value.averageKillBiomassKg.toFixed(2)} altKg=${value.alternativeFoodConsumedKg.toFixed(1)} `
       + `fruit=${value.alternativeFruitKg.toFixed(1)} insects=${value.alternativeInsectKg.toFixed(1)} carrion=${value.alternativeCarrionKg.toFixed(1)} `
       + `births=${value.births} immigrants=${value.immigrants} deaths=${value.deaths}`,
   );
+  if (value.topPrey.length > 0) {
+    console.log(
+      `[${phase}|${seed}] ${speciesId} preyMix=`
+        + value.topPrey.map(entry => `${entry.preyId}:${entry.kills}/${entry.biomassKg.toFixed(1)}kg`).join(','),
+    );
+  }
 }
 
 mkdirSync('artifacts', { recursive: true });
