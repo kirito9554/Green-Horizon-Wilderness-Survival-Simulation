@@ -53,6 +53,7 @@ import {
   calculatePredatorFeedingBoutPlan,
   getPredatorP95TargetScore,
   predatorAlternativeFoodResources,
+  predatorCalibratedBoutAttemptsPerHead,
   predatorConsumedPreyFraction,
   predatorShadowSdaFraction,
 } from './spatialPredatorP9';
@@ -852,6 +853,9 @@ export function tickSpatialPredatorsDay(
           bioReserveKJ: bioReserveBeforeKJ,
           gutEnergyKJ: shadowGutStartKJ,
           maxKillsPerAdultPerDay: predator.maxKillsPerAdultPerDay,
+          calibratedBoutAttemptsPerHead: behavior.speciesCalibration
+            ? predatorCalibratedBoutAttemptsPerHead(predator.id)
+            : 0,
           candidates: candidates.map(candidate => ({
             encounterScore: candidate.score,
             expectedEdibleKg: candidate.expectedEdibleKg,
@@ -939,6 +943,9 @@ export function tickSpatialPredatorsDay(
         bioReserveKJ: bioReserveBeforeKJ,
         gutEnergyKJ: shadowGutStartKJ + alternativeFoodEnergyKJ,
         maxKillsPerAdultPerDay: predator.maxKillsPerAdultPerDay,
+        calibratedBoutAttemptsPerHead: behavior.speciesCalibration
+          ? predatorCalibratedBoutAttemptsPerHead(predator.id)
+          : 0,
         candidates: candidates.map(candidate => ({
           encounterScore: candidate.score,
           expectedEdibleKg: candidate.expectedEdibleKg,
