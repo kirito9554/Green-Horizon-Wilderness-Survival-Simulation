@@ -7,7 +7,8 @@ import type { SpatialPredatorSpeciesTelemetry } from '../src/types/spatialEcolog
 const seed = process.env.SPATIAL_TROPHIC_SEED ?? 'spatial-trophic-soak-alpha';
 const days = Math.max(2, Math.floor(Number(process.env.P9_DAYS ?? 30)));
 const alternativeDiet = process.env.P9_ALT_DIET === '1';
-const phase = alternativeDiet ? 'p9.4' : 'p9.3';
+const densitySwitching = process.env.P9_SWITCHING === '1';
+const phase = densitySwitching ? 'p9.5' : alternativeDiet ? 'p9.4' : 'p9.3';
 const world = generateSpatialWorld(seed);
 const runtime = createSpatialFaunaEcosystemState(seed, 1, world);
 const initialPrey = getSpatialFaunaRuntimePopulation(runtime);
@@ -152,6 +153,7 @@ for (let day = 2; day <= days; day += 1) {
     controlledRecovery: true,
     bioenergeticFeeding: true,
     alternativeDiet,
+    densitySwitching,
   });
   totalKills += telemetry.predatorKills ?? 0;
   for (const daily of Object.values(runtime.predatorSystem?.telemetry.bySpecies ?? {})) accumulate(daily);
@@ -199,6 +201,7 @@ const report = {
   days,
   phase,
   alternativeDiet,
+  densitySwitching,
   initialPrey,
   endPrey,
   minPrey,
