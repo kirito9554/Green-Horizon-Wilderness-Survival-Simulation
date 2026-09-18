@@ -7,7 +7,9 @@ import {
   calculateFieldMetabolicRateKJPerDay,
   calculatePredatorBioenergeticLedger,
   calculatePredatorFeedingBoutPlan,
+  getPredatorP95TargetScore,
   predatorAlternativeFoodResources,
+  predatorLocalDensitySwitchFactor,
   PREDATOR_ALTERNATIVE_FOOD_ENERGY_KJ_PER_KG,
   calculatePredatorBioenergeticShadow,
   estimatePredatorShadowDigestionDays,
@@ -61,6 +63,40 @@ close(
 );
 assert.ok(day1.state.daysRemaining >= 6 && day1.state.daysRemaining <= 7, 'python meal must retain multi-day gut state after day one');
 assert.ok(day1.digestionCostKJ > 0 && day1.assimilatedEnergyKJ > 0, 'digestion must split released energy into SDA cost and assimilated energy');
+
+close(
+  predatorLocalDensitySwitchFactor(100, 100),
+  1,
+  1e-9,
+  'P9.5 density switching should be neutral at local K',
+);
+assert.ok(
+  predatorLocalDensitySwitchFactor(10, 100) < predatorLocalDensitySwitchFactor(50, 100),
+  'P9.5 density switching must reduce pressure as prey becomes locally rare',
+);
+close(
+  predatorLocalDensitySwitchFactor(10, 100),
+  predatorLocalDensitySwitchFactor(1, 10),
+  1e-9,
+  'P9.5 switching must depend on relative N/K rather than absolute head count',
+);
+const smallTarget = getPredatorP95TargetScore({
+  encounterScore: 10,
+  successProbability: .3,
+  expectedEdibleKg: .2,
+  mealUtilityCapacityKg: 3,
+  localPopulation: 50,
+  localCarryingCapacity: 100,
+});
+const largeTarget = getPredatorP95TargetScore({
+  encounterScore: 10,
+  successProbability: .3,
+  expectedEdibleKg: 2,
+  mealUtilityCapacityKg: 3,
+  localPopulation: 50,
+  localCarryingCapacity: 100,
+});
+assert.ok(largeTarget > smallTarget, 'P9.5 profitability should prefer more usable energy per comparable encounter');
 
 assert.deepEqual(
   predatorAlternativeFoodResources('PREDATOR_MONITOR_LIZARD'),
