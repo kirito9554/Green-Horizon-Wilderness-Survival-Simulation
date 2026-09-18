@@ -8,9 +8,9 @@
 | Hạng mục | Nguồn gốc | License | Ghi chú kỹ thuật |
 | :--- | :--- | :--- | :--- |
 | **System & Action Icons** | Lucide React Icons | ISC License | Sử dụng trực tiếp từ thư viện cài sẵn, vector SVG sắc nét |
-| **Camp & Biome Visuals** | SVG Vector Canvas & Styled Art | Custom / Open Assets | Đồ họa phong cách tropical survival bán tả thực |
-| **Survivor Portraits** | Vector Avatars / Procedural Stylized | Custom MIT | Chân dung nhân vật phong cách sinh tồn |
-| **UI Components (Bars, Badges, Panels)** | Procedural Tailwind CSS | MIT / In-house | Thanh sinh tồn, đồng hồ chu kỳ, tải trọng kho |
+| **Camp & Biome Visuals** | Project-specific / generated / edited assets | No separate license declared | Đồ họa phong cách tropical survival bán tả thực; provenance cần được ghi lại khi nhập asset bên ngoài |
+| **Survivor Portraits** | Project-specific / procedural stylized assets | No separate license declared | Chân dung nhân vật phong cách sinh tồn |
+| **UI Components (Bars, Badges, Panels)** | Procedural Tailwind CSS / in-repo implementation | Project license not yet selected | Thanh sinh tồn, đồng hồ chu kỳ, tải trọng kho |
 
 ---
 
@@ -27,5 +27,7 @@
 ---
 
 ### 3. QUY TRÌNH KIỂM CHỨNG TÀI NGUYÊN
-* Không sử dụng bất kỳ hình ảnh nào chưa rõ bản quyền.
-* Toàn bộ mã nguồn và đồ họa vector procedural được bảo trì trực tiếp trong codebase, đảm bảo tải siêu tốc (<1.5s), không phụ thuộc vào CDN bên thứ ba có thể bị gián đoạn kết nối.
+* Asset nhập từ bên ngoài cần ghi rõ nguồn gốc và điều khoản sử dụng trước khi commit.
+* Asset project-specific / generated / edited trong repo hiện chưa được cấp một project-wide open-source license riêng.
+* Lucide React giữ nguyên license upstream của thư viện.
+* Public visibility của repository không đồng nghĩa với việc tự động cấp quyền tái sử dụng cho các asset gốc của dự án.
