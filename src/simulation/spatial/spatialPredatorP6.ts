@@ -14,6 +14,7 @@ const SHADOW_GUT_ENERGY = 5;
 const SHADOW_GUT_MASS = 6;
 const SHADOW_DIGESTION_DAYS = 7;
 const SHADOW_DAYS_SINCE_MEAL = 8;
+const BIO_RESERVE_ENERGY = 9;
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
 
 /** Recovery must remain stable above MVP before accumulated rescue pressure is cleared. */
@@ -147,6 +148,7 @@ export function extractPredatorCohortTransfer(
     0, 0,
     cohort[SHADOW_DIGESTION_DAYS] ?? 0,
     cohort[SHADOW_DAYS_SINCE_MEAL] ?? 0,
+    0,
   ];
   let remaining = Math.min(Math.max(0, requested), predatorCohortPopulation(cohort));
   const order = adultFirst ? [ADULTS, OLD, JUVENILES] as const : [JUVENILES, ADULTS, OLD] as const;
@@ -175,6 +177,11 @@ export function extractPredatorCohortTransfer(
     cohort[SHADOW_GUT_MASS] = gutMass - gutMassShare;
     transfer[SHADOW_GUT_ENERGY] = gutEnergyShare;
     transfer[SHADOW_GUT_MASS] = gutMassShare;
+
+    const bioReserve = Math.max(0, cohort[BIO_RESERVE_ENERGY] ?? 0);
+    const bioReserveShare = bioReserve * heads / sourceTotalHeads;
+    cohort[BIO_RESERVE_ENERGY] = bioReserve - bioReserveShare;
+    transfer[BIO_RESERVE_ENERGY] = bioReserveShare;
   }
   return transfer;
 }
@@ -199,6 +206,8 @@ export function mergePredatorCohortTransfer(
   const totalGutEnergy = targetGutEnergy + transferGutEnergy;
   target[SHADOW_GUT_ENERGY] = totalGutEnergy;
   target[SHADOW_GUT_MASS] = targetGutMass + transferGutMass;
+  target[BIO_RESERVE_ENERGY] = Math.max(0, target[BIO_RESERVE_ENERGY] ?? 0)
+    + Math.max(0, transfer[BIO_RESERVE_ENERGY] ?? 0);
 
   const targetDigestionDays = Math.max(0, target[SHADOW_DIGESTION_DAYS] ?? 0);
   const transferDigestionDays = Math.max(0, transfer[SHADOW_DIGESTION_DAYS] ?? 0);
