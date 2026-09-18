@@ -461,3 +461,62 @@ export function getPredatorP95TargetScore(input: PredatorP95TargetScoreInput): n
   );
   return encounter * densitySwitch * success * Math.min(edible, capacity);
 }
+
+
+/**
+ * P9.6 species/analogue calibration.
+ *
+ * Forest Raptor uses the mean of four adult Ferruginous Hawk nesting-season
+ * expenditure estimates (330.9, 374.3, 265.3, 294.6 kcal/day), converted at
+ * 4.184 kJ/kcal: ~1.323 MJ/day. This replaces the broad bird allometry only
+ * when the P9.6 calibration flag is enabled.
+ */
+export const PREDATOR_RAPTOR_ANALOGUE_FMR_KJ_PER_DAY = 1323;
+
+export function calculatePredatorCalibratedFmrKJPerAdultDay(
+  speciesId: string,
+  adultWeightKg: number,
+): number {
+  if (speciesId === 'PREDATOR_RAPTOR') return PREDATOR_RAPTOR_ANALOGUE_FMR_KJ_PER_DAY;
+  return calculateFieldMetabolicRateKJPerDay(
+    adultWeightKg,
+    getPredatorBioenergeticClass(speciesId),
+  );
+}
+
+/**
+ * Fraction of killed prey mass actually ingested.
+ *
+ * The 0.62 fallback is the inherited P7/P8 carcass-use assumption.
+ * - Pythons swallow intact prey, so whole-prey ingestion is authoritative.
+ * - Accipitrid-like raptors consume most small prey but dismember larger prey;
+ *   the smooth 0.85 -> 0.65 curve is a modeled morphology constraint, not a
+ *   measured universal fraction.
+ * - Crocodilians can swallow small prey rapidly but dismember large prey; the
+ *   small-prey branch therefore approaches 0.9 and returns to the inherited
+ *   fraction as prey becomes large relative to predator mass.
+ */
+export function predatorConsumedPreyFraction(
+  speciesId: string,
+  preyMassKg: number,
+  predatorMassKg: number,
+): number {
+  const relative = predatorMassKg > 0 ? nonNegative(preyMassKg) / predatorMassKg : 1;
+  if (speciesId === 'PREDATOR_PYTHON') return 1;
+
+  if (speciesId === 'PREDATOR_RAPTOR') {
+    if (relative <= .2) return .85;
+    if (relative >= .85) return .65;
+    const t = (relative - .2) / .65;
+    return .85 + (.65 - .85) * t;
+  }
+
+  if (speciesId === 'PREDATOR_ESTUARINE_CROCODILE') {
+    if (relative <= .1) return .9;
+    if (relative >= .35) return .62;
+    const t = (relative - .1) / .25;
+    return .9 + (.62 - .9) * t;
+  }
+
+  return .62;
+}
