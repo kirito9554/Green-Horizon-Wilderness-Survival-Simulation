@@ -237,6 +237,11 @@ export interface SpatialPredatorSpeciesTelemetry {
   bioReserveGainKJ: number;
   bioEnergyOverflowKJ: number;
   feedingBoutPredatorDays: number;
+  alternativeFoodConsumedKg: number;
+  alternativeFoodEnergyKJ: number;
+  alternativeFruitKg: number;
+  alternativeInsectKg: number;
+  alternativeCarrionKg: number;
   hungerRiskPredatorDays: number;
   huntingPredatorDays: number;
   reserveCoveredPredatorDays: number;
@@ -272,6 +277,8 @@ export interface SpatialPredatorTelemetry {
   preyKilled: number;
   preyBiomassKilledKg: number;
   carrionAddedKg: number;
+  alternativeFoodConsumedKg?: number;
+  alternativeFoodEnergyKJ?: number;
   births: number;
   deaths: number;
   hungerDeaths?: number;
