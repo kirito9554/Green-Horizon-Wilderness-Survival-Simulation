@@ -13,7 +13,10 @@ export interface SpatialPredatorSpeciesDefinition {
   adultWeightKg: number;
   dailyFoodKgPerAdult: number;
   dailyWaterNeed: number;
-  /** Existing kill cadence from the pre-spatial ecology model; reserve horizon is derived from this rather than tuned separately. */
+  /**
+   * Existing kill cadence from the pre-spatial ecology model. It is a feeding-activity cadence,
+   * not a hard global cap across all prey species; reserve horizon is derived from it.
+   */
   maxKillsPerAdultPerDay: number;
   densityPerKm2: number;
   worldPresence: number;
