@@ -186,3 +186,189 @@ export function advancePredatorShadowDigestion(
     assimilatedEnergyKJ,
   };
 }
+
+
+export interface PredatorFeedingCandidateInput {
+  encounterScore: number;
+  expectedEdibleKg: number;
+  successProbability: number;
+}
+
+export interface PredatorFeedingBoutPlanInput {
+  speciesId: string;
+  metabolicHeads: number;
+  fmrDemandKJ: number;
+  bioReserveKJ: number;
+  gutEnergyKJ: number;
+  maxKillsPerAdultPerDay: number;
+  candidates: readonly PredatorFeedingCandidateInput[];
+}
+
+export interface PredatorFeedingBoutPlan {
+  storedUsableEnergyKJ: number;
+  feedingTriggerKJ: number;
+  mealTargetKJ: number;
+  feedingGapKJ: number;
+  mealUtilityCapacityKg: number;
+  meanSuccessProbability: number;
+  authoredCadenceAttempts: number;
+  huntLimit: number;
+}
+
+export interface PredatorBioenergeticLedger {
+  demandKJ: number;
+  reserveBeforeKJ: number;
+  assimilatedKJ: number;
+  availableKJ: number;
+  coveredDemandKJ: number;
+  shortfallKJ: number;
+  reserveGainKJ: number;
+  reserveDrawKJ: number;
+  reserveAfterKJ: number;
+  overflowKJ: number;
+}
+
+/**
+ * Meal target horizon for the first authoritative feeding-bout pass.
+ *
+ * Python: seven days is the midpoint of the observed 6-8 day return to
+ * prefeeding metabolism after a 25%-body-mass meal.
+ * Crocodilian: four days follows the documented multi-day postprandial
+ * response after a ~7.5%-body-mass meal.
+ *
+ * Other taxa deliberately use a one-day target until species calibration.
+ * This is not a claim that they physiologically empty the gut in one day;
+ * it prevents unsourced multi-day satiation constants from entering P9.3.
+ */
+export function predatorFeedingTargetHorizonDays(speciesId: string): number {
+  if (speciesId === 'PREDATOR_PYTHON') return 7;
+  if (speciesId === 'PREDATOR_ESTUARINE_CROCODILE') return 4;
+  return 1;
+}
+
+export function predatorNetGutEnergyKJ(speciesId: string, grossGutEnergyKJ: number): number {
+  return nonNegative(grossGutEnergyKJ) * (1 - predatorShadowSdaFraction(speciesId));
+}
+
+/**
+ * P9.3 feeding-bout planner.
+ *
+ * Critical distinction from P8:
+ * - energy deficit decides whether a bout is needed and when it can stop;
+ * - energy deficit NEVER increases the number of hunt attempts.
+ *
+ * Attempt budget comes only from the inherited feeding-activity cadence and
+ * encounter success. This removes the P8 positive feedback where tiny prey
+ * created 10-20+ attempts simply because each kill yielded little energy.
+ */
+export function calculatePredatorFeedingBoutPlan(
+  input: PredatorFeedingBoutPlanInput,
+): PredatorFeedingBoutPlan {
+  const metabolicHeads = nonNegative(input.metabolicHeads);
+  const fmrDemandKJ = nonNegative(input.fmrDemandKJ);
+  const reserveKJ = nonNegative(input.bioReserveKJ);
+  const netGutKJ = predatorNetGutEnergyKJ(input.speciesId, input.gutEnergyKJ);
+  const storedUsableEnergyKJ = reserveKJ + netGutKJ;
+  const feedingTriggerKJ = fmrDemandKJ;
+  const mealTargetKJ = fmrDemandKJ * predatorFeedingTargetHorizonDays(input.speciesId);
+  const feedingGapKJ = Math.max(0, mealTargetKJ - storedUsableEnergyKJ);
+  const mealUtilityCapacityKg = feedingGapKJ / REFERENCE_WET_PREY_ENERGY_KJ_PER_KG;
+
+  if (
+    fmrDemandKJ <= 1e-9
+    || storedUsableEnergyKJ >= feedingTriggerKJ
+    || input.candidates.length === 0
+  ) {
+    return {
+      storedUsableEnergyKJ,
+      feedingTriggerKJ,
+      mealTargetKJ,
+      feedingGapKJ,
+      mealUtilityCapacityKg,
+      meanSuccessProbability: 0,
+      authoredCadenceAttempts: 0,
+      huntLimit: 0,
+    };
+  }
+
+  let weightSum = 0;
+  let successWeighted = 0;
+  for (const candidate of input.candidates) {
+    const encounter = nonNegative(candidate.encounterScore);
+    const expectedEdibleKg = nonNegative(candidate.expectedEdibleKg);
+    const capacityKg = Math.max(expectedEdibleKg, mealUtilityCapacityKg);
+    const weight = encounter * Math.min(expectedEdibleKg, capacityKg);
+    if (weight <= 0) continue;
+    const success = clamp(candidate.successProbability, 0, 1);
+    weightSum += weight;
+    successWeighted += weight * success;
+  }
+
+  if (weightSum <= 0) {
+    return {
+      storedUsableEnergyKJ,
+      feedingTriggerKJ,
+      mealTargetKJ,
+      feedingGapKJ,
+      mealUtilityCapacityKg,
+      meanSuccessProbability: 0,
+      authoredCadenceAttempts: 0,
+      huntLimit: 0,
+    };
+  }
+
+  const meanSuccessProbability = clamp(successWeighted / weightSum, 0, 1);
+  const effectiveSuccess = Math.max(.05, meanSuccessProbability);
+  const authoredCadenceAttempts = metabolicHeads
+    * nonNegative(input.maxKillsPerAdultPerDay)
+    / effectiveSuccess;
+  const huntLimit = Math.min(24, Math.max(1, Math.ceil(authoredCadenceAttempts)));
+
+  return {
+    storedUsableEnergyKJ,
+    feedingTriggerKJ,
+    mealTargetKJ,
+    feedingGapKJ,
+    mealUtilityCapacityKg,
+    meanSuccessProbability,
+    authoredCadenceAttempts,
+    huntLimit,
+  };
+}
+
+export function calculatePredatorBioenergeticLedger(
+  demandKJ: number,
+  reserveBeforeKJ: number,
+  reserveCapacityKJ: number,
+  assimilatedKJ: number,
+): PredatorBioenergeticLedger {
+  const demand = nonNegative(demandKJ);
+  const capacity = nonNegative(reserveCapacityKJ);
+  const reserveBefore = Math.min(capacity, nonNegative(reserveBeforeKJ));
+  const assimilated = nonNegative(assimilatedKJ);
+  const availableKJ = reserveBefore + assimilated;
+  const coveredDemandKJ = Math.min(demand, availableKJ);
+  const shortfallKJ = Math.max(0, demand - coveredDemandKJ);
+  const afterDemand = Math.max(0, availableKJ - coveredDemandKJ);
+  const reserveAfterKJ = Math.min(capacity, afterDemand);
+  const overflowKJ = Math.max(0, afterDemand - reserveAfterKJ);
+  const reserveDrawKJ = Math.min(reserveBefore, coveredDemandKJ);
+  const freshToDemandKJ = Math.min(assimilated, coveredDemandKJ);
+  const reserveGainKJ = Math.max(0, reserveAfterKJ - Math.max(0, reserveBefore - reserveDrawKJ));
+
+  return {
+    demandKJ: demand,
+    reserveBeforeKJ: reserveBefore,
+    assimilatedKJ: assimilated,
+    availableKJ,
+    coveredDemandKJ,
+    shortfallKJ,
+    reserveGainKJ,
+    reserveDrawKJ,
+    reserveAfterKJ,
+    overflowKJ,
+  };
+}
+
+/** Authority-friendly name; the old shadow name is retained for P9.1/P9.2 reports. */
+export const advancePredatorDigestion = advancePredatorShadowDigestion;
