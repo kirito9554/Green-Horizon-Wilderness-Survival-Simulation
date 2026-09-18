@@ -206,6 +206,12 @@ export interface SpatialPredatorSpeciesTelemetry {
   reserveDrawKg: number;
   reserveGainKg: number;
   edibleOverflowKg: number;
+  /** P9.1 shadow-only broad-class field metabolic demand; not yet authoritative for behavior. */
+  fmrDemandKJ: number;
+  /** P9.1 legacy kg-food demand converted onto the reference wet-prey energy axis. */
+  legacyDemandEquivalentKJ: number;
+  /** P9.1 edible vertebrate kills converted onto the same reference energy axis. */
+  ingestedPreyEnergyKJ: number;
   hungerRiskPredatorDays: number;
   huntingPredatorDays: number;
   reserveCoveredPredatorDays: number;
