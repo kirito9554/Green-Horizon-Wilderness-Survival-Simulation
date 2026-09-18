@@ -42,7 +42,11 @@ import {
   calculatePredatorHuntPlan,
   getPredatorEnergyWeightedTargetScore,
 } from './spatialPredatorP8';
-import { calculatePredatorBioenergeticShadow } from './spatialPredatorP9';
+import {
+  REFERENCE_WET_PREY_ENERGY_KJ_PER_KG,
+  advancePredatorShadowDigestion,
+  calculatePredatorBioenergeticShadow,
+} from './spatialPredatorP9';
 
 export const SPATIAL_PREDATOR_RUNTIME_VERSION = 8;
 const JUVENILES = 0;
@@ -50,6 +54,10 @@ const ADULTS = 1;
 const OLD = 2;
 const CONDITION = 3;
 const RESERVE = 4;
+const SHADOW_GUT_ENERGY = 5;
+const SHADOW_GUT_MASS = 6;
+const SHADOW_DIGESTION_DAYS = 7;
+const SHADOW_DAYS_SINCE_MEAL = 8;
 const CARRION_STOCK_INDEX = 7;
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 const round3 = (v: number): number => Math.round(v * 1000) / 1000;
@@ -568,6 +576,11 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     fmrDemandKJ: 0,
     legacyDemandEquivalentKJ: 0,
     ingestedPreyEnergyKJ: 0,
+    shadowGutStartKJ: 0,
+    shadowGutEndKJ: 0,
+    shadowAssimilatedEnergyKJ: 0,
+    shadowDigestionCostKJ: 0,
+    shadowDigestingPredatorDays: 0,
     hungerRiskPredatorDays: 0,
     huntingPredatorDays: 0,
     reserveCoveredPredatorDays: 0,
@@ -732,6 +745,14 @@ export function tickSpatialPredatorsDay(
       let huntIndex = 0;
       let successfulHunts = 0;
       let huntedEdibleKg = 0;
+      let huntedBiomassKg = 0;
+      const shadowGutStartKJ = Math.max(0, cohort[SHADOW_GUT_ENERGY] ?? 0);
+      const shadowGutStartMassKg = Math.max(0, cohort[SHADOW_GUT_MASS] ?? 0);
+      const shadowDigestionDays = Math.max(
+        0,
+        cohort[SHADOW_DIGESTION_DAYS] ?? (shadowGutStartKJ > 0 ? 1 : 0),
+      );
+      const shadowDaysSinceMeal = Math.max(0, cohort[SHADOW_DAYS_SINCE_MEAL] ?? 0);
       let lastKillPatchId: string | undefined;
       const huntPlan = calculatePredatorHuntPlan({
         metabolicHeads,
@@ -775,6 +796,7 @@ export function tickSpatialPredatorsDay(
           if (removed.killed) {
             const edible = removed.biomassKg * .62;
             huntedEdibleKg += edible;
+            huntedBiomassKg += removed.biomassKg;
             lastKillPatchId = candidate.patchId;
             carrionAddedKg += addCarrion(fauna, candidate.patchId, removed.biomassKg - edible);
             preyKilled += 1;
@@ -819,6 +841,34 @@ export function tickSpatialPredatorsDay(
       speciesEvent.fmrDemandKJ += bioenergeticShadow.fmrDemandKJ;
       speciesEvent.legacyDemandEquivalentKJ += bioenergeticShadow.legacyDemandEquivalentKJ;
       speciesEvent.ingestedPreyEnergyKJ += bioenergeticShadow.ingestedPreyEnergyKJ;
+
+      // P9.2: persist a shadow gut/digestion state on the cohort. The state is
+      // transferred with the cohort but remains observational: P8 hunting and
+      // mortality still do not read it.
+      const shadowDigestion = advancePredatorShadowDigestion(
+        {
+          gutEnergyKJ: shadowGutStartKJ,
+          gutMassKg: shadowGutStartMassKg,
+          daysRemaining: shadowDigestionDays,
+          daysSinceMeal: shadowDaysSinceMeal,
+          lastMealEnergyKJ: 0,
+        },
+        predator.id,
+        predator.adultWeightKg * Math.max(.25, metabolicHeads),
+        huntedBiomassKg,
+        huntedEdibleKg * REFERENCE_WET_PREY_ENERGY_KJ_PER_KG,
+      );
+      cohort[SHADOW_GUT_ENERGY] = shadowDigestion.state.gutEnergyKJ;
+      cohort[SHADOW_GUT_MASS] = shadowDigestion.state.gutMassKg;
+      cohort[SHADOW_DIGESTION_DAYS] = shadowDigestion.state.daysRemaining;
+      cohort[SHADOW_DAYS_SINCE_MEAL] = shadowDigestion.state.daysSinceMeal;
+      speciesEvent.shadowGutStartKJ += shadowGutStartKJ;
+      speciesEvent.shadowGutEndKJ += shadowDigestion.state.gutEnergyKJ;
+      speciesEvent.shadowAssimilatedEnergyKJ += shadowDigestion.assimilatedEnergyKJ;
+      speciesEvent.shadowDigestionCostKJ += shadowDigestion.digestionCostKJ;
+      if (shadowGutStartKJ > 0 || huntedEdibleKg > 0) {
+        speciesEvent.shadowDigestingPredatorDays += population;
+      }
 
       if (edibleOverflowKg > 0 && lastKillPatchId) carrionAddedKg += addCarrion(fauna, lastKillPatchId, edibleOverflowKg);
 
