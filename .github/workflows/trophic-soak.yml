@@ -15,6 +15,10 @@ on:
       - '.github/workflows/trophic-soak.yml'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   trophic-soak:
     runs-on: ubuntu-latest
