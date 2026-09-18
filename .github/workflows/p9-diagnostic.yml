@@ -11,6 +11,10 @@ on:
       - 'package.json'
       - '.github/workflows/p9-diagnostic.yml'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   p9-diagnostic:
     runs-on: ubuntu-latest
