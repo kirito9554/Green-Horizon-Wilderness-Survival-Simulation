@@ -56,10 +56,10 @@ jobs:
           PREDATOR_P6_ASSERT: ${{ matrix.gate }}
         run: npm run test:spatial-trophic-soak
 
-      - name: Upload P7 trophic report
+      - name: Upload P8 trophic report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: predator-p7-${{ matrix.mode }}-${{ matrix.seed }}
-          path: artifacts/predator-p7-*.json
+          name: predator-p8-${{ matrix.mode }}-${{ matrix.seed }}
+          path: artifacts/predator-p8-*.json
           if-no-files-found: warn

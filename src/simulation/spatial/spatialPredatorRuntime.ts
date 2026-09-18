@@ -252,6 +252,11 @@ interface PreyCandidate {
   cohort: SpatialFaunaPatchCohortState;
   score: number;
   adultWeightKg: number;
+  expectedEdibleKg: number;
+}
+
+export function getPredatorEnergyWeightedTargetScore(encounterScore: number, expectedEdibleKg: number): number {
+  return Math.max(0, encounterScore) * Math.max(0, expectedEdibleKg);
 }
 
 function preyCandidates(
@@ -280,7 +285,14 @@ function preyCandidates(
       const refuge = world.localSiteInfluenceByPatchId[patchId]?.preyRefuge ?? .25;
       const encounter = world.localSiteInfluenceByPatchId[patchId]?.predatorOpportunity ?? .25;
       const score = population * preference * sizeFit * distanceFit * (.78 + encounter * .38) * (1 - refuge * .32);
-      if (score > 0) result.push({ speciesId: preyDef.id, patchId, cohort, score, adultWeightKg: preyDef.adultWeightKg });
+      if (score > 0) result.push({
+        speciesId: preyDef.id,
+        patchId,
+        cohort,
+        score,
+        adultWeightKg: preyDef.adultWeightKg,
+        expectedEdibleKg: preyMass * .62,
+      });
     }
   }
   return result.sort((a, b) => b.score - a.score);
@@ -702,10 +714,16 @@ export function tickSpatialPredatorsDay(
         expectedAttempts,
       ));
       while (huntedEdibleKg < dailyNeed * 1.05 && huntIndex < huntLimit && candidates.length) {
-        const totalScore = candidates.reduce((sum, entry) => sum + entry.score, 0);
+        const totalScore = candidates.reduce(
+          (sum, entry) => sum + getPredatorEnergyWeightedTargetScore(entry.score, entry.expectedEdibleKg),
+          0,
+        );
         let roll = spatialUnitRandom(world.worldSeed, `predator-target|${predator.id}|${patchId}|${day}|${huntIndex}`) * totalScore;
         let candidate = candidates[0];
-        for (const entry of candidates) { roll -= entry.score; if (roll <= 0) { candidate = entry; break; } }
+        for (const entry of candidates) {
+          roll -= getPredatorEnergyWeightedTargetScore(entry.score, entry.expectedEdibleKg);
+          if (roll <= 0) { candidate = entry; break; }
+        }
         const preyPopulation = cohortPopulation(candidate.cohort);
         if (preyPopulation <= 0) { huntIndex += 1; continue; }
         const encounterDensity = clamp01(Math.log1p(preyPopulation) / Math.log(80));

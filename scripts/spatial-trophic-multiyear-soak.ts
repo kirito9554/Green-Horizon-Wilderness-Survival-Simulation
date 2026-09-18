@@ -571,7 +571,7 @@ function runFiveYearSoak(): void {
   };
   mkdirSync('artifacts', { recursive: true });
   const safeSeed = seed.replace(/[^a-zA-Z0-9_-]+/g, '-');
-  const reportPath = `artifacts/predator-p7-${mode}-${safeSeed}.json`;
+  const reportPath = `artifacts/predator-p8-${mode}-${safeSeed}.json`;
   writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(`[${label}] report=${reportPath}`);
 
