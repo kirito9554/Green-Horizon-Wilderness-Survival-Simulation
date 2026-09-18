@@ -146,13 +146,21 @@ export interface SpatialInsectRuntimeState {
   telemetry: SpatialInsectTelemetry;
 }
 
-/** Predator cohort: [juveniles, adults, old, condition 0..1, reserve kg food-equivalent]. */
+/**
+ * Predator cohort.
+ * P9.2 trailing digestion fields are optional for backward compatibility with
+ * runtime/save state created before shadow gut telemetry existed.
+ */
 export type SpatialPredatorPatchCohortState = [
   juveniles: number,
   adults: number,
   old: number,
   condition: number,
   reserveKg: number,
+  shadowGutEnergyKJ?: number,
+  shadowGutMassKg?: number,
+  shadowDigestionDaysRemaining?: number,
+  shadowDaysSinceMeal?: number,
 ];
 
 export interface SpatialPredatorSpeciesRuntimeState {
@@ -212,6 +220,12 @@ export interface SpatialPredatorSpeciesTelemetry {
   legacyDemandEquivalentKJ: number;
   /** P9.1 edible vertebrate kills converted onto the same reference energy axis. */
   ingestedPreyEnergyKJ: number;
+  /** P9.2 non-authoritative gut state accounting. */
+  shadowGutStartKJ: number;
+  shadowGutEndKJ: number;
+  shadowAssimilatedEnergyKJ: number;
+  shadowDigestionCostKJ: number;
+  shadowDigestingPredatorDays: number;
   hungerRiskPredatorDays: number;
   huntingPredatorDays: number;
   reserveCoveredPredatorDays: number;
