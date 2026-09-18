@@ -6,6 +6,8 @@ import type { SpatialPredatorSpeciesTelemetry } from '../src/types/spatialEcolog
 
 const seed = process.env.SPATIAL_TROPHIC_SEED ?? 'spatial-trophic-soak-alpha';
 const days = Math.max(2, Math.floor(Number(process.env.P9_DAYS ?? 30)));
+const alternativeDiet = process.env.P9_ALT_DIET === '1';
+const phase = alternativeDiet ? 'p9.4' : 'p9.3';
 const world = generateSpatialWorld(seed);
 const runtime = createSpatialFaunaEcosystemState(seed, 1, world);
 const initialPrey = getSpatialFaunaRuntimePopulation(runtime);
@@ -38,6 +40,11 @@ interface Aggregate {
   shadowAssimilatedEnergyKJ: number;
   shadowDigestionCostKJ: number;
   ingestedPreyEnergyKJ: number;
+  alternativeFoodConsumedKg: number;
+  alternativeFoodEnergyKJ: number;
+  alternativeFruitKg: number;
+  alternativeInsectKg: number;
+  alternativeCarrionKg: number;
   births: number;
   immigrants: number;
   deaths: number;
@@ -72,6 +79,11 @@ for (const telemetry of Object.values(runtime.predatorSystem?.telemetry.bySpecie
     shadowAssimilatedEnergyKJ: 0,
     shadowDigestionCostKJ: 0,
     ingestedPreyEnergyKJ: 0,
+    alternativeFoodConsumedKg: 0,
+    alternativeFoodEnergyKJ: 0,
+    alternativeFruitKg: 0,
+    alternativeInsectKg: 0,
+    alternativeCarrionKg: 0,
     births: 0,
     immigrants: 0,
     deaths: 0,
@@ -105,6 +117,11 @@ function accumulate(daily: SpatialPredatorSpeciesTelemetry): void {
   total.shadowAssimilatedEnergyKJ += daily.shadowAssimilatedEnergyKJ;
   total.shadowDigestionCostKJ += daily.shadowDigestionCostKJ;
   total.ingestedPreyEnergyKJ += daily.ingestedPreyEnergyKJ;
+  total.alternativeFoodConsumedKg += daily.alternativeFoodConsumedKg;
+  total.alternativeFoodEnergyKJ += daily.alternativeFoodEnergyKJ;
+  total.alternativeFruitKg += daily.alternativeFruitKg;
+  total.alternativeInsectKg += daily.alternativeInsectKg;
+  total.alternativeCarrionKg += daily.alternativeCarrionKg;
   total.births += daily.births;
   total.immigrants += daily.immigrants;
   total.deaths += daily.deaths;
@@ -121,6 +138,7 @@ for (let day = 2; day <= days; day += 1) {
     maintainMateConnectivity: true,
     controlledRecovery: true,
     bioenergeticFeeding: true,
+    alternativeDiet,
   });
   totalKills += telemetry.predatorKills ?? 0;
   for (const daily of Object.values(runtime.predatorSystem?.telemetry.bySpecies ?? {})) accumulate(daily);
@@ -160,6 +178,8 @@ const species = Object.fromEntries(Object.entries(aggregates).map(([speciesId, a
 const report = {
   seed,
   days,
+  phase,
+  alternativeDiet,
   initialPrey,
   endPrey,
   minPrey,
@@ -175,23 +195,25 @@ const report = {
 };
 
 console.log(
-  `[p9.3|${seed}|${days}d] prey=${initialPrey}->${endPrey} min=${minPrey}/${carryingCapacity} `
+  `[${phase}|${seed}|${days}d] prey=${initialPrey}->${endPrey} min=${minPrey}/${carryingCapacity} `
     + `predators=${initialPredators}->${endPredators} kills=${totalKills}`,
 );
 for (const point of checkpoints) {
-  console.log(`[p9.3|${seed}] day=${point.day} prey=${point.prey} predators=${point.predators}`);
+  console.log(`[${phase}|${seed}] day=${point.day} prey=${point.prey} predators=${point.predators}`);
 }
 for (const [speciesId, value] of Object.entries(species)) {
   console.log(
-    `[p9.3|${seed}] ${speciesId} pop=${value.startPopulation}->${value.endPopulation} `
+    `[${phase}|${seed}] ${speciesId} pop=${value.startPopulation}->${value.endPopulation} `
       + `attempts/predDay=${value.attemptsPerPredatorDay.toFixed(3)} kills/predDay=${value.killsPerPredatorDay.toFixed(3)} `
       + `success=${value.huntSuccessRate.toFixed(3)} coverage=${value.bioCoverage.toFixed(3)} shortfall=${value.bioShortfall.toFixed(3)} `
       + `hungerRisk=${value.hungerRiskShare.toFixed(3)} huntDays=${value.huntingDayShare.toFixed(3)} `
-      + `digestDays=${value.digestingDayShare.toFixed(3)} births=${value.births} immigrants=${value.immigrants} deaths=${value.deaths}`,
+      + `digestDays=${value.digestingDayShare.toFixed(3)} altKg=${value.alternativeFoodConsumedKg.toFixed(1)} `
+      + `fruit=${value.alternativeFruitKg.toFixed(1)} insects=${value.alternativeInsectKg.toFixed(1)} carrion=${value.alternativeCarrionKg.toFixed(1)} `
+      + `births=${value.births} immigrants=${value.immigrants} deaths=${value.deaths}`,
   );
 }
 
 mkdirSync('artifacts', { recursive: true });
-const path = `artifacts/predator-p9-diagnostic-${seed}-${days}d.json`;
+const path = `artifacts/predator-${phase}-diagnostic-${seed}-${days}d.json`;
 writeFileSync(path, JSON.stringify(report, null, 2));
-console.log(`[p9.3|${seed}] report=${path}`);
+console.log(`[${phase}|${seed}] report=${path}`);
