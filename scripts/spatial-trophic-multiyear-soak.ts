@@ -244,6 +244,20 @@ function accumulatePredators(aggregates: Record<string, PredatorAggregate>, dail
     total.shadowAssimilatedEnergyKJ += daily.shadowAssimilatedEnergyKJ;
     total.shadowDigestionCostKJ += daily.shadowDigestionCostKJ;
     total.shadowDigestingPredatorDays += daily.shadowDigestingPredatorDays;
+    total.bioDemandKJ += daily.bioDemandKJ;
+    total.bioCoveredDemandKJ += daily.bioCoveredDemandKJ;
+    total.bioShortfallKJ += daily.bioShortfallKJ;
+    total.bioReserveStartKJ += daily.bioReserveStartKJ;
+    total.bioReserveEndKJ += daily.bioReserveEndKJ;
+    total.bioReserveDrawKJ += daily.bioReserveDrawKJ;
+    total.bioReserveGainKJ += daily.bioReserveGainKJ;
+    total.bioEnergyOverflowKJ += daily.bioEnergyOverflowKJ;
+    total.feedingBoutPredatorDays += daily.feedingBoutPredatorDays;
+    total.alternativeFoodConsumedKg += daily.alternativeFoodConsumedKg;
+    total.alternativeFoodEnergyKJ += daily.alternativeFoodEnergyKJ;
+    total.alternativeFruitKg += daily.alternativeFruitKg;
+    total.alternativeInsectKg += daily.alternativeInsectKg;
+    total.alternativeCarrionKg += daily.alternativeCarrionKg;
     total.hungerRiskPredatorDays += daily.hungerRiskPredatorDays;
     total.huntingPredatorDays += daily.huntingPredatorDays;
     total.reserveCoveredPredatorDays += daily.reserveCoveredPredatorDays;
@@ -470,17 +484,17 @@ function runFiveYearSoak(): void {
     );
     const shadowGutTolerance = Math.max(
       1,
-      species.shadowGutStartKJ + species.ingestedPreyEnergyKJ,
+      species.shadowGutStartKJ + species.ingestedPreyEnergyKJ + species.alternativeFoodEnergyKJ,
     ) * 1e-9;
     check(
       `predator-p9-shadow-gut-conservation:${species.speciesId}`,
       Math.abs(
-        species.shadowGutStartKJ + species.ingestedPreyEnergyKJ
+        species.shadowGutStartKJ + species.ingestedPreyEnergyKJ + species.alternativeFoodEnergyKJ
           - species.shadowGutEndKJ
           - species.shadowAssimilatedEnergyKJ
           - species.shadowDigestionCostKJ
       ) <= shadowGutTolerance,
-      `input=${(species.shadowGutStartKJ + species.ingestedPreyEnergyKJ).toFixed(1)} output=${(species.shadowGutEndKJ + species.shadowAssimilatedEnergyKJ + species.shadowDigestionCostKJ).toFixed(1)}`,
+      `input=${(species.shadowGutStartKJ + species.ingestedPreyEnergyKJ + species.alternativeFoodEnergyKJ).toFixed(1)} output=${(species.shadowGutEndKJ + species.shadowAssimilatedEnergyKJ + species.shadowDigestionCostKJ).toFixed(1)}`,
     );
     check(
       `predator-p9-shadow-digesting-day-bounds:${species.speciesId}`,
@@ -488,6 +502,27 @@ function runFiveYearSoak(): void {
         && species.shadowDigestingPredatorDays <= species.predatorDays + energyTolerance,
       `digesting=${species.shadowDigestingPredatorDays.toFixed(1)} predatorDays=${species.predatorDays.toFixed(1)}`,
     );
+    if (species.bioDemandKJ > 0) {
+      const bioTolerance = Math.max(
+        1,
+        species.bioReserveStartKJ + species.shadowAssimilatedEnergyKJ,
+      ) * 1e-9;
+      check(
+        `predator-p9-bio-demand-accounting:${species.speciesId}`,
+        Math.abs(species.bioDemandKJ - species.bioCoveredDemandKJ - species.bioShortfallKJ) <= bioTolerance,
+        `demand=${species.bioDemandKJ.toFixed(1)} covered=${species.bioCoveredDemandKJ.toFixed(1)} shortfall=${species.bioShortfallKJ.toFixed(1)}`,
+      );
+      check(
+        `predator-p9-bio-energy-conservation:${species.speciesId}`,
+        Math.abs(
+          species.bioReserveStartKJ + species.shadowAssimilatedEnergyKJ
+            - species.bioCoveredDemandKJ
+            - species.bioReserveEndKJ
+            - species.bioEnergyOverflowKJ
+        ) <= bioTolerance,
+        `input=${(species.bioReserveStartKJ + species.shadowAssimilatedEnergyKJ).toFixed(1)} output=${(species.bioCoveredDemandKJ + species.bioReserveEndKJ + species.bioEnergyOverflowKJ).toFixed(1)}`,
+      );
+    }
   }
   for (const bucket of annual) {
     const expected = bucket.startPopulation + bucket.births + bucket.faunaImmigrants - bucket.nonPredatorDeaths - bucket.predatorKills;
@@ -544,6 +579,10 @@ function runFiveYearSoak(): void {
     const p9ShadowIntakeVsFmr = species.fmrDemandKJ > 0 ? species.ingestedPreyEnergyKJ / species.fmrDemandKJ : 1;
     const p9ShadowLegacyVsFmr = species.fmrDemandKJ > 0 ? species.legacyDemandEquivalentKJ / species.fmrDemandKJ : 1;
     const p9ShadowAssimilatedVsFmr = species.fmrDemandKJ > 0 ? species.shadowAssimilatedEnergyKJ / species.fmrDemandKJ : 1;
+    const p9ShadowTotalGrossIntakeVsFmr = species.fmrDemandKJ > 0
+      ? (species.ingestedPreyEnergyKJ + species.alternativeFoodEnergyKJ) / species.fmrDemandKJ
+      : 1;
+    const p9BioCoverage = species.bioDemandKJ > 0 ? species.bioCoveredDemandKJ / species.bioDemandKJ : 0;
     const p9ShadowDigestingShare = species.predatorDays > 0 ? species.shadowDigestingPredatorDays / species.predatorDays : 0;
     console.log(
       `[${label}] ${speciesId} pop=${species.startPopulation}->${species.endPopulation} births=${species.births} immigrants=${species.immigrants} deaths=${species.deaths} `
@@ -571,6 +610,13 @@ function runFiveYearSoak(): void {
         + `SDA=${(species.shadowDigestionCostKJ / 1000).toFixed(1)}MJ gutEnd=${(species.shadowGutEndKJ / 1000).toFixed(1)}MJ `
         + `assim/fmr=${p9ShadowAssimilatedVsFmr.toFixed(3)} digestingDays=${p9ShadowDigestingShare.toFixed(3)}`,
     );
+    if (species.bioDemandKJ > 0 || species.alternativeFoodEnergyKJ > 0) {
+      console.log(
+        `[${label}] ${speciesId} p9-active bioCoverage=${p9BioCoverage.toFixed(3)} totalGross/fmr=${p9ShadowTotalGrossIntakeVsFmr.toFixed(3)} `
+          + `altKg=${species.alternativeFoodConsumedKg.toFixed(1)} fruit=${species.alternativeFruitKg.toFixed(1)} `
+          + `insects=${species.alternativeInsectKg.toFixed(1)} carrion=${species.alternativeCarrionKg.toFixed(1)}`,
+      );
+    }
     return [speciesId, {
       ...species,
       foodCoverage,
