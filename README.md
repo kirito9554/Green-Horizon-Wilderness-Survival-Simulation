@@ -1,92 +1,115 @@
-# Green Horizon Wilderness Survival Simulation
+# Green Horizon — Wilderness Survival Simulation
 
-> A personal, systems-heavy tropical rainforest survival and colony simulation prototype built for the browser.
+**Green Horizon** là một dự án game sinh tồn rừng mưa nhiệt đới mang tính cá nhân, tập trung vào mô phỏng hệ sinh thái, quản lý tài nguyên, thám hiểm và quá trình phát triển từ sinh tồn đơn lẻ sang một khu định cư tự vận hành.
 
-![Green Horizon main world map](public/maps/main.png)
+Dự án hiện ở giai đoạn **prototype / active development**. Mục tiêu chính chưa phải là tạo một bản game hoàn chỉnh để phát hành, mà là xây một nền mô phỏng đủ nhất quán để các hệ thống sinh tồn, môi trường và colony gameplay có thể tương tác với nhau lâu dài mà không phụ thuộc vào các “buff” cân bằng tùy ý.
 
-Green Horizon is an experimental survival game project focused on **long-term wilderness simulation rather than scripted survival set pieces**. The player begins with limited resources in a hostile tropical environment, explores and learns the island, builds a camp, manages equipment and logistics, and can eventually grow a small self-sustaining settlement.
+> **Status:** simulation-first prototype. UI, gameplay systems và ecology runtime đều đang được phát triển song song; nhiều phần vẫn có thể thay đổi mạnh.
 
-This repository is primarily a **personal development sandbox**. It is public for transparency, experimentation, and easier CI usage; it should not be treated as a finished game or stable framework.
+---
 
-## Project status
+## Current focus
 
-**Active prototype / pre-release.**
+Nhánh phát triển hiện tại tập trung vào **seeded spatial world + authoritative terrestrial food web**.
 
-Systems, data models, balance values, save formats, UI, and art are still changing frequently. The current development focus is the authoritative spatial world and living ecology simulation.
+Mô hình thế giới chính hiện dùng:
 
-### Current spatial world foundation
+- **120 km²** diện tích đất đảo chuẩn.
+- **10 macro regions** ổn định ở tầng thiết kế.
+- Habitat lattice sinh theo seed với khoảng cách cỡ **600 m**.
+- **70 natural Local Sites + 3 required landmarks**.
+- **24 loài fauna trên cạn không phải predator**.
+- **40+ flora taxa/guilds** qua **13 tầng cấu trúc thực vật**.
+- **20+ insect taxa/guilds**.
+- **5 predator species**.
+- Tài nguyên thực vật, côn trùng, carrion và nước ngọt dùng **shared per-patch material budget** thay vì các proxy độc lập.
 
-The current world model uses:
+Các hệ thống ecology cũ vẫn còn trong codebase ở một số nơi để tương thích dữ liệu hoặc phục vụ migration/regression, nhưng runtime terrestrial mới đang dần trở thành authority chính.
 
-- a canonical **120 km² tropical island**;
-- **10 stable authored macro regions** used for navigation and game-facing identity;
-- a seeded habitat lattice at roughly **600 m** spatial resolution;
-- **70 generated natural Local Sites + 3 required landmarks**;
-- generated terrain, hydrology, habitat suitability, travel cost, and local ecological influence;
-- deterministic world generation from a campaign seed.
+### Predator ecology
 
-Macro regions remain recognizable between campaigns while the local wilderness underneath them can vary.
+Predator simulation hiện bao gồm:
 
-### Living terrestrial ecology
+- founder-unit seeding;
+- home-range hunting;
+- energy reserve / satiation;
+- breeding connectivity;
+- controlled recovery / recolonization;
+- per-species energy accounting;
+- prey-access and kill-biomass telemetry;
+- intermittent, reserve-aware feeding bouts.
 
-The authoritative spatial terrestrial stack is designed as one connected food web:
+Các bài test dài hạn dùng deterministic seeds để so sánh trajectory qua nhiều năm thay vì chỉ nhìn một snapshot ngắn.
 
-```text
-living flora
-    ↓
-insects + shared material resource pools
-    ↓
-non-predator fauna
-    ↓
-spatial predators
-```
-
-Current spatial ecology data includes:
-
-- **40+ flora taxa/guilds** across 13 structural strata;
-- **20+ insect taxa/guilds**;
-- **24 non-predator terrestrial fauna species**;
-- **5 spatial predator species**;
-- conserved per-patch plant food, insect biomass, carrion, and fresh-water resources;
-- habitat-dependent movement, competition, breeding, mortality, carrying capacity, predator home ranges, energy reserve, and recovery behavior.
-
-Legacy terrestrial ecology modules are still present for compatibility and data bridging, but the active spatial implementation lives primarily under `src/simulation/spatial/`.
+---
 
 ## Gameplay direction
 
-The project is intended to move gradually from difficult solo survival toward settlement management.
+Green Horizon hướng tới một vòng chơi dài:
 
-Core design goals include:
+**survive → explore → understand → exploit carefully → build → automate → sustain**
 
-- **Exploration** — inspect terrain, discover Local Sites, evaluate routes, and learn where resources actually exist.
-- **Survival** — food, water, fatigue, health, weather exposure, equipment condition, and environmental risk matter over time.
-- **Physical logistics** — inventory, storage, hauling, weight, volume, freshness, and material movement are modeled instead of abstracted into one global stockpile.
-- **Crafting & equipment** — tools are built, repaired, modified, and upgraded from physical materials and components.
-- **Camp development** — construction, storage, utilities, food production, farming, defenses, and work assignment grow in importance as the settlement expands.
-- **Living ecology** — plants, prey, predators, water, harvesting pressure, and regeneration are intended to interact rather than exist as isolated resource nodes.
-- **Long simulation horizons** — ecology and colony systems are tested over months and years, not only short gameplay ticks.
+### Survival
 
-The design deliberately favors understandable ecological mechanisms over hidden balance buffs where possible.
+Người sống sót phải quản lý các nhu cầu như:
 
-## Major implemented systems
+- sức khỏe;
+- đói và khát;
+- fatigue;
+- morale;
+- nhiệt độ và tác động môi trường;
+- chất lượng, độ bền và tình trạng trang bị.
 
-The repository currently contains working or actively developed foundations for:
+### Exploration
 
-- survivor state and party management;
-- inventory, storage networks, hauling, and reservation;
-- component-based items, wear, repair, crafting, research, and upgrades;
-- construction, building clusters, workstations, utilities, and maintenance;
-- agriculture and food-production simulation;
-- save migration and persistence;
-- dynamic weather and environmental simulation;
-- hydrology and surface-water systems;
-- terrestrial and aquatic ecology;
-- seeded spatial world generation and Local Sites;
-- living flora, insects, fauna, predators, and trophic resource accounting;
-- encounter/UI prototypes;
-- Canvas/WebGL map effects and tropical survival UI.
+Thế giới được khám phá theo các khu vực và Local Site có điều kiện địa hình, hydrology, ecology và resource profile riêng.
 
-See `docs/` for design notes, architecture documents, spatial-world notes, and simulation reports.
+Travel không được thiết kế như một mạng node “đi đâu cũng được”; khoảng cách, địa hình, vùng ngập, ridge, swamp, mangrove và các điểm vượt địa hình đều có vai trò trong khả năng tiếp cận.
+
+### Camp and colony
+
+Gameplay dự kiến phát triển dần từ một survivor hoặc nhóm nhỏ thành colony:
+
+- xây dựng cluster và công trình;
+- storage và logistics theo khối lượng/thể tích;
+- crafting, repair, replacement và equipment upgrade;
+- farming và husbandry;
+- utilities và defense;
+- job assignment;
+- companion/NPC autonomy;
+- production chains và long-term resource planning.
+
+### Ecology
+
+Mục tiêu của ecology không chỉ là tạo “spawn table”.
+
+Population, food availability, competition, carrying capacity, breeding, predation, reserve energy, hydrology và resource regeneration được mô phỏng như các state có thể thay đổi theo thời gian.
+
+Khi một hệ thống mất cân bằng, ưu tiên của dự án là tìm **nguyên nhân cơ chế** trước khi chỉnh các hằng số như mortality, fecundity hoặc hunt success.
+
+---
+
+## Interface and presentation
+
+Prototype sử dụng giao diện 2D top-down / elevated tactical view với theme rainforest survival.
+
+Các khu vực UI chính hiện gồm:
+
+- tactical world map;
+- selected-location interaction;
+- party / survivor management;
+- inventory và storage;
+- crafting / research / repair / upgrade;
+- camp overview;
+- building management;
+- farming;
+- utilities;
+- encounter screen;
+- weather, clock và environmental HUD.
+
+Bản đồ có các lớp hiệu ứng như water shader, haze/fog, vegetation motion, ambient particles và day/night presentation. Visual fidelity vẫn đang được chỉnh liên tục và không phải mọi asset hiện tại đều là final art.
+
+---
 
 ## Tech stack
 
@@ -95,144 +118,198 @@ See `docs/` for design notes, architecture documents, spatial-world notes, and s
 - **Vite 6**
 - **Tailwind CSS 4**
 - **Lucide React**
-- HTML Canvas / WebGL-based map effects
-- Browser LocalStorage / JSON save serialization
-- Node/TypeScript simulation smoke tests
+- Canvas / shader-based map effects
+- deterministic simulation scripts bằng TypeScript
+- GitHub Actions cho regression và multi-year soak tests
 
-## Running locally
+---
 
-CI currently targets **Node.js 22**.
+## Quick start
+
+Yêu cầu khuyến nghị:
+
+- Node.js **22** cho môi trường giống CI hiện tại.
+- npm.
+
+Cài dependency:
 
 ```bash
-git clone https://github.com/kirito9554/Green-Horizon-Wilderness-Survival-Simulation.git
-cd Green-Horizon-Wilderness-Survival-Simulation
 npm ci
+```
+
+Chạy development server:
+
+```bash
 npm run dev
 ```
 
-The development server runs on port `3000` by default.
+Mặc định Vite chạy tại:
+
+```text
+http://localhost:3000
+```
+
+Typecheck:
+
+```bash
+npm run lint
+```
 
 Production build:
 
 ```bash
-npm run lint
 npm run build
 ```
 
-### Environment files
-
-Real environment files are intentionally ignored by Git:
-
-```text
-.env*
-!.env.example
-```
-
-`.env.example` contains placeholders only. **Do not commit real API keys, tokens, credentials, or local secrets.**
-
-The core simulation does not require secrets to run its normal local smoke tests.
-
-## Testing
-
-The project relies heavily on deterministic smoke tests and long-running simulation checks.
-
-Useful commands:
+Preview build:
 
 ```bash
-# TypeScript
-npm run lint
+npm run preview
+```
 
-# World / fauna foundations
+---
+
+## Simulation and regression tests
+
+Repo có nhiều smoke test độc lập để tránh một thay đổi ở ecology, storage, hydrology hoặc building silently phá subsystem khác.
+
+Một số test quan trọng:
+
+```bash
 npm run test:spatial-world
 npm run test:spatial-fauna
 npm run test:spatial-fauna-runtime
 npm run test:spatial-fauna-competition
 npm run test:spatial-fauna-resources
 
-# Predator regressions and full trophic runtime
 npm run test:spatial-predator-founders
 npm run test:spatial-predator-p6
 npm run test:spatial-predator-p7
 npm run test:spatial-predator-p8
+
 npm run test:spatial-trophic
-
-# Multi-year ecology soak
 npm run test:spatial-trophic-soak
-
-# Other simulation suites
-npm run test:production
-npm run test:building
-npm run test:storage
-npm run test:agriculture
-npm run test:hydrology
-npm run test:ecology
 ```
 
-The multi-year trophic soak is intentionally much heavier than the normal smoke tests. It is used to inspect population trajectories, resource pressure, predator energy accounting, extinction/recovery behavior, and long-term ecological stability.
+Ngoài terrestrial ecology còn có regression cho:
+
+- building/construction;
+- storage/logistics;
+- agriculture;
+- hydrology;
+- aquatic ecology;
+- maintenance;
+- production;
+- save migration;
+- environmental scale.
+
+### Multi-year trophic soak
+
+Long-run ecology test dùng deterministic seed và có thể chạy trực tiếp:
+
+```bash
+PREDATOR_P6_MODE=combined \
+SPATIAL_TROPHIC_SEED=spatial-trophic-soak-alpha \
+PREDATOR_P6_ASSERT=1 \
+npm run test:spatial-trophic-soak
+```
+
+Seed beta:
+
+```bash
+PREDATOR_P6_MODE=combined \
+SPATIAL_TROPHIC_SEED=spatial-trophic-soak-beta \
+PREDATOR_P6_ASSERT=1 \
+npm run test:spatial-trophic-soak
+```
+
+Các report dài hạn theo dõi population, demography, prey access, kill biomass, energy coverage, reserve, hunger risk, breeding connectivity, recovery pressure và các conservation/accounting invariants.
+
+---
 
 ## Repository layout
 
 ```text
-public/
-  maps/               World-map artwork
-  poi-bg/             POI environment artwork
-  poi-card/           POI cards
-  iconsets/           Item/resource icons
-  weather-card/       Weather artwork
-  ui/                 UI artwork
-
-docs/
-  GAME_DESIGN.md
-  SYSTEM_ARCHITECTURE.md
-  DATA_SCHEMA.md
-  ART_BIBLE.md
-  ASSET_MANIFEST.md
-  spatial-world-foundation.md
-  spatial-fauna-community.md
-  spatial-trophic-multiyear-soak.md
-
-src/
-  components/         React UI
-  data/               Static game/ecology definitions
-  encounter/          Encounter prototype
-  save/               Save + migration logic
-  simulation/         Simulation systems
-  simulation/spatial/ Seeded world and authoritative spatial ecology
-  types/              TypeScript state/contracts
-  utils/              Shared utilities
-
-scripts/              Deterministic smoke tests and simulation soaks
-.github/workflows/    CI and long-run ecology workflows
+.
+├── public/                     # Maps, POI art, UI art, weather cards, icons
+├── docs/                       # Design and simulation documentation
+├── scripts/                    # Smoke tests, soak tests and dev utilities
+├── src/
+│   ├── components/             # React UI
+│   ├── data/                   # Authored game/ecology data
+│   ├── encounter/              # Encounter runtime
+│   ├── save/                   # Save and migration logic
+│   ├── simulation/
+│   │   └── spatial/            # Seeded spatial world/ecology runtime
+│   ├── types/                  # TypeScript state contracts
+│   └── utils/
+├── .github/workflows/          # CI and long-run ecology workflows
+├── package.json
+└── vite.config.ts
 ```
 
-## Art and asset notes
+Tài liệu kỹ thuật đáng chú ý:
 
-Most project-specific visual assets are stored directly under `public/`. Lucide icons are provided by the `lucide-react` dependency and retain their upstream license.
+- [Spatial world foundation](docs/spatial-world-foundation.md)
+- [Spatial fauna community](docs/spatial-fauna-community.md)
+- [Multi-year trophic soak](docs/spatial-trophic-multiyear-soak.md)
+- [System architecture](docs/SYSTEM_ARCHITECTURE.md)
+- [Game design](docs/GAME_DESIGN.md)
+- [Art bible](docs/ART_BIBLE.md)
+- [Asset manifest](docs/ASSET_MANIFEST.md)
 
-The project is still experimental, and asset provenance/licensing documentation should be treated separately from code architecture. See `docs/ASSET_MANIFEST.md` for the current inventory.
+---
 
-If an asset is replaced or imported from another source, its provenance and reuse terms should be documented before committing it.
+## Environment and secrets
 
-## Security / public-repository hygiene
+Không commit credential thật vào repository.
 
-Before publishing or sharing a build:
+`.gitignore` loại trừ:
 
-- keep real `.env` files out of Git;
-- never hard-code API keys or access tokens;
-- avoid committing machine-specific paths, private logs, or personal exports;
-- keep generated simulation artifacts out of the repository unless they are intentionally part of documentation;
-- treat save files as potentially user-specific data.
+```text
+.env*
+```
 
-## License
+và chỉ giữ `.env.example` làm placeholder.
 
-There is currently **no project-wide open-source license** attached to Green Horizon.
+Nếu dùng các integration tùy chọn yêu cầu secret, hãy tạo file environment local hoặc dùng secret store của môi trường chạy. Không thay placeholder trong `.env.example` bằng API key thật.
 
-Public visibility does **not** automatically grant reuse rights to the source code or original project assets. Third-party dependencies and assets retain their respective licenses.
+Trước khi repository được public, codebase hiện tại đã được audit để tìm các mẫu phổ biến như API key, GitHub token, private key, JWT, credential assignment, email cá nhân và absolute home path.
 
-A project-wide license can be chosen later if the repository is intended to become reusable/open source rather than simply publicly viewable.
+---
 
-## Development philosophy
+## Assets and licensing
 
-Green Horizon is intentionally being built as a simulation-first personal project. The priority is not rapid feature count; it is making the systems underneath survival — ecology, logistics, resources, equipment, weather, and settlement growth — interact in ways that remain believable over long time horizons.
+Repository hiện **chưa có project-wide LICENSE**.
 
-Expect experiments, discarded approaches, migration code, diagnostics, and unusually detailed simulation tests. That is part of the project.
+Điều đó có nghĩa là việc repository có thể được xem công khai **không tự động cấp quyền tái sử dụng, phân phối hoặc relicensing toàn bộ source/art asset**.
+
+Một số dependency như Lucide có license riêng của chúng. Các asset nằm trong `public/` bao gồm project-specific UI art, map art, portraits, POI imagery và generated/stylized visuals; provenance và ghi chú asset được theo dõi tại [docs/ASSET_MANIFEST.md](docs/ASSET_MANIFEST.md).
+
+Nếu sau này dự án được mở theo một open-source license cụ thể, source code và art assets có thể cần được cấp license riêng thay vì gom chung một license.
+
+---
+
+## Project status
+
+Đây là **personal development project** và không có cam kết release schedule.
+
+Các ưu tiên gần hiện tại:
+
+- hoàn thiện authoritative spatial terrestrial ecology;
+- kiểm chứng predator/prey equilibrium dài hạn;
+- nối player gathering vào cùng material budget với ecology;
+- làm rõ Local Site interaction;
+- tiếp tục camp/crafting/assignment UI;
+- mở rộng NPC/companion autonomy;
+- tăng chiều sâu long-term colony simulation.
+
+Những hệ thống hoặc asset trong repo có thể bị thay thế hoàn toàn nếu mô hình mới phù hợp hơn.
+
+---
+
+## Public-repo note
+
+Mục tiêu khi để repo public là thuận tiện cho development, CI và việc theo dõi tiến độ của một project cá nhân — không phải biến dự án thành một package/API ổn định.
+
+Expect breaking changes.
