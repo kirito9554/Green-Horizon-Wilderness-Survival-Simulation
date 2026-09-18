@@ -179,3 +179,48 @@ export function tickSpatialTrophicResources(
     sufficiencyByPatch: sufficiencyByPatch as SpatialFaunaResourceSufficiencyByPatch,
   };
 }
+
+export type PredatorSharedFoodResource = 'fruit' | 'insects' | 'carrion';
+
+/** Remaining authoritative shared stock after prey/resource consumers have eaten for the day. */
+export function getSpatialSharedFoodStockKg(
+  fauna: SpatialFaunaRuntimeState,
+  patchId: string,
+  resource: PredatorSharedFoodResource,
+): number {
+  const stock = fauna.resourceStocksByPatch?.[patchId];
+  if (!stock) return 0;
+  return Math.max(0, stock[FOOD_INDEX[resource]]);
+}
+
+/**
+ * Predator-side consumption from the same conserved material pools used by prey.
+ * This is intentionally called after tickSpatialTrophicResources, so predators
+ * can only consume stock actually left in the patch that day.
+ */
+export function consumeSpatialSharedFoodKg(
+  fauna: SpatialFaunaRuntimeState,
+  patchId: string,
+  resource: PredatorSharedFoodResource,
+  requestedKg: number,
+): number {
+  const stock = fauna.resourceStocksByPatch?.[patchId];
+  if (!stock || requestedKg <= 0) return 0;
+  const index = FOOD_INDEX[resource];
+
+  if (resource === 'insects') {
+    if (!fauna.insectSystem) return 0;
+    const requested = Math.min(Math.max(0, stock[index]), requestedKg);
+    const actual = consumeSpatialInsectBiomass(fauna.insectSystem, patchId, requested);
+    stock[index] = round3(getSpatialInsectAccessibleBiomassAtPatch(fauna.insectSystem, patchId));
+    return actual;
+  }
+
+  const actual = Math.min(Math.max(0, stock[index]), requestedKg);
+  if (actual <= 0) return 0;
+  stock[index] = round3(stock[index] - actual);
+  if (resource === 'fruit' && fauna.floraSystem) {
+    applySpatialFloraConsumption(fauna.floraSystem, patchId, 'fruit', actual);
+  }
+  return actual;
+}
