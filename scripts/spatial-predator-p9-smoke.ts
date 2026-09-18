@@ -10,6 +10,7 @@ import {
   calculatePredatorFeedingBoutPlan,
   getPredatorP95TargetScore,
   predatorAlternativeFoodResources,
+  predatorCalibratedBoutAttemptsPerHead,
   predatorConsumedPreyFraction,
   predatorLocalDensitySwitchFactor,
   PREDATOR_ALTERNATIVE_FOOD_ENERGY_KJ_PER_KG,
@@ -65,6 +66,29 @@ close(
 );
 assert.ok(day1.state.daysRemaining >= 6 && day1.state.daysRemaining <= 7, 'python meal must retain multi-day gut state after day one');
 assert.ok(day1.digestionCostKJ > 0 && day1.assimilatedEnergyKJ > 0, 'digestion must split released energy into SDA cost and assimilated energy');
+
+assert.equal(
+  predatorCalibratedBoutAttemptsPerHead('PREDATOR_RAPTOR'),
+  3,
+  'P9.6 raptor should use the observed median three attacks per feeding bout',
+);
+assert.equal(
+  predatorCalibratedBoutAttemptsPerHead('PREDATOR_PYTHON'),
+  0,
+  'P9.6 raptor effort calibration must not leak into ambush specialists',
+);
+const raptorBout = calculatePredatorFeedingBoutPlan({
+  speciesId: 'PREDATOR_RAPTOR',
+  metabolicHeads: 1,
+  fmrDemandKJ: 1323,
+  bioReserveKJ: 0,
+  gutEnergyKJ: 0,
+  maxKillsPerAdultPerDay: .34,
+  calibratedBoutAttemptsPerHead: 3,
+  candidates: [{ encounterScore: 10, expectedEdibleKg: .3, successProbability: .2 }],
+});
+assert.equal(raptorBout.huntLimit, 3,
+  'P9.6 raptor effort must be a bounded three-attempt feeding bout, not deficit-driven spam');
 
 close(
   calculatePredatorCalibratedFmrKJPerAdultDay('PREDATOR_RAPTOR', 4.8),
