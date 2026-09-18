@@ -10,6 +10,7 @@ on:
       - 'scripts/spatial-predator-p6-smoke.ts'
       - 'scripts/spatial-predator-p7-smoke.ts'
       - 'scripts/spatial-predator-p8-smoke.ts'
+      - 'scripts/spatial-predator-p9-smoke.ts'
       - 'package.json'
       - '.github/workflows/trophic-soak.yml'
   workflow_dispatch:
@@ -53,6 +54,9 @@ jobs:
       - name: Predator P8 intermittent-feeding/hunt-plan regression
         run: npm run test:spatial-predator-p8
 
+      - name: Predator P9 bioenergetic-shadow regression
+        run: npm run test:spatial-predator-p9
+
       - name: Five-year terrestrial trophic soak
         env:
           PREDATOR_P6_MODE: ${{ matrix.mode }}
@@ -60,10 +64,10 @@ jobs:
           PREDATOR_P6_ASSERT: ${{ matrix.gate }}
         run: npm run test:spatial-trophic-soak
 
-      - name: Upload P8 trophic report
+      - name: Upload P9 shadow trophic report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: predator-p8-${{ matrix.mode }}-${{ matrix.seed }}
-          path: artifacts/predator-p8-*.json
+          name: predator-p9-shadow-${{ matrix.mode }}-${{ matrix.seed }}
+          path: artifacts/predator-p9-shadow-*.json
           if-no-files-found: warn
