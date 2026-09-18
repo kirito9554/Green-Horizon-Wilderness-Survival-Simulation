@@ -725,7 +725,7 @@ export function tickSpatialPredatorsDay(
   let preyBiomassKilledKg = 0;
   let carrionAddedKg = 0;
   let alternativeFoodConsumedKg = 0;
-  let alternativeFoodEnergyKJ = 0;
+  let alternativeFoodEnergyTotalKJ = 0;
   let births = 0;
   let deaths = 0;
   let hungerDeaths = 0;
@@ -882,7 +882,7 @@ export function tickSpatialPredatorsDay(
       speciesEvent.alternativeFoodConsumedKg += alternativeFoodMassKg;
       speciesEvent.alternativeFoodEnergyKJ += alternativeFoodEnergyKJ;
       alternativeFoodConsumedKg += alternativeFoodMassKg;
-      alternativeFoodEnergyKJ += alternativeFoodEnergyKJ;
+      alternativeFoodEnergyTotalKJ += alternativeFoodEnergyKJ;
       speciesEvent.alternativeFruitKg += alternativeFruitKg;
       speciesEvent.alternativeInsectKg += alternativeInsectKg;
       speciesEvent.alternativeCarrionKg += alternativeCarrionKg;
@@ -1299,7 +1299,7 @@ export function tickSpatialPredatorsDay(
 
   predators.lastProcessedDay = day;
   predators.telemetry = summarizePredators(predators, world, day, season, {
-    preyKilled, preyBiomassKilledKg, carrionAddedKg, alternativeFoodConsumedKg, alternativeFoodEnergyKJ,
+    preyKilled, preyBiomassKilledKg, carrionAddedKg, alternativeFoodConsumedKg, alternativeFoodEnergyKJ: alternativeFoodEnergyTotalKJ,
     births, deaths, hungerDeaths, naturalDeaths,
     matured, aged, moved, mateSearchMoved, mateSearchProposed, mateSearchExecuted, mateSearchBlocked,
     natalDispersed, territorySettled, groupSplitMoved, immigrants, immigrationPulses, unsuccessfulHunts,
