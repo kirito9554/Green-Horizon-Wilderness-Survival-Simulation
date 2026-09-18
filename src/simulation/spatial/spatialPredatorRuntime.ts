@@ -49,9 +49,11 @@ import {
   advancePredatorShadowDigestion,
   calculatePredatorBioenergeticLedger,
   calculatePredatorBioenergeticShadow,
+  calculatePredatorCalibratedFmrKJPerAdultDay,
   calculatePredatorFeedingBoutPlan,
   getPredatorP95TargetScore,
   predatorAlternativeFoodResources,
+  predatorConsumedPreyFraction,
   predatorShadowSdaFraction,
 } from './spatialPredatorP9';
 import {
@@ -85,6 +87,8 @@ export interface SpatialPredatorRuntimeOptions {
   alternativeDiet?: boolean;
   /** P9.5 diagnostic flag: target selection uses local density switching and expected energetic profitability. */
   densitySwitching?: boolean;
+  /** P9.6 diagnostic flag: species/analogue FMR and prey-consumption profiles become authoritative. */
+  speciesCalibration?: boolean;
 }
 
 function normalizedOptions(options?: SpatialPredatorRuntimeOptions): Required<SpatialPredatorRuntimeOptions> {
@@ -94,6 +98,7 @@ function normalizedOptions(options?: SpatialPredatorRuntimeOptions): Required<Sp
     bioenergeticFeeding: options?.bioenergeticFeeding ?? false,
     alternativeDiet: options?.alternativeDiet ?? false,
     densitySwitching: options?.densitySwitching ?? false,
+    speciesCalibration: options?.speciesCalibration ?? false,
   };
 }
 
@@ -296,6 +301,7 @@ function preyCandidates(
   startPatchId: string,
   fauna: SpatialFaunaRuntimeState,
   world: GeneratedSpatialWorld,
+  speciesCalibration = false,
 ): PreyCandidate[] {
   const accessible = getBehaviorPatchesWithinRange(world, startPatchId, predator.homeRangeKm);
   const distanceByPatch = new Map(accessible.map(entry => [entry.patchId, entry.distanceKm]));
@@ -327,7 +333,11 @@ function preyCandidates(
           cohort,
           score,
           adultWeightKg: preyDef.adultWeightKg,
-          expectedEdibleKg: preyMass * .62,
+          expectedEdibleKg: preyMass * (
+            speciesCalibration
+              ? predatorConsumedPreyFraction(predator.id, preyMass, predator.adultWeightKg)
+              : .62
+          ),
           localPopulation: population,
           localCarryingCapacity,
         });
@@ -783,7 +793,13 @@ export function tickSpatialPredatorsDay(
       const dailyNeed = metabolicHeads * predator.dailyFoodKgPerAdult;
       const reserveCapacity = clampPredatorReserve(cohort, predator);
       const reserveBefore = cohort[RESERVE];
-      const candidates = preyCandidates(predator, patchId, fauna, world);
+      const candidates = preyCandidates(
+        predator,
+        patchId,
+        fauna,
+        world,
+        behavior.speciesCalibration,
+      );
       const accessiblePrey = accessiblePreyMetrics(candidates);
       speciesEvent.huntOpportunityPredatorDays += candidates.length > 0 ? population : 0;
       speciesEvent.accessiblePreyHeadDays += accessiblePrey.heads * population;
@@ -812,7 +828,9 @@ export function tickSpatialPredatorsDay(
         legacyDailyFoodKgPerAdult: predator.dailyFoodKgPerAdult,
         edibleBiomassFromKillsKg: 0,
       });
-      const fmrDemandKJ = preHuntBio.fmrDemandKJ;
+      const fmrDemandKJ = behavior.speciesCalibration
+        ? metabolicHeads * calculatePredatorCalibratedFmrKJPerAdultDay(predator.id, predator.adultWeightKg)
+        : preHuntBio.fmrDemandKJ;
       const bioReserveCapacityKJ = fmrDemandKJ * getSpatialPredatorEnergyReserveDays(predator);
       const legacyReserveFraction = reserveCapacity > 0 ? clamp01(reserveBefore / reserveCapacity) : 0;
       const bioReserveBeforeKJ = Math.min(
@@ -996,7 +1014,11 @@ export function tickSpatialPredatorsDay(
             spatialUnitRandom(world.worldSeed, `predator-stage|${predator.id}|${candidate.speciesId}|${candidate.patchId}|${day}|${huntIndex}`),
           );
           if (removed.killed) {
-            const edible = removed.biomassKg * .62;
+            const edible = removed.biomassKg * (
+              behavior.speciesCalibration
+                ? predatorConsumedPreyFraction(predator.id, removed.biomassKg, predator.adultWeightKg)
+                : .62
+            );
             huntedEdibleKg += edible;
             huntedBiomassKg += removed.biomassKg;
             lastKillPatchId = candidate.patchId;
