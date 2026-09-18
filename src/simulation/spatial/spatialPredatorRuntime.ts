@@ -44,8 +44,12 @@ import {
 } from './spatialPredatorP8';
 import {
   REFERENCE_WET_PREY_ENERGY_KJ_PER_KG,
+  advancePredatorDigestion,
   advancePredatorShadowDigestion,
+  calculatePredatorBioenergeticLedger,
   calculatePredatorBioenergeticShadow,
+  calculatePredatorFeedingBoutPlan,
+  predatorShadowSdaFraction,
 } from './spatialPredatorP9';
 
 export const SPATIAL_PREDATOR_RUNTIME_VERSION = 8;
@@ -58,6 +62,7 @@ const SHADOW_GUT_ENERGY = 5;
 const SHADOW_GUT_MASS = 6;
 const SHADOW_DIGESTION_DAYS = 7;
 const SHADOW_DAYS_SINCE_MEAL = 8;
+const BIO_RESERVE_ENERGY = 9;
 const CARRION_STOCK_INDEX = 7;
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 const round3 = (v: number): number => Math.round(v * 1000) / 1000;
@@ -67,12 +72,15 @@ export interface SpatialPredatorRuntimeOptions {
   maintainMateConnectivity?: boolean;
   /** P6: retain under-MVP recovery pressure across pulses and enforce a separate pulse cooldown. */
   controlledRecovery?: boolean;
+  /** P9.3 diagnostic flag: gut/FMR energy becomes authoritative for feeding and hunger. */
+  bioenergeticFeeding?: boolean;
 }
 
 function normalizedOptions(options?: SpatialPredatorRuntimeOptions): Required<SpatialPredatorRuntimeOptions> {
   return {
     maintainMateConnectivity: options?.maintainMateConnectivity ?? true,
     controlledRecovery: options?.controlledRecovery ?? true,
+    bioenergeticFeeding: options?.bioenergeticFeeding ?? false,
   };
 }
 
@@ -581,6 +589,15 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     shadowAssimilatedEnergyKJ: 0,
     shadowDigestionCostKJ: 0,
     shadowDigestingPredatorDays: 0,
+    bioDemandKJ: 0,
+    bioCoveredDemandKJ: 0,
+    bioShortfallKJ: 0,
+    bioReserveStartKJ: 0,
+    bioReserveEndKJ: 0,
+    bioReserveDrawKJ: 0,
+    bioReserveGainKJ: 0,
+    bioEnergyOverflowKJ: 0,
+    feedingBoutPredatorDays: 0,
     hungerRiskPredatorDays: 0,
     huntingPredatorDays: 0,
     reserveCoveredPredatorDays: 0,
