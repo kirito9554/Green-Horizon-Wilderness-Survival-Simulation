@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import type { SpatialPredatorPatchCohortState } from '../src/types/spatialEcologySimulation';
+import { extractPredatorCohortTransfer, mergePredatorCohortTransfer } from '../src/simulation/spatial/spatialPredatorP6';
 import {
   REFERENCE_WET_PREY_ENERGY_KJ_PER_KG,
   advancePredatorShadowDigestion,
@@ -55,5 +57,14 @@ close(
 );
 assert.ok(day1.state.daysRemaining >= 6 && day1.state.daysRemaining <= 7, 'python meal must retain multi-day gut state after day one');
 assert.ok(day1.digestionCostKJ > 0 && day1.assimilatedEnergyKJ > 0, 'digestion must split released energy into SDA cost and assimilated energy');
+
+const source: SpatialPredatorPatchCohortState = [0, 4, 0, .9, 8, 1000, 2, 5, 1];
+const transfer = extractPredatorCohortTransfer(source, 1, true);
+close((source[5] ?? 0) + (transfer[5] ?? 0), 1000, 1e-9, 'cohort movement must conserve shadow gut energy');
+close((source[6] ?? 0) + (transfer[6] ?? 0), 2, 1e-9, 'cohort movement must conserve shadow gut mass');
+const target: SpatialPredatorPatchCohortState = [0, 1, 0, .8, 1, 100, .2, 2, 3];
+const targetGutBefore = target[5] ?? 0;
+mergePredatorCohortTransfer(target, transfer);
+close(target[5] ?? 0, targetGutBefore + (transfer[5] ?? 0), 1e-9, 'cohort merge must preserve transferred shadow gut energy');
 
 console.log('spatial predator P9 bioenergetic-shadow regression passed');
