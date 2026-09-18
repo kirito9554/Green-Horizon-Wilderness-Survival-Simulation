@@ -42,6 +42,7 @@ import {
   calculatePredatorHuntPlan,
   getPredatorEnergyWeightedTargetScore,
 } from './spatialPredatorP8';
+import { calculatePredatorBioenergeticShadow } from './spatialPredatorP9';
 
 export const SPATIAL_PREDATOR_RUNTIME_VERSION = 8;
 const JUVENILES = 0;
@@ -564,6 +565,9 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     reserveDrawKg: 0,
     reserveGainKg: 0,
     edibleOverflowKg: 0,
+    fmrDemandKJ: 0,
+    legacyDemandEquivalentKJ: 0,
+    ingestedPreyEnergyKJ: 0,
     hungerRiskPredatorDays: 0,
     huntingPredatorDays: 0,
     reserveCoveredPredatorDays: 0,
@@ -802,6 +806,20 @@ export function tickSpatialPredatorsDay(
       speciesEvent.reserveDrawKg += energy.reserveDrawKg;
       speciesEvent.reserveGainKg += energy.reserveGainKg;
       speciesEvent.edibleOverflowKg += energy.overflowKg;
+
+      // P9.1: shadow-only bioenergetic accounting. None of these values feed back
+      // into P8 hunting, reserve, mortality, fertility or movement decisions.
+      const bioenergeticShadow = calculatePredatorBioenergeticShadow({
+        speciesId: predator.id,
+        adultWeightKg: predator.adultWeightKg,
+        metabolicHeads,
+        legacyDailyFoodKgPerAdult: predator.dailyFoodKgPerAdult,
+        edibleBiomassFromKillsKg: huntedEdibleKg,
+      });
+      speciesEvent.fmrDemandKJ += bioenergeticShadow.fmrDemandKJ;
+      speciesEvent.legacyDemandEquivalentKJ += bioenergeticShadow.legacyDemandEquivalentKJ;
+      speciesEvent.ingestedPreyEnergyKJ += bioenergeticShadow.ingestedPreyEnergyKJ;
+
       if (edibleOverflowKg > 0 && lastKillPatchId) carrionAddedKg += addCarrion(fauna, lastKillPatchId, edibleOverflowKg);
 
       const foodRatio = dailyNeed > 0 ? clamp01(coveredEnergyKg / dailyNeed) : 1;
