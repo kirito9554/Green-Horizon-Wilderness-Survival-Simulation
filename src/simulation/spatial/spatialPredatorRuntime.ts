@@ -37,6 +37,7 @@ import {
   predatorNeedsMateSearch,
   registerPredatorImmigrationPulse,
 } from './spatialPredatorP6';
+import { calculatePredatorEnergyLedger } from './spatialPredatorP7';
 
 export const SPATIAL_PREDATOR_RUNTIME_VERSION = 7;
 const JUVENILES = 0;
@@ -285,6 +286,42 @@ function preyCandidates(
   return result.sort((a, b) => b.score - a.score);
 }
 
+function preyCohortBiomassKg(cohort: SpatialFaunaPatchCohortState, adultWeightKg: number): number {
+  return Math.max(0,
+    cohort[JUVENILES] * adultWeightKg * .48
+    + cohort[ADULTS] * adultWeightKg
+    + cohort[OLD] * adultWeightKg * .88
+  );
+}
+
+function accessiblePreyMetrics(candidates: readonly PreyCandidate[]): { heads: number; biomassKg: number } {
+  let heads = 0;
+  let biomassKg = 0;
+  for (const candidate of candidates) {
+    heads += cohortPopulation(candidate.cohort);
+    biomassKg += preyCohortBiomassKg(candidate.cohort, candidate.adultWeightKg);
+  }
+  return { heads, biomassKg };
+}
+
+function islandPreferredPreyMetrics(
+  predator: SpatialPredatorSpeciesDefinition,
+  fauna: SpatialFaunaRuntimeState,
+): { heads: number; biomassKg: number } {
+  let heads = 0;
+  let biomassKg = 0;
+  for (const preyState of fauna.species) {
+    if ((predator.preyWeights[preyState.speciesId] ?? 0) <= 0) continue;
+    const preyDef = SPATIAL_FAUNA_SPECIES_BY_ID[preyState.speciesId];
+    if (!preyDef) continue;
+    for (const cohort of Object.values(preyState.cohortsByPatch)) {
+      heads += cohortPopulation(cohort);
+      biomassKg += preyCohortBiomassKg(cohort, preyDef.adultWeightKg);
+    }
+  }
+  return { heads, biomassKg };
+}
+
 function removeOnePrey(candidate: PreyCandidate, predator: SpatialPredatorSpeciesDefinition, random: number): { biomassKg: number; killed: boolean } {
   const cohort = candidate.cohort;
   const population = cohortPopulation(cohort);
@@ -477,6 +514,25 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     matured: 0,
     aged: 0,
     preyKilled: 0,
+    huntAttempts: 0,
+    successfulHunts: 0,
+    unsuccessfulHunts: 0,
+    huntOpportunityPredatorDays: 0,
+    accessiblePreyHeadDays: 0,
+    accessiblePreyBiomassPredatorDaysKg: 0,
+    islandPreferredPreyHeadDays: 0,
+    islandPreferredPreyBiomassPredatorDaysKg: 0,
+    preyBiomassKilledKg: 0,
+    edibleBiomassFromKillsKg: 0,
+    dailyDemandKg: 0,
+    coveredDemandKg: 0,
+    energyShortfallKg: 0,
+    reserveStartKg: 0,
+    reserveEndKg: 0,
+    reserveDrawKg: 0,
+    reserveGainKg: 0,
+    edibleOverflowKg: 0,
+    hungerRiskPredatorDays: 0,
     predatorDays: 0,
     foodCoveragePredatorDays: 0,
     reserveFillPredatorDays: 0,
@@ -485,6 +541,7 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     mateSearchProposed: 0,
     mateSearchExecuted: 0,
     mateSearchBlocked: 0,
+    mateAccessEvaluated: 0,
     mateAccessBeforeSum: 0,
     mateAccessAfterSum: 0,
     belowMvpDays: 0,
@@ -611,6 +668,7 @@ export function tickSpatialPredatorsDay(
     const speciesEvent = blankSpeciesTelemetry(predator.id, startPopulation);
     bySpecies[predator.id] = speciesEvent;
     const profile = getPredatorBehaviorProfile(predator);
+    const islandPreferredPrey = islandPreferredPreyMetrics(predator, fauna);
     const breederSnapshotByPatch = new Map(
       Object.entries(speciesState.cohortsByPatch).map(([patchId, cohort]) => [patchId, effectivePredatorBreeders(cohort)] as const),
     );
@@ -627,7 +685,14 @@ export function tickSpatialPredatorsDay(
       const reserveCapacity = clampPredatorReserve(cohort, predator);
       const reserveBefore = cohort[RESERVE];
       const candidates = preyCandidates(predator, patchId, fauna, world);
+      const accessiblePrey = accessiblePreyMetrics(candidates);
+      speciesEvent.huntOpportunityPredatorDays += candidates.length > 0 ? population : 0;
+      speciesEvent.accessiblePreyHeadDays += accessiblePrey.heads * population;
+      speciesEvent.accessiblePreyBiomassPredatorDaysKg += accessiblePrey.biomassKg * population;
+      speciesEvent.islandPreferredPreyHeadDays += islandPreferredPrey.heads * population;
+      speciesEvent.islandPreferredPreyBiomassPredatorDaysKg += islandPreferredPrey.biomassKg * population;
       let huntIndex = 0;
+      let successfulHunts = 0;
       let huntedEdibleKg = 0;
       let lastKillPatchId: string | undefined;
       const expectedAttempts = metabolicHeads * predator.maxKillsPerAdultPerDay / Math.max(.12, predator.huntSuccessBase);
@@ -656,19 +721,33 @@ export function tickSpatialPredatorsDay(
             lastKillPatchId = candidate.patchId;
             carrionAddedKg += addCarrion(fauna, candidate.patchId, removed.biomassKg - edible);
             preyKilled += 1;
+            successfulHunts += 1;
             speciesEvent.preyKilled += 1;
+            speciesEvent.preyBiomassKilledKg += removed.biomassKg;
+            speciesEvent.edibleBiomassFromKillsKg += edible;
             preyBiomassKilledKg += removed.biomassKg;
           }
         } else unsuccessfulHunts += 1;
         huntIndex += 1;
       }
 
-      const availableEnergyKg = reserveBefore + huntedEdibleKg;
-      const coveredEnergyKg = Math.min(dailyNeed, availableEnergyKg);
-      const shortfall = Math.max(0, dailyNeed - coveredEnergyKg);
-      const reserveAfterDemand = Math.min(reserveCapacity, Math.max(0, availableEnergyKg - coveredEnergyKg));
-      const edibleOverflowKg = Math.max(0, availableEnergyKg - coveredEnergyKg - reserveAfterDemand);
+      speciesEvent.huntAttempts += huntIndex;
+      speciesEvent.successfulHunts += successfulHunts;
+      speciesEvent.unsuccessfulHunts += Math.max(0, huntIndex - successfulHunts);
+      const energy = calculatePredatorEnergyLedger(reserveBefore, reserveCapacity, huntedEdibleKg, dailyNeed);
+      const coveredEnergyKg = energy.coveredDemandKg;
+      const shortfall = energy.shortfallKg;
+      const reserveAfterDemand = energy.reserveAfterKg;
+      const edibleOverflowKg = energy.overflowKg;
       cohort[RESERVE] = reserveAfterDemand;
+      speciesEvent.dailyDemandKg += energy.demandKg;
+      speciesEvent.coveredDemandKg += energy.coveredDemandKg;
+      speciesEvent.energyShortfallKg += energy.shortfallKg;
+      speciesEvent.reserveStartKg += energy.reserveBeforeKg;
+      speciesEvent.reserveEndKg += energy.reserveAfterKg;
+      speciesEvent.reserveDrawKg += energy.reserveDrawKg;
+      speciesEvent.reserveGainKg += energy.reserveGainKg;
+      speciesEvent.edibleOverflowKg += energy.overflowKg;
       if (edibleOverflowKg > 0 && lastKillPatchId) carrionAddedKg += addCarrion(fauna, lastKillPatchId, edibleOverflowKg);
 
       const foodRatio = dailyNeed > 0 ? clamp01(coveredEnergyKg / dailyNeed) : 1;
@@ -677,6 +756,7 @@ export function tickSpatialPredatorsDay(
       speciesEvent.reserveFillPredatorDays += (reserveCapacity > 0 ? clamp01(reserveAfterDemand / reserveCapacity) : 1) * population;
       cohort[CONDITION] = clamp01(cohort[CONDITION] + (foodRatio - .72) * .045);
       if (shortfall > dailyNeed * .45) {
+        speciesEvent.hungerRiskPredatorDays += population;
         const hungerRate = .0008 + (1 - foodRatio) * .004;
         const count = Math.min(
           population,
@@ -828,6 +908,7 @@ export function tickSpatialPredatorsDay(
         const liveBreeders = buildPredatorBreederHeadMap(speciesState.cohortsByPatch);
         const before = getPredatorMateAccessScore(world, move.from, predator.matingRangeKm, liveBreeders);
         const after = getPredatorMateAccessScore(world, move.to, predator.matingRangeKm, liveBreeders);
+        speciesEvent.mateAccessEvaluated += 1;
         speciesEvent.mateAccessBeforeSum += before;
         speciesEvent.mateAccessAfterSum += after;
         if (after <= 0 || after <= before + 1e-6) {

@@ -218,6 +218,25 @@ function accumulatePredators(aggregates: Record<string, PredatorAggregate>, dail
     total.matured += daily.matured;
     total.aged += daily.aged;
     total.preyKilled += daily.preyKilled;
+    total.huntAttempts += daily.huntAttempts;
+    total.successfulHunts += daily.successfulHunts;
+    total.unsuccessfulHunts += daily.unsuccessfulHunts;
+    total.huntOpportunityPredatorDays += daily.huntOpportunityPredatorDays;
+    total.accessiblePreyHeadDays += daily.accessiblePreyHeadDays;
+    total.accessiblePreyBiomassPredatorDaysKg += daily.accessiblePreyBiomassPredatorDaysKg;
+    total.islandPreferredPreyHeadDays += daily.islandPreferredPreyHeadDays;
+    total.islandPreferredPreyBiomassPredatorDaysKg += daily.islandPreferredPreyBiomassPredatorDaysKg;
+    total.preyBiomassKilledKg += daily.preyBiomassKilledKg;
+    total.edibleBiomassFromKillsKg += daily.edibleBiomassFromKillsKg;
+    total.dailyDemandKg += daily.dailyDemandKg;
+    total.coveredDemandKg += daily.coveredDemandKg;
+    total.energyShortfallKg += daily.energyShortfallKg;
+    total.reserveStartKg += daily.reserveStartKg;
+    total.reserveEndKg += daily.reserveEndKg;
+    total.reserveDrawKg += daily.reserveDrawKg;
+    total.reserveGainKg += daily.reserveGainKg;
+    total.edibleOverflowKg += daily.edibleOverflowKg;
+    total.hungerRiskPredatorDays += daily.hungerRiskPredatorDays;
     total.predatorDays += daily.predatorDays;
     total.foodCoveragePredatorDays += daily.foodCoveragePredatorDays;
     total.reserveFillPredatorDays += daily.reserveFillPredatorDays;
@@ -226,6 +245,7 @@ function accumulatePredators(aggregates: Record<string, PredatorAggregate>, dail
     total.mateSearchProposed += daily.mateSearchProposed;
     total.mateSearchExecuted += daily.mateSearchExecuted;
     total.mateSearchBlocked += daily.mateSearchBlocked;
+    total.mateAccessEvaluated += daily.mateAccessEvaluated;
     total.mateAccessBeforeSum += daily.mateAccessBeforeSum;
     total.mateAccessAfterSum += daily.mateAccessAfterSum;
     total.belowMvpDays = daily.belowMvpDays;
@@ -378,6 +398,49 @@ function runFiveYearSoak(): void {
       species.deathJuveniles + species.deathAdults + species.deathOld === species.deaths,
       `${species.deathJuveniles}+${species.deathAdults}+${species.deathOld} vs ${species.deaths}`,
     );
+    const energyTolerance = Math.max(1, species.dailyDemandKg + species.reserveStartKg + species.edibleBiomassFromKillsKg) * 1e-9;
+    check(
+      `predator-hunt-accounting:${species.speciesId}`,
+      species.huntAttempts === species.successfulHunts + species.unsuccessfulHunts && species.successfulHunts === species.preyKilled,
+      `attempts=${species.huntAttempts} success=${species.successfulHunts} failed=${species.unsuccessfulHunts} kills=${species.preyKilled}`,
+    );
+    check(
+      `predator-edible-yield-accounting:${species.speciesId}`,
+      Math.abs(species.edibleBiomassFromKillsKg - species.preyBiomassKilledKg * .62) <= energyTolerance,
+      `edible=${species.edibleBiomassFromKillsKg.toFixed(3)} killBiomass=${species.preyBiomassKilledKg.toFixed(3)}`,
+    );
+    check(
+      `predator-demand-accounting:${species.speciesId}`,
+      Math.abs(species.dailyDemandKg - species.coveredDemandKg - species.energyShortfallKg) <= energyTolerance,
+      `demand=${species.dailyDemandKg.toFixed(3)} covered=${species.coveredDemandKg.toFixed(3)} shortfall=${species.energyShortfallKg.toFixed(3)}`,
+    );
+    check(
+      `predator-reserve-accounting:${species.speciesId}`,
+      Math.abs(species.reserveEndKg - (species.reserveStartKg - species.reserveDrawKg + species.reserveGainKg)) <= energyTolerance,
+      `start=${species.reserveStartKg.toFixed(3)} draw=${species.reserveDrawKg.toFixed(3)} gain=${species.reserveGainKg.toFixed(3)} end=${species.reserveEndKg.toFixed(3)}`,
+    );
+    check(
+      `predator-energy-conservation:${species.speciesId}`,
+      Math.abs(
+        species.reserveStartKg + species.edibleBiomassFromKillsKg
+        - species.coveredDemandKg - species.reserveEndKg - species.edibleOverflowKg
+      ) <= energyTolerance,
+      `input=${(species.reserveStartKg + species.edibleBiomassFromKillsKg).toFixed(3)} output=${(species.coveredDemandKg + species.reserveEndKg + species.edibleOverflowKg).toFixed(3)}`,
+    );
+    check(
+      `predator-accessible-prey-subset:${species.speciesId}`,
+      species.accessiblePreyHeadDays <= species.islandPreferredPreyHeadDays + energyTolerance
+        && species.accessiblePreyBiomassPredatorDaysKg <= species.islandPreferredPreyBiomassPredatorDaysKg + energyTolerance,
+      `heads=${species.accessiblePreyHeadDays.toFixed(1)}/${species.islandPreferredPreyHeadDays.toFixed(1)} biomass=${species.accessiblePreyBiomassPredatorDaysKg.toFixed(1)}/${species.islandPreferredPreyBiomassPredatorDaysKg.toFixed(1)}`,
+    );
+    check(
+      `predator-mate-access-bounds:${species.speciesId}`,
+      species.mateAccessBeforeSum >= -1e-9
+        && species.mateAccessAfterSum >= -1e-9
+        && species.mateAccessBeforeSum <= species.mateAccessEvaluated + 1e-9
+        && species.mateAccessAfterSum <= species.mateAccessEvaluated + 1e-9,
+      `samples=${species.mateAccessEvaluated} beforeSum=${species.mateAccessBeforeSum.toFixed(3)} afterSum=${species.mateAccessAfterSum.toFixed(3)}`,
+    );
   }
   for (const bucket of annual) {
     const expected = bucket.startPopulation + bucket.births + bucket.faunaImmigrants - bucket.nonPredatorDeaths - bucket.predatorKills;
@@ -408,8 +471,27 @@ function runFiveYearSoak(): void {
     const reserveFill = species.predatorDays > 0 ? species.reserveFillPredatorDays / species.predatorDays : 0;
     const killsPerPredatorDay = species.predatorDays > 0 ? species.preyKilled / species.predatorDays : 0;
     const immigrationShare = recruitment > 0 ? species.immigrants / recruitment : 0;
-    const mateAccessBefore = species.mateSearchExecuted > 0 ? species.mateAccessBeforeSum / species.mateSearchExecuted : 0;
-    const mateAccessAfter = species.mateSearchExecuted > 0 ? species.mateAccessAfterSum / species.mateSearchExecuted : 0;
+    const mateAccessSamples = species.mateAccessEvaluated;
+    const mateAccessBefore = mateAccessSamples > 0 ? species.mateAccessBeforeSum / mateAccessSamples : 0;
+    const mateAccessAfter = mateAccessSamples > 0 ? species.mateAccessAfterSum / mateAccessSamples : 0;
+    const huntOpportunityRate = species.predatorDays > 0 ? species.huntOpportunityPredatorDays / species.predatorDays : 0;
+    const attemptsPerPredatorDay = species.predatorDays > 0 ? species.huntAttempts / species.predatorDays : 0;
+    const huntSuccessRate = species.huntAttempts > 0 ? species.successfulHunts / species.huntAttempts : 0;
+    const accessiblePreyHeadsPerPredatorDay = species.predatorDays > 0 ? species.accessiblePreyHeadDays / species.predatorDays : 0;
+    const islandPreferredPreyHeadsPerPredatorDay = species.predatorDays > 0 ? species.islandPreferredPreyHeadDays / species.predatorDays : 0;
+    const accessiblePreyBiomassKgPerPredatorDay = species.predatorDays > 0 ? species.accessiblePreyBiomassPredatorDaysKg / species.predatorDays : 0;
+    const islandPreferredPreyBiomassKgPerPredatorDay = species.predatorDays > 0 ? species.islandPreferredPreyBiomassPredatorDaysKg / species.predatorDays : 0;
+    const preyHeadAccessShare = species.islandPreferredPreyHeadDays > 0 ? species.accessiblePreyHeadDays / species.islandPreferredPreyHeadDays : 0;
+    const preyBiomassAccessShare = species.islandPreferredPreyBiomassPredatorDaysKg > 0
+      ? species.accessiblePreyBiomassPredatorDaysKg / species.islandPreferredPreyBiomassPredatorDaysKg
+      : 0;
+    const preyBiomassPerKillKg = species.preyKilled > 0 ? species.preyBiomassKilledKg / species.preyKilled : 0;
+    const edibleKgPerKill = species.preyKilled > 0 ? species.edibleBiomassFromKillsKg / species.preyKilled : 0;
+    const edibleYieldVsDemand = species.dailyDemandKg > 0 ? species.edibleBiomassFromKillsKg / species.dailyDemandKg : 0;
+    const demandCoverage = species.dailyDemandKg > 0 ? species.coveredDemandKg / species.dailyDemandKg : 1;
+    const shortfallRatio = species.dailyDemandKg > 0 ? species.energyShortfallKg / species.dailyDemandKg : 0;
+    const hungerRiskShare = species.predatorDays > 0 ? species.hungerRiskPredatorDays / species.predatorDays : 0;
+    const reserveDeltaKgPerPredatorDay = species.predatorDays > 0 ? (species.reserveEndKg - species.reserveStartKg) / species.predatorDays : 0;
     console.log(
       `[${label}] ${speciesId} pop=${species.startPopulation}->${species.endPopulation} births=${species.births} immigrants=${species.immigrants} deaths=${species.deaths} `
         + `hunger=${species.hungerDeaths} natural=${species.naturalDeaths} deathAge=${species.deathJuveniles}/${species.deathAdults}/${species.deathOld} `
@@ -418,7 +500,39 @@ function runFiveYearSoak(): void {
         + `pulses=${species.immigrationPulses} belowMvp=${species.belowMvpDays} pressure=${species.recoveryPressure.toFixed(3)} maxAbsent=${species.maxGlobalAbsenceDays} `
         + `food=${foodCoverage.toFixed(3)} reserve=${reserveFill.toFixed(3)} kills/predDay=${killsPerPredatorDay.toFixed(4)} immigrationShare=${immigrationShare.toFixed(3)}`,
     );
-    return [speciesId, { ...species, foodCoverage, reserveFill, killsPerPredatorDay, immigrationShare, mateAccessBefore, mateAccessAfter }];
+    console.log(
+      `[${label}] ${speciesId} energy opportunity=${huntOpportunityRate.toFixed(3)} attempts/predDay=${attemptsPerPredatorDay.toFixed(4)} success=${huntSuccessRate.toFixed(3)} `
+        + `preyHeads local/island=${accessiblePreyHeadsPerPredatorDay.toFixed(1)}/${islandPreferredPreyHeadsPerPredatorDay.toFixed(1)} accessShare=${preyHeadAccessShare.toFixed(3)} `
+        + `preyBiomass local/island=${accessiblePreyBiomassKgPerPredatorDay.toFixed(1)}/${islandPreferredPreyBiomassKgPerPredatorDay.toFixed(1)}kg accessShare=${preyBiomassAccessShare.toFixed(3)} `
+        + `killKg=${preyBiomassPerKillKg.toFixed(2)} edible/kill=${edibleKgPerKill.toFixed(2)} edible/demand=${edibleYieldVsDemand.toFixed(3)} `
+        + `coverage=${demandCoverage.toFixed(3)} shortfall=${shortfallRatio.toFixed(3)} reserveDelta/predDay=${reserveDeltaKgPerPredatorDay.toFixed(4)} hungerRisk=${hungerRiskShare.toFixed(3)}`,
+    );
+    return [speciesId, {
+      ...species,
+      foodCoverage,
+      reserveFill,
+      killsPerPredatorDay,
+      immigrationShare,
+      mateAccessSamples,
+      mateAccessBefore,
+      mateAccessAfter,
+      huntOpportunityRate,
+      attemptsPerPredatorDay,
+      huntSuccessRate,
+      accessiblePreyHeadsPerPredatorDay,
+      islandPreferredPreyHeadsPerPredatorDay,
+      accessiblePreyBiomassKgPerPredatorDay,
+      islandPreferredPreyBiomassKgPerPredatorDay,
+      preyHeadAccessShare,
+      preyBiomassAccessShare,
+      preyBiomassPerKillKg,
+      edibleKgPerKill,
+      edibleYieldVsDemand,
+      demandCoverage,
+      shortfallRatio,
+      hungerRiskShare,
+      reserveDeltaKgPerPredatorDay,
+    }];
   }));
 
   console.log(
@@ -457,7 +571,7 @@ function runFiveYearSoak(): void {
   };
   mkdirSync('artifacts', { recursive: true });
   const safeSeed = seed.replace(/[^a-zA-Z0-9_-]+/g, '-');
-  const reportPath = `artifacts/predator-p6-${mode}-${safeSeed}.json`;
+  const reportPath = `artifacts/predator-p7-${mode}-${safeSeed}.json`;
   writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(`[${label}] report=${reportPath}`);
 

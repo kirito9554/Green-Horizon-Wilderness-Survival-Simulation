@@ -53,6 +53,9 @@ jobs:
       - name: Predator P6 breeding-retention/recovery smoke test
         run: npm run test:spatial-predator-p6
 
+      - name: Predator P7 energy-accounting smoke test
+        run: npm run test:spatial-predator-p7
+
       - name: Full spatial trophic ecosystem smoke test
         run: npm run test:spatial-trophic
 
