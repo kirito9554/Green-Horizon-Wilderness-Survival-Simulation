@@ -201,6 +201,8 @@ export interface PredatorFeedingBoutPlanInput {
   bioReserveKJ: number;
   gutEnergyKJ: number;
   maxKillsPerAdultPerDay: number;
+  /** Optional empirical feeding-bout intensity; never derived from calorie deficit. */
+  calibratedBoutAttemptsPerHead?: number;
   candidates: readonly PredatorFeedingCandidateInput[];
 }
 
@@ -322,7 +324,11 @@ export function calculatePredatorFeedingBoutPlan(
   const authoredCadenceAttempts = metabolicHeads
     * nonNegative(input.maxKillsPerAdultPerDay)
     / effectiveSuccess;
-  const huntLimit = Math.min(24, Math.max(1, Math.ceil(authoredCadenceAttempts)));
+  const calibratedBoutAttempts = metabolicHeads * nonNegative(input.calibratedBoutAttemptsPerHead ?? 0);
+  const huntLimit = Math.min(
+    24,
+    Math.max(1, Math.ceil(Math.max(authoredCadenceAttempts, calibratedBoutAttempts))),
+  );
 
   return {
     storedUsableEnergyKJ,
@@ -471,6 +477,16 @@ export function getPredatorP95TargetScore(input: PredatorP95TargetScoreInput): n
  * 4.184 kJ/kcal: ~1.323 MJ/day. This replaces the broad bird allometry only
  * when the P9.6 calibration flag is enabled.
  */
+/**
+ * Median attack count per observed multi-attack hawk hunting bout was three
+ * (IQR 2-5) in the bat-hunting field study used as the P9.6 effort analogue.
+ * This is a bounded bout-effort parameter, not an energy-deficit multiplier.
+ */
+export function predatorCalibratedBoutAttemptsPerHead(speciesId: string): number {
+  if (speciesId === 'PREDATOR_RAPTOR') return 3;
+  return 0;
+}
+
 export const PREDATOR_RAPTOR_ANALOGUE_FMR_KJ_PER_DAY = 1323;
 
 export function calculatePredatorCalibratedFmrKJPerAdultDay(
