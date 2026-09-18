@@ -5,6 +5,8 @@ import {
   REFERENCE_WET_PREY_ENERGY_KJ_PER_KG,
   advancePredatorShadowDigestion,
   calculateFieldMetabolicRateKJPerDay,
+  calculatePredatorBioenergeticLedger,
+  calculatePredatorFeedingBoutPlan,
   calculatePredatorBioenergeticShadow,
   estimatePredatorShadowDigestionDays,
 } from '../src/simulation/spatial/spatialPredatorP9';
@@ -57,6 +59,52 @@ close(
 );
 assert.ok(day1.state.daysRemaining >= 6 && day1.state.daysRemaining <= 7, 'python meal must retain multi-day gut state after day one');
 assert.ok(day1.digestionCostKJ > 0 && day1.assimilatedEnergyKJ > 0, 'digestion must split released energy into SDA cost and assimilated energy');
+
+const p93SmallPrey = calculatePredatorFeedingBoutPlan({
+  speciesId: 'PREDATOR_MONITOR_LIZARD',
+  metabolicHeads: 1,
+  fmrDemandKJ: calculateFieldMetabolicRateKJPerDay(8.5, 'reptile'),
+  bioReserveKJ: 0,
+  gutEnergyKJ: 0,
+  maxKillsPerAdultPerDay: .42,
+  candidates: [{ encounterScore: 10, expectedEdibleKg: .11, successProbability: .27 }],
+});
+assert.ok(p93SmallPrey.huntLimit >= 1 && p93SmallPrey.huntLimit <= 2,
+  'P9.3 small-prey deficit must not expand into P8-style 20+ attempt budgets');
+
+const pythonDemand = calculateFieldMetabolicRateKJPerDay(24, 'reptile');
+const fedPython = calculatePredatorFeedingBoutPlan({
+  speciesId: 'PREDATOR_PYTHON',
+  metabolicHeads: 1,
+  fmrDemandKJ: pythonDemand,
+  bioReserveKJ: 0,
+  gutEnergyKJ: pythonDemand * 4 / .75,
+  maxKillsPerAdultPerDay: .16,
+  candidates: [{ encounterScore: 10, expectedEdibleKg: 3, successProbability: .25 }],
+});
+assert.equal(fedPython.huntLimit, 0, 'python with more than one usable FMR-day in gut must not hunt');
+const hungryPython = calculatePredatorFeedingBoutPlan({
+  speciesId: 'PREDATOR_PYTHON',
+  metabolicHeads: 1,
+  fmrDemandKJ: pythonDemand,
+  bioReserveKJ: 0,
+  gutEnergyKJ: 0,
+  maxKillsPerAdultPerDay: .16,
+  candidates: [{ encounterScore: 10, expectedEdibleKg: 3, successProbability: .25 }],
+});
+close(hungryPython.mealTargetKJ, pythonDemand * 7, 1e-9,
+  'empty python feeding bout should seek the seven-day empirical meal horizon');
+
+const bioLedger = calculatePredatorBioenergeticLedger(1000, 400, 2000, 900);
+assert.equal(bioLedger.coveredDemandKJ, 1000);
+assert.equal(bioLedger.reserveDrawKJ, 100);
+assert.equal(bioLedger.reserveAfterKJ, 300);
+close(
+  bioLedger.reserveBeforeKJ + bioLedger.assimilatedKJ,
+  bioLedger.coveredDemandKJ + bioLedger.reserveAfterKJ + bioLedger.overflowKJ,
+  1e-9,
+  'P9.3 authoritative energy ledger must conserve energy',
+);
 
 const source: SpatialPredatorPatchCohortState = [0, 4, 0, .9, 8, 1000, 2, 5, 1];
 const transfer = extractPredatorCohortTransfer(source, 1, true);
