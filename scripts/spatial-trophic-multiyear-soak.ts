@@ -237,6 +237,8 @@ function accumulatePredators(aggregates: Record<string, PredatorAggregate>, dail
     total.reserveGainKg += daily.reserveGainKg;
     total.edibleOverflowKg += daily.edibleOverflowKg;
     total.hungerRiskPredatorDays += daily.hungerRiskPredatorDays;
+    total.huntingPredatorDays += daily.huntingPredatorDays;
+    total.reserveCoveredPredatorDays += daily.reserveCoveredPredatorDays;
     total.predatorDays += daily.predatorDays;
     total.foodCoveragePredatorDays += daily.foodCoveragePredatorDays;
     total.reserveFillPredatorDays += daily.reserveFillPredatorDays;
@@ -491,6 +493,8 @@ function runFiveYearSoak(): void {
     const demandCoverage = species.dailyDemandKg > 0 ? species.coveredDemandKg / species.dailyDemandKg : 1;
     const shortfallRatio = species.dailyDemandKg > 0 ? species.energyShortfallKg / species.dailyDemandKg : 0;
     const hungerRiskShare = species.predatorDays > 0 ? species.hungerRiskPredatorDays / species.predatorDays : 0;
+    const huntingDayShare = species.predatorDays > 0 ? species.huntingPredatorDays / species.predatorDays : 0;
+    const reserveCoveredDayShare = species.predatorDays > 0 ? species.reserveCoveredPredatorDays / species.predatorDays : 0;
     const reserveDeltaKgPerPredatorDay = species.predatorDays > 0 ? (species.reserveEndKg - species.reserveStartKg) / species.predatorDays : 0;
     console.log(
       `[${label}] ${speciesId} pop=${species.startPopulation}->${species.endPopulation} births=${species.births} immigrants=${species.immigrants} deaths=${species.deaths} `
@@ -505,7 +509,8 @@ function runFiveYearSoak(): void {
         + `preyHeads local/island=${accessiblePreyHeadsPerPredatorDay.toFixed(1)}/${islandPreferredPreyHeadsPerPredatorDay.toFixed(1)} accessShare=${preyHeadAccessShare.toFixed(3)} `
         + `preyBiomass local/island=${accessiblePreyBiomassKgPerPredatorDay.toFixed(1)}/${islandPreferredPreyBiomassKgPerPredatorDay.toFixed(1)}kg accessShare=${preyBiomassAccessShare.toFixed(3)} `
         + `killKg=${preyBiomassPerKillKg.toFixed(2)} edible/kill=${edibleKgPerKill.toFixed(2)} edible/demand=${edibleYieldVsDemand.toFixed(3)} `
-        + `coverage=${demandCoverage.toFixed(3)} shortfall=${shortfallRatio.toFixed(3)} reserveDelta/predDay=${reserveDeltaKgPerPredatorDay.toFixed(4)} hungerRisk=${hungerRiskShare.toFixed(3)}`,
+        + `coverage=${demandCoverage.toFixed(3)} shortfall=${shortfallRatio.toFixed(3)} reserveDelta/predDay=${reserveDeltaKgPerPredatorDay.toFixed(4)} `
+        + `hungerRisk=${hungerRiskShare.toFixed(3)} huntingDays=${huntingDayShare.toFixed(3)} reserveDays=${reserveCoveredDayShare.toFixed(3)}`,
     );
     return [speciesId, {
       ...species,
@@ -531,6 +536,8 @@ function runFiveYearSoak(): void {
       demandCoverage,
       shortfallRatio,
       hungerRiskShare,
+      huntingDayShare,
+      reserveCoveredDayShare,
       reserveDeltaKgPerPredatorDay,
     }];
   }));
