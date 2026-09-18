@@ -161,6 +161,7 @@ export type SpatialPredatorPatchCohortState = [
   shadowGutMassKg?: number,
   shadowDigestionDaysRemaining?: number,
   shadowDaysSinceMeal?: number,
+  bioReserveEnergyKJ?: number,
 ];
 
 export interface SpatialPredatorSpeciesRuntimeState {
@@ -226,6 +227,16 @@ export interface SpatialPredatorSpeciesTelemetry {
   shadowAssimilatedEnergyKJ: number;
   shadowDigestionCostKJ: number;
   shadowDigestingPredatorDays: number;
+  /** P9.3 authoritative bioenergetic ledger, populated only when the feature flag is enabled. */
+  bioDemandKJ: number;
+  bioCoveredDemandKJ: number;
+  bioShortfallKJ: number;
+  bioReserveStartKJ: number;
+  bioReserveEndKJ: number;
+  bioReserveDrawKJ: number;
+  bioReserveGainKJ: number;
+  bioEnergyOverflowKJ: number;
+  feedingBoutPredatorDays: number;
   hungerRiskPredatorDays: number;
   huntingPredatorDays: number;
   reserveCoveredPredatorDays: number;
