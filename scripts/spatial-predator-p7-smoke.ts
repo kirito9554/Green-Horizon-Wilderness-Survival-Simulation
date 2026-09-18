@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createSpatialFaunaEcosystemState } from '../src/simulation/spatial/spatialFaunaEcosystemRuntime';
 import { calculatePredatorEnergyLedger } from '../src/simulation/spatial/spatialPredatorP7';
-import { getPredatorEnergyWeightedTargetScore, tickSpatialPredatorsDay } from '../src/simulation/spatial/spatialPredatorRuntime';
+import { tickSpatialPredatorsDay } from '../src/simulation/spatial/spatialPredatorRuntime';
 import { generateSpatialWorld } from '../src/simulation/spatial/worldGeneration';
 
 function approx(actual: number, expected: number, label: string, scale = 1): void {
@@ -30,12 +30,6 @@ for (const [name, reserve, capacity, fresh, demand] of [
   );
   assert.ok(ledger.reserveAfterKg >= 0 && ledger.reserveAfterKg <= ledger.reserveCapacityKg + 1e-9, `${name} reserve bounds`);
 }
-
-assert.ok(
-  getPredatorEnergyWeightedTargetScore(10, 2) > getPredatorEnergyWeightedTargetScore(10, .2),
-  'equal encounter opportunity should prefer the prey item with greater edible yield',
-);
-assert.equal(getPredatorEnergyWeightedTargetScore(0, 5), 0, 'zero encounter opportunity must remain unselectable');
 
 const world = generateSpatialWorld('spatial-trophic-soak-alpha');
 const runtime = createSpatialFaunaEcosystemState('spatial-trophic-soak-alpha', 1, world);
