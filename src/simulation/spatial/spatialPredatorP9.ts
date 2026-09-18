@@ -296,7 +296,7 @@ export function calculatePredatorFeedingBoutPlan(
   for (const candidate of input.candidates) {
     const encounter = nonNegative(candidate.encounterScore);
     const expectedEdibleKg = nonNegative(candidate.expectedEdibleKg);
-    const capacityKg = Math.max(expectedEdibleKg, mealUtilityCapacityKg);
+    const capacityKg = Math.max(.001, mealUtilityCapacityKg);
     const weight = encounter * Math.min(expectedEdibleKg, capacityKg);
     if (weight <= 0) continue;
     const success = clamp(candidate.successProbability, 0, 1);
