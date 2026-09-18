@@ -239,6 +239,11 @@ function accumulatePredators(aggregates: Record<string, PredatorAggregate>, dail
     total.fmrDemandKJ += daily.fmrDemandKJ;
     total.legacyDemandEquivalentKJ += daily.legacyDemandEquivalentKJ;
     total.ingestedPreyEnergyKJ += daily.ingestedPreyEnergyKJ;
+    total.shadowGutStartKJ += daily.shadowGutStartKJ;
+    total.shadowGutEndKJ += daily.shadowGutEndKJ;
+    total.shadowAssimilatedEnergyKJ += daily.shadowAssimilatedEnergyKJ;
+    total.shadowDigestionCostKJ += daily.shadowDigestionCostKJ;
+    total.shadowDigestingPredatorDays += daily.shadowDigestingPredatorDays;
     total.hungerRiskPredatorDays += daily.hungerRiskPredatorDays;
     total.huntingPredatorDays += daily.huntingPredatorDays;
     total.reserveCoveredPredatorDays += daily.reserveCoveredPredatorDays;
@@ -463,6 +468,26 @@ function runFiveYearSoak(): void {
         && species.ingestedPreyEnergyKJ >= 0,
       `fmr=${species.fmrDemandKJ.toFixed(1)} legacy=${species.legacyDemandEquivalentKJ.toFixed(1)} intake=${species.ingestedPreyEnergyKJ.toFixed(1)}`,
     );
+    const shadowGutTolerance = Math.max(
+      1,
+      species.shadowGutStartKJ + species.ingestedPreyEnergyKJ,
+    ) * 1e-9;
+    check(
+      `predator-p9-shadow-gut-conservation:${species.speciesId}`,
+      Math.abs(
+        species.shadowGutStartKJ + species.ingestedPreyEnergyKJ
+          - species.shadowGutEndKJ
+          - species.shadowAssimilatedEnergyKJ
+          - species.shadowDigestionCostKJ
+      ) <= shadowGutTolerance,
+      `input=${(species.shadowGutStartKJ + species.ingestedPreyEnergyKJ).toFixed(1)} output=${(species.shadowGutEndKJ + species.shadowAssimilatedEnergyKJ + species.shadowDigestionCostKJ).toFixed(1)}`,
+    );
+    check(
+      `predator-p9-shadow-digesting-day-bounds:${species.speciesId}`,
+      species.shadowDigestingPredatorDays >= 0
+        && species.shadowDigestingPredatorDays <= species.predatorDays + energyTolerance,
+      `digesting=${species.shadowDigestingPredatorDays.toFixed(1)} predatorDays=${species.predatorDays.toFixed(1)}`,
+    );
   }
   for (const bucket of annual) {
     const expected = bucket.startPopulation + bucket.births + bucket.faunaImmigrants - bucket.nonPredatorDeaths - bucket.predatorKills;
@@ -518,6 +543,8 @@ function runFiveYearSoak(): void {
     const reserveDeltaKgPerPredatorDay = species.predatorDays > 0 ? (species.reserveEndKg - species.reserveStartKg) / species.predatorDays : 0;
     const p9ShadowIntakeVsFmr = species.fmrDemandKJ > 0 ? species.ingestedPreyEnergyKJ / species.fmrDemandKJ : 1;
     const p9ShadowLegacyVsFmr = species.fmrDemandKJ > 0 ? species.legacyDemandEquivalentKJ / species.fmrDemandKJ : 1;
+    const p9ShadowAssimilatedVsFmr = species.fmrDemandKJ > 0 ? species.shadowAssimilatedEnergyKJ / species.fmrDemandKJ : 1;
+    const p9ShadowDigestingShare = species.predatorDays > 0 ? species.shadowDigestingPredatorDays / species.predatorDays : 0;
     console.log(
       `[${label}] ${speciesId} pop=${species.startPopulation}->${species.endPopulation} births=${species.births} immigrants=${species.immigrants} deaths=${species.deaths} `
         + `hunger=${species.hungerDeaths} natural=${species.naturalDeaths} deathAge=${species.deathJuveniles}/${species.deathAdults}/${species.deathOld} `
@@ -538,6 +565,11 @@ function runFiveYearSoak(): void {
       `[${label}] ${speciesId} p9-shadow fmr=${(species.fmrDemandKJ / 1000).toFixed(1)}MJ `
         + `legacyEq=${(species.legacyDemandEquivalentKJ / 1000).toFixed(1)}MJ intake=${(species.ingestedPreyEnergyKJ / 1000).toFixed(1)}MJ `
         + `intake/fmr=${p9ShadowIntakeVsFmr.toFixed(3)} legacy/fmr=${p9ShadowLegacyVsFmr.toFixed(3)}`,
+    );
+    console.log(
+      `[${label}] ${speciesId} p9-gut assimilated=${(species.shadowAssimilatedEnergyKJ / 1000).toFixed(1)}MJ `
+        + `SDA=${(species.shadowDigestionCostKJ / 1000).toFixed(1)}MJ gutEnd=${(species.shadowGutEndKJ / 1000).toFixed(1)}MJ `
+        + `assim/fmr=${p9ShadowAssimilatedVsFmr.toFixed(3)} digestingDays=${p9ShadowDigestingShare.toFixed(3)}`,
     );
     return [speciesId, {
       ...species,
