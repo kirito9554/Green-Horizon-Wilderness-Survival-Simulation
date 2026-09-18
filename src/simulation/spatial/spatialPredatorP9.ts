@@ -381,3 +381,32 @@ export function calculatePredatorBioenergeticLedger(
 
 /** Authority-friendly name; the old shadow name is retained for P9.1/P9.2 reports. */
 export const advancePredatorDigestion = advancePredatorShadowDigestion;
+
+
+export type PredatorAlternativeFoodResource = 'fruit' | 'insects' | 'carrion';
+
+/**
+ * Wet-mass energy densities for P9.4 alternative foods.
+ *
+ * Fruit is deliberately conservative at 2 MJ/kg fresh mass: published wild
+ * fruits span widely with many values around ~0.5-4 MJ/kg fresh mass.
+ * Insects use 6 MJ/kg fresh mass, derived from ~19-26 MJ/kg dry arthropod
+ * energy density and roughly 30% dry matter in fresh larvae.
+ * Carrion reuses the whole-prey reference axis.
+ */
+export const PREDATOR_ALTERNATIVE_FOOD_ENERGY_KJ_PER_KG: Readonly<Record<PredatorAlternativeFoodResource, number>> =
+  Object.freeze({
+    fruit: 2000,
+    insects: 6000,
+    carrion: REFERENCE_WET_PREY_ENERGY_KJ_PER_KG,
+  });
+
+/**
+ * Eligibility, not a fixed diet fraction.
+ * Actual composition emerges from local stock and energetic profitability.
+ */
+export function predatorAlternativeFoodResources(speciesId: string): readonly PredatorAlternativeFoodResource[] {
+  if (speciesId === 'PREDATOR_MONITOR_LIZARD') return ['insects', 'carrion'];
+  if (speciesId === 'PREDATOR_CIVET') return ['fruit', 'insects', 'carrion'];
+  return [];
+}
