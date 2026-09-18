@@ -197,6 +197,9 @@ export interface SpatialPredatorSpeciesTelemetry {
   matured: number;
   aged: number;
   preyKilled: number;
+  /** P9.5 audit: realized kill composition before changing target-selection semantics. */
+  preyKillsBySpecies: Record<string, number>;
+  preyKillBiomassBySpeciesKg: Record<string, number>;
   huntAttempts: number;
   successfulHunts: number;
   unsuccessfulHunts: number;
