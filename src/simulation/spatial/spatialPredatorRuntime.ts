@@ -724,6 +724,8 @@ export function tickSpatialPredatorsDay(
   let preyKilled = 0;
   let preyBiomassKilledKg = 0;
   let carrionAddedKg = 0;
+  let alternativeFoodConsumedKg = 0;
+  let alternativeFoodEnergyKJ = 0;
   let births = 0;
   let deaths = 0;
   let hungerDeaths = 0;
@@ -879,6 +881,8 @@ export function tickSpatialPredatorsDay(
 
       speciesEvent.alternativeFoodConsumedKg += alternativeFoodMassKg;
       speciesEvent.alternativeFoodEnergyKJ += alternativeFoodEnergyKJ;
+      alternativeFoodConsumedKg += alternativeFoodMassKg;
+      alternativeFoodEnergyKJ += alternativeFoodEnergyKJ;
       speciesEvent.alternativeFruitKg += alternativeFruitKg;
       speciesEvent.alternativeInsectKg += alternativeInsectKg;
       speciesEvent.alternativeCarrionKg += alternativeCarrionKg;
@@ -1295,7 +1299,8 @@ export function tickSpatialPredatorsDay(
 
   predators.lastProcessedDay = day;
   predators.telemetry = summarizePredators(predators, world, day, season, {
-    preyKilled, preyBiomassKilledKg, carrionAddedKg, births, deaths, hungerDeaths, naturalDeaths,
+    preyKilled, preyBiomassKilledKg, carrionAddedKg, alternativeFoodConsumedKg, alternativeFoodEnergyKJ,
+    births, deaths, hungerDeaths, naturalDeaths,
     matured, aged, moved, mateSearchMoved, mateSearchProposed, mateSearchExecuted, mateSearchBlocked,
     natalDispersed, territorySettled, groupSplitMoved, immigrants, immigrationPulses, unsuccessfulHunts,
   }, bySpecies);
@@ -1360,6 +1365,8 @@ function summarizePredators(
     preyKilled: event.preyKilled ?? 0,
     preyBiomassKilledKg: event.preyBiomassKilledKg ?? 0,
     carrionAddedKg: event.carrionAddedKg ?? 0,
+    alternativeFoodConsumedKg: event.alternativeFoodConsumedKg ?? 0,
+    alternativeFoodEnergyKJ: event.alternativeFoodEnergyKJ ?? 0,
     births: event.births ?? 0,
     deaths: event.deaths ?? 0,
     hungerDeaths: event.hungerDeaths ?? 0,
