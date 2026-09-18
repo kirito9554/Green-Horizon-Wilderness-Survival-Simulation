@@ -759,10 +759,13 @@ export function tickSpatialPredatorsDay(
       speciesEvent.accessiblePreyBiomassPredatorDaysKg += accessiblePrey.biomassKg * population;
       speciesEvent.islandPreferredPreyHeadDays += islandPreferredPrey.heads * population;
       speciesEvent.islandPreferredPreyBiomassPredatorDaysKg += islandPreferredPrey.biomassKg * population;
+
       let huntIndex = 0;
       let successfulHunts = 0;
       let huntedEdibleKg = 0;
       let huntedBiomassKg = 0;
+      let lastKillPatchId: string | undefined;
+
       const shadowGutStartKJ = Math.max(0, cohort[SHADOW_GUT_ENERGY] ?? 0);
       const shadowGutStartMassKg = Math.max(0, cohort[SHADOW_GUT_MASS] ?? 0);
       const shadowDigestionDays = Math.max(
@@ -770,8 +773,23 @@ export function tickSpatialPredatorsDay(
         cohort[SHADOW_DIGESTION_DAYS] ?? (shadowGutStartKJ > 0 ? 1 : 0),
       );
       const shadowDaysSinceMeal = Math.max(0, cohort[SHADOW_DAYS_SINCE_MEAL] ?? 0);
-      let lastKillPatchId: string | undefined;
-      const huntPlan = calculatePredatorHuntPlan({
+
+      const preHuntBio = calculatePredatorBioenergeticShadow({
+        speciesId: predator.id,
+        adultWeightKg: predator.adultWeightKg,
+        metabolicHeads,
+        legacyDailyFoodKgPerAdult: predator.dailyFoodKgPerAdult,
+        edibleBiomassFromKillsKg: 0,
+      });
+      const fmrDemandKJ = preHuntBio.fmrDemandKJ;
+      const bioReserveCapacityKJ = fmrDemandKJ * getSpatialPredatorEnergyReserveDays(predator);
+      const legacyReserveFraction = reserveCapacity > 0 ? clamp01(reserveBefore / reserveCapacity) : 0;
+      const bioReserveBeforeKJ = Math.min(
+        bioReserveCapacityKJ,
+        Math.max(0, cohort[BIO_RESERVE_ENERGY] ?? bioReserveCapacityKJ * legacyReserveFraction),
+      );
+
+      const p8HuntPlan = behavior.bioenergeticFeeding ? undefined : calculatePredatorHuntPlan({
         metabolicHeads,
         dailyNeedKg: dailyNeed,
         reserveBeforeKg: reserveBefore,
@@ -783,13 +801,53 @@ export function tickSpatialPredatorsDay(
           successProbability: candidateHuntSuccess(predator, cohort, candidate, world),
         })),
       });
-      if (huntPlan.freshFoodTargetKg <= 0) speciesEvent.reserveCoveredPredatorDays += population;
-      while (huntedEdibleKg < huntPlan.freshFoodTargetKg * 1.05 && huntIndex < huntPlan.huntLimit && candidates.length) {
+      const p9FeedingPlan = behavior.bioenergeticFeeding ? calculatePredatorFeedingBoutPlan({
+        speciesId: predator.id,
+        metabolicHeads,
+        fmrDemandKJ,
+        bioReserveKJ: bioReserveBeforeKJ,
+        gutEnergyKJ: shadowGutStartKJ,
+        maxKillsPerAdultPerDay: predator.maxKillsPerAdultPerDay,
+        candidates: candidates.map(candidate => ({
+          encounterScore: candidate.score,
+          expectedEdibleKg: candidate.expectedEdibleKg,
+          successProbability: candidateHuntSuccess(predator, cohort, candidate, world),
+        })),
+      }) : undefined;
+
+      if (behavior.bioenergeticFeeding) {
+        if ((p9FeedingPlan?.storedUsableEnergyKJ ?? 0) >= fmrDemandKJ) {
+          speciesEvent.reserveCoveredPredatorDays += population;
+        }
+      } else if ((p8HuntPlan?.freshFoodTargetKg ?? 0) <= 0) {
+        speciesEvent.reserveCoveredPredatorDays += population;
+      }
+
+      const huntLimit = behavior.bioenergeticFeeding
+        ? (p9FeedingPlan?.huntLimit ?? 0)
+        : (p8HuntPlan?.huntLimit ?? 0);
+      const targetUtilityCapacityKg = behavior.bioenergeticFeeding
+        ? Math.max(.001, p9FeedingPlan?.mealUtilityCapacityKg ?? 0)
+        : Math.max(.001, p8HuntPlan?.usableEnergyCapacityKg ?? 0);
+
+      const shouldContinueFeeding = (): boolean => {
+        if (huntIndex >= huntLimit || candidates.length === 0) return false;
+        if (behavior.bioenergeticFeeding) {
+          const netNewMealKJ = huntedEdibleKg
+            * REFERENCE_WET_PREY_ENERGY_KJ_PER_KG
+            * (1 - predatorShadowSdaFraction(predator.id));
+          return (p9FeedingPlan?.storedUsableEnergyKJ ?? 0) + netNewMealKJ
+            < (p9FeedingPlan?.mealTargetKJ ?? 0);
+        }
+        return huntedEdibleKg < (p8HuntPlan?.freshFoodTargetKg ?? 0) * 1.05;
+      };
+
+      while (shouldContinueFeeding()) {
         const totalScore = candidates.reduce(
           (sum, entry) => sum + getPredatorEnergyWeightedTargetScore(
             entry.score,
             entry.expectedEdibleKg,
-            huntPlan.usableEnergyCapacityKg,
+            targetUtilityCapacityKg,
           ),
           0,
         );
@@ -800,7 +858,7 @@ export function tickSpatialPredatorsDay(
           roll -= getPredatorEnergyWeightedTargetScore(
             entry.score,
             entry.expectedEdibleKg,
-            huntPlan.usableEnergyCapacityKg,
+            targetUtilityCapacityKg,
           );
           if (roll <= 0) { candidate = entry; break; }
         }
@@ -809,7 +867,11 @@ export function tickSpatialPredatorsDay(
         const success = candidateHuntSuccess(predator, cohort, candidate, world);
         const successRoll = spatialUnitRandom(world.worldSeed, `predator-hunt|${predator.id}|${patchId}|${day}|${huntIndex}`);
         if (successRoll <= success) {
-          const removed = removeOnePrey(candidate, predator, spatialUnitRandom(world.worldSeed, `predator-stage|${predator.id}|${candidate.speciesId}|${candidate.patchId}|${day}|${huntIndex}`));
+          const removed = removeOnePrey(
+            candidate,
+            predator,
+            spatialUnitRandom(world.worldSeed, `predator-stage|${predator.id}|${candidate.speciesId}|${candidate.patchId}|${day}|${huntIndex}`),
+          );
           if (removed.killed) {
             const edible = removed.biomassKg * .62;
             huntedEdibleKg += edible;
@@ -828,15 +890,16 @@ export function tickSpatialPredatorsDay(
       }
 
       speciesEvent.huntAttempts += huntIndex;
-      if (huntIndex > 0) speciesEvent.huntingPredatorDays += population;
+      if (huntIndex > 0) {
+        speciesEvent.huntingPredatorDays += population;
+        if (behavior.bioenergeticFeeding) speciesEvent.feedingBoutPredatorDays += population;
+      }
       speciesEvent.successfulHunts += successfulHunts;
       speciesEvent.unsuccessfulHunts += Math.max(0, huntIndex - successfulHunts);
+
+      // Retain P7/P8 kg-equivalent accounting as a diagnostic comparison even
+      // when P9.3 owns behavior. In P9.3 this ledger is no longer authoritative.
       const energy = calculatePredatorEnergyLedger(reserveBefore, reserveCapacity, huntedEdibleKg, dailyNeed);
-      const coveredEnergyKg = energy.coveredDemandKg;
-      const shortfall = energy.shortfallKg;
-      const reserveAfterDemand = energy.reserveAfterKg;
-      const edibleOverflowKg = energy.overflowKg;
-      cohort[RESERVE] = reserveAfterDemand;
       speciesEvent.dailyDemandKg += energy.demandKg;
       speciesEvent.coveredDemandKg += energy.coveredDemandKg;
       speciesEvent.energyShortfallKg += energy.shortfallKg;
@@ -846,8 +909,6 @@ export function tickSpatialPredatorsDay(
       speciesEvent.reserveGainKg += energy.reserveGainKg;
       speciesEvent.edibleOverflowKg += energy.overflowKg;
 
-      // P9.1: shadow-only bioenergetic accounting. None of these values feed back
-      // into P8 hunting, reserve, mortality, fertility or movement decisions.
       const bioenergeticShadow = calculatePredatorBioenergeticShadow({
         speciesId: predator.id,
         adultWeightKg: predator.adultWeightKg,
@@ -859,10 +920,7 @@ export function tickSpatialPredatorsDay(
       speciesEvent.legacyDemandEquivalentKJ += bioenergeticShadow.legacyDemandEquivalentKJ;
       speciesEvent.ingestedPreyEnergyKJ += bioenergeticShadow.ingestedPreyEnergyKJ;
 
-      // P9.2: persist a shadow gut/digestion state on the cohort. The state is
-      // transferred with the cohort but remains observational: P8 hunting and
-      // mortality still do not read it.
-      const shadowDigestion = advancePredatorShadowDigestion(
+      const digestion = (behavior.bioenergeticFeeding ? advancePredatorDigestion : advancePredatorShadowDigestion)(
         {
           gutEnergyKJ: shadowGutStartKJ,
           gutMassKg: shadowGutStartMassKg,
@@ -875,26 +933,68 @@ export function tickSpatialPredatorsDay(
         huntedBiomassKg,
         huntedEdibleKg * REFERENCE_WET_PREY_ENERGY_KJ_PER_KG,
       );
-      cohort[SHADOW_GUT_ENERGY] = shadowDigestion.state.gutEnergyKJ;
-      cohort[SHADOW_GUT_MASS] = shadowDigestion.state.gutMassKg;
-      cohort[SHADOW_DIGESTION_DAYS] = shadowDigestion.state.daysRemaining;
-      cohort[SHADOW_DAYS_SINCE_MEAL] = shadowDigestion.state.daysSinceMeal;
+      cohort[SHADOW_GUT_ENERGY] = digestion.state.gutEnergyKJ;
+      cohort[SHADOW_GUT_MASS] = digestion.state.gutMassKg;
+      cohort[SHADOW_DIGESTION_DAYS] = digestion.state.daysRemaining;
+      cohort[SHADOW_DAYS_SINCE_MEAL] = digestion.state.daysSinceMeal;
       speciesEvent.shadowGutStartKJ += shadowGutStartKJ;
-      speciesEvent.shadowGutEndKJ += shadowDigestion.state.gutEnergyKJ;
-      speciesEvent.shadowAssimilatedEnergyKJ += shadowDigestion.assimilatedEnergyKJ;
-      speciesEvent.shadowDigestionCostKJ += shadowDigestion.digestionCostKJ;
+      speciesEvent.shadowGutEndKJ += digestion.state.gutEnergyKJ;
+      speciesEvent.shadowAssimilatedEnergyKJ += digestion.assimilatedEnergyKJ;
+      speciesEvent.shadowDigestionCostKJ += digestion.digestionCostKJ;
       if (shadowGutStartKJ > 0 || huntedEdibleKg > 0) {
         speciesEvent.shadowDigestingPredatorDays += population;
       }
 
-      if (edibleOverflowKg > 0 && lastKillPatchId) carrionAddedKg += addCarrion(fauna, lastKillPatchId, edibleOverflowKg);
+      let foodRatio: number;
+      let hungerShortfall: number;
+      let hungerDemand: number;
+      let reserveFillRatio: number;
 
-      const foodRatio = dailyNeed > 0 ? clamp01(coveredEnergyKg / dailyNeed) : 1;
+      if (behavior.bioenergeticFeeding) {
+        const bioEnergy = calculatePredatorBioenergeticLedger(
+          fmrDemandKJ,
+          bioReserveBeforeKJ,
+          bioReserveCapacityKJ,
+          digestion.assimilatedEnergyKJ,
+        );
+        cohort[BIO_RESERVE_ENERGY] = bioEnergy.reserveAfterKJ;
+        // Keep the legacy reserve slot synchronized only as a compatibility
+        // projection for older UI/movement code; it no longer receives kills.
+        cohort[RESERVE] = bioReserveCapacityKJ > 0
+          ? reserveCapacity * clamp01(bioEnergy.reserveAfterKJ / bioReserveCapacityKJ)
+          : 0;
+
+        speciesEvent.bioDemandKJ += bioEnergy.demandKJ;
+        speciesEvent.bioCoveredDemandKJ += bioEnergy.coveredDemandKJ;
+        speciesEvent.bioShortfallKJ += bioEnergy.shortfallKJ;
+        speciesEvent.bioReserveStartKJ += bioEnergy.reserveBeforeKJ;
+        speciesEvent.bioReserveEndKJ += bioEnergy.reserveAfterKJ;
+        speciesEvent.bioReserveDrawKJ += bioEnergy.reserveDrawKJ;
+        speciesEvent.bioReserveGainKJ += bioEnergy.reserveGainKJ;
+        speciesEvent.bioEnergyOverflowKJ += bioEnergy.overflowKJ;
+
+        foodRatio = fmrDemandKJ > 0 ? clamp01(bioEnergy.coveredDemandKJ / fmrDemandKJ) : 1;
+        hungerShortfall = bioEnergy.shortfallKJ;
+        hungerDemand = fmrDemandKJ;
+        reserveFillRatio = bioReserveCapacityKJ > 0
+          ? clamp01(bioEnergy.reserveAfterKJ / bioReserveCapacityKJ)
+          : 1;
+      } else {
+        cohort[RESERVE] = energy.reserveAfterKg;
+        if (energy.overflowKg > 0 && lastKillPatchId) {
+          carrionAddedKg += addCarrion(fauna, lastKillPatchId, energy.overflowKg);
+        }
+        foodRatio = dailyNeed > 0 ? clamp01(energy.coveredDemandKg / dailyNeed) : 1;
+        hungerShortfall = energy.shortfallKg;
+        hungerDemand = dailyNeed;
+        reserveFillRatio = reserveCapacity > 0 ? clamp01(energy.reserveAfterKg / reserveCapacity) : 1;
+      }
+
       speciesEvent.predatorDays += population;
       speciesEvent.foodCoveragePredatorDays += foodRatio * population;
-      speciesEvent.reserveFillPredatorDays += (reserveCapacity > 0 ? clamp01(reserveAfterDemand / reserveCapacity) : 1) * population;
+      speciesEvent.reserveFillPredatorDays += reserveFillRatio * population;
       cohort[CONDITION] = clamp01(cohort[CONDITION] + (foodRatio - .72) * .045);
-      if (shortfall > dailyNeed * .45) {
+      if (hungerShortfall > hungerDemand * .45) {
         speciesEvent.hungerRiskPredatorDays += population;
         const hungerRate = .0008 + (1 - foodRatio) * .004;
         const count = Math.min(
