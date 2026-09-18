@@ -50,12 +50,13 @@ jobs:
         env:
           SPATIAL_TROPHIC_SEED: ${{ matrix.seed }}
           P9_DAYS: ${{ matrix.days }}
+          P9_ALT_DIET: '1'
         run: npm run test:spatial-predator-p9-diagnostic
 
       - name: Upload P9 diagnostic report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: predator-p9-diagnostic-${{ matrix.seed }}-${{ matrix.days }}d
-          path: artifacts/predator-p9-diagnostic-*.json
+          name: predator-p9-4-diagnostic-${{ matrix.seed }}-${{ matrix.days }}d
+          path: artifacts/predator-p9.4-diagnostic-*.json
           if-no-files-found: warn
