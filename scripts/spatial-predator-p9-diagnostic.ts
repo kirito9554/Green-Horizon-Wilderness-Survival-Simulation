@@ -172,6 +172,7 @@ const species = Object.fromEntries(Object.entries(aggregates).map(([speciesId, a
     digestingDayShare: a.shadowDigestingPredatorDays / predatorDays,
     assimilatedVsDemand: a.shadowAssimilatedEnergyKJ / demand,
     intakeVsDemand: a.ingestedPreyEnergyKJ / demand,
+    totalGrossIntakeVsDemand: (a.ingestedPreyEnergyKJ + a.alternativeFoodEnergyKJ) / demand,
   }];
 }));
 
@@ -207,7 +208,7 @@ for (const [speciesId, value] of Object.entries(species)) {
       + `attempts/predDay=${value.attemptsPerPredatorDay.toFixed(3)} kills/predDay=${value.killsPerPredatorDay.toFixed(3)} `
       + `success=${value.huntSuccessRate.toFixed(3)} coverage=${value.bioCoverage.toFixed(3)} shortfall=${value.bioShortfall.toFixed(3)} `
       + `hungerRisk=${value.hungerRiskShare.toFixed(3)} huntDays=${value.huntingDayShare.toFixed(3)} `
-      + `digestDays=${value.digestingDayShare.toFixed(3)} altKg=${value.alternativeFoodConsumedKg.toFixed(1)} `
+      + `digestDays=${value.digestingDayShare.toFixed(3)} totalGross/demand=${value.totalGrossIntakeVsDemand.toFixed(3)} altKg=${value.alternativeFoodConsumedKg.toFixed(1)} `
       + `fruit=${value.alternativeFruitKg.toFixed(1)} insects=${value.alternativeInsectKg.toFixed(1)} carrion=${value.alternativeCarrionKg.toFixed(1)} `
       + `births=${value.births} immigrants=${value.immigrants} deaths=${value.deaths}`,
   );
