@@ -40,7 +40,8 @@
     "test:hydrology-living": "tsx scripts/hydrology-living-integration-smoke.ts",
     "test:hydrology-aquatic": "tsx scripts/hydrology-aquatic-ready-smoke.ts",
     "test:environment-scale": "tsx scripts/environmental-scale-smoke.ts",
-    "test:spatial-predator-p7": "tsx scripts/spatial-predator-p7-smoke.ts"
+    "test:spatial-predator-p7": "tsx scripts/spatial-predator-p7-smoke.ts",
+    "test:spatial-predator-p8": "tsx scripts/spatial-predator-p8-smoke.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
