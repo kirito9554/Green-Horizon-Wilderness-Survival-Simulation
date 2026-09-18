@@ -38,7 +38,7 @@ close(
   '7.5%-body-mass crocodilian meal should map to a four-day shadow digestion horizon',
 );
 
-const initial = { gutEnergyKJ: 0, daysRemaining: 0, daysSinceMeal: 5, lastMealEnergyKJ: 0 };
+const initial = { gutEnergyKJ: 0, gutMassKg: 0, daysRemaining: 0, daysSinceMeal: 5, lastMealEnergyKJ: 0 };
 const mealEnergy = 6 * REFERENCE_WET_PREY_ENERGY_KJ_PER_KG;
 const day1 = advancePredatorShadowDigestion(initial, 'PREDATOR_PYTHON', 24, 6, mealEnergy);
 close(
@@ -46,6 +46,12 @@ close(
   mealEnergy,
   1e-6,
   'shadow gut step must conserve incoming meal energy',
+);
+close(
+  day1.state.gutMassKg + day1.grossReleasedMassKg,
+  6,
+  1e-9,
+  'shadow gut step must conserve incoming meal mass',
 );
 assert.ok(day1.state.daysRemaining >= 6 && day1.state.daysRemaining <= 7, 'python meal must retain multi-day gut state after day one');
 assert.ok(day1.digestionCostKJ > 0 && day1.assimilatedEnergyKJ > 0, 'digestion must split released energy into SDA cost and assimilated energy');
