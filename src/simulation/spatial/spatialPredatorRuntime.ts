@@ -572,6 +572,8 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     matured: 0,
     aged: 0,
     preyKilled: 0,
+    preyKillsBySpecies: {},
+    preyKillBiomassBySpeciesKg: {},
     huntAttempts: 0,
     successfulHunts: 0,
     unsuccessfulHunts: 0,
@@ -979,6 +981,10 @@ export function tickSpatialPredatorsDay(
             preyKilled += 1;
             successfulHunts += 1;
             speciesEvent.preyKilled += 1;
+            speciesEvent.preyKillsBySpecies[candidate.speciesId] =
+              (speciesEvent.preyKillsBySpecies[candidate.speciesId] ?? 0) + 1;
+            speciesEvent.preyKillBiomassBySpeciesKg[candidate.speciesId] =
+              (speciesEvent.preyKillBiomassBySpeciesKg[candidate.speciesId] ?? 0) + removed.biomassKg;
             speciesEvent.preyBiomassKilledKg += removed.biomassKg;
             speciesEvent.edibleBiomassFromKillsKg += edible;
             preyBiomassKilledKg += removed.biomassKg;
