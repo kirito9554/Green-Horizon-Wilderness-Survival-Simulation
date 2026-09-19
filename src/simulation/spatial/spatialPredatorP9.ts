@@ -639,6 +639,28 @@ export function predatorCalibratedPreySizeProfitability(
  *   small-prey branch therefore approaches 0.9 and returns to the inherited
  *   fraction as prey becomes large relative to predator mass.
  */
+/**
+ * Calibrated maximum single-prey mass.
+ *
+ * Python uses a conservative one-predator-body-mass ceiling. Large pythons are
+ * documented swallowing prey near or above their own mass, so this remains
+ * deliberately below physiological extremes while fixing the authored
+ * 16-kg species-level cutoff that excluded feasible juvenile ungulates.
+ *
+ * Other predators retain their authored maximum until analogue-specific gape /
+ * carrying limits are justified.
+ */
+export function predatorCalibratedMaxPreyMassKg(
+  speciesId: string,
+  predatorMassKg: number,
+  authoredMaxPreyKg: number,
+): number {
+  if (speciesId === 'PREDATOR_PYTHON') {
+    return Math.max(nonNegative(authoredMaxPreyKg), nonNegative(predatorMassKg));
+  }
+  return nonNegative(authoredMaxPreyKg);
+}
+
 export function predatorConsumedPreyFraction(
   speciesId: string,
   preyMassKg: number,
