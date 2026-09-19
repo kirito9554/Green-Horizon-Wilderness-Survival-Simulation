@@ -601,7 +601,7 @@ export function predatorCalibratedPreySizeProfitability(
     // 15-35% meals remain highly profitable while tiny rodents are fallback.
     const logDistance = Math.log(Math.max(1e-6, relative) / .25);
     const gaussian = Math.exp(-.5 * Math.pow(logDistance / .75, 2));
-    return .05 + .95 * gaussian;
+    return .02 + .98 * gaussian;
   }
 
   if (speciesId === 'PREDATOR_RAPTOR') {
@@ -620,11 +620,29 @@ export function predatorCalibratedPreySizeProfitability(
     // prey. Preserve small-prey opportunism, but make >=5%-body-mass prey far
     // more profitable per successful encounter.
     if (relative >= .05) return 1;
-    if (relative <= .005) return .25;
-    return .25 + .75 * ((relative - .005) / .045);
+    if (relative <= .01) return .05;
+    return .05 + .95 * ((relative - .01) / .04);
   }
 
   return 1;
+}
+
+/**
+ * P9.6 stage-selection weight.
+ *
+ * Juvenile preference remains a vulnerability term, but it is multiplied by
+ * the realized stage's energetic profitability. Large specialists therefore
+ * do not systematically choose undersized juveniles after selecting an
+ * otherwise profitable prey species.
+ */
+export function predatorCalibratedPreyStageWeight(
+  speciesId: string,
+  stageMassKg: number,
+  predatorMassKg: number,
+  vulnerabilityMultiplier: number,
+): number {
+  return Math.max(0, vulnerabilityMultiplier)
+    * predatorCalibratedPreySizeProfitability(speciesId, stageMassKg, predatorMassKg);
 }
 
 /**
