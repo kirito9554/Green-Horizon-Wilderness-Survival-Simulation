@@ -126,8 +126,13 @@ close(
 );
 assert.equal(
   predatorCalibratedBioReserveDays('PREDATOR_PYTHON', 5.625),
-  21,
-  'P9.6 python reserve must retain post-digestion energy across the feeding cycle',
+  60,
+  'P9.6 python reserve must reflect documented prolonged-fasting physiology',
+);
+assert.equal(
+  predatorCalibratedBioReserveDays('PREDATOR_ESTUARINE_CROCODILE', 11.25),
+  30,
+  'P9.6 crocodilian reserve must outlast the short inherited kill-cadence horizon',
 );
 assert.ok(
   predatorCalibratedPreySizeProfitability('PREDATOR_PYTHON', 6, 24)
