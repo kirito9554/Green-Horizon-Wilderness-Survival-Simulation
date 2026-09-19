@@ -6,11 +6,15 @@ import {
   advancePredatorShadowDigestion,
   calculateFieldMetabolicRateKJPerDay,
   calculatePredatorBioenergeticLedger,
+  calculatePredatorCalibratedEnergyDemandKJPerAdultDay,
   calculatePredatorCalibratedFmrKJPerAdultDay,
   calculatePredatorFeedingBoutPlan,
   getPredatorP95TargetScore,
   predatorAlternativeFoodResources,
+  predatorCalibratedBioReserveDays,
   predatorCalibratedBoutAttemptsPerHead,
+  predatorCalibratedMealTargetKg,
+  predatorCalibratedPreySizeProfitability,
   predatorConsumedPreyFraction,
   predatorLocalDensitySwitchFactor,
   PREDATOR_ALTERNATIVE_FOOD_ENERGY_KJ_PER_KG,
@@ -96,6 +100,69 @@ close(
   1e-9,
   'P9.6 raptor analogue demand should match adult Ferruginous Hawk expenditure calibration',
 );
+close(
+  calculatePredatorCalibratedEnergyDemandKJPerAdultDay('PREDATOR_PYTHON', 24),
+  24 * .25 * REFERENCE_WET_PREY_ENERGY_KJ_PER_KG * .755 / 28,
+  1e-9,
+  'P9.6 python demand should follow the 25%-meal / 28-day feeding-cycle benchmark',
+);
+close(
+  calculatePredatorCalibratedEnergyDemandKJPerAdultDay('PREDATOR_ESTUARINE_CROCODILE', 180),
+  180 * .04 * REFERENCE_WET_PREY_ENERGY_KJ_PER_KG * .68 / 7,
+  1e-9,
+  'P9.6 crocodilian demand should follow the 4%-body-mass-per-week maintenance benchmark',
+);
+close(
+  predatorCalibratedMealTargetKg('PREDATOR_PYTHON', 24),
+  6,
+  1e-9,
+  'P9.6 python gross meal target should be 25% body mass',
+);
+close(
+  predatorCalibratedMealTargetKg('PREDATOR_ESTUARINE_CROCODILE', 180),
+  13.5,
+  1e-9,
+  'P9.6 crocodilian large-meal target should be 7.5% body mass',
+);
+assert.equal(
+  predatorCalibratedBioReserveDays('PREDATOR_PYTHON', 5.625),
+  21,
+  'P9.6 python reserve must retain post-digestion energy across the feeding cycle',
+);
+assert.ok(
+  predatorCalibratedPreySizeProfitability('PREDATOR_PYTHON', 6, 24)
+    > predatorCalibratedPreySizeProfitability('PREDATOR_PYTHON', .28, 24) * 4,
+  'P9.6 python should strongly prefer meal-sized prey over tiny rodents when both are available',
+);
+assert.ok(
+  predatorCalibratedPreySizeProfitability('PREDATOR_RAPTOR', 1.2, 4.8)
+    > predatorCalibratedPreySizeProfitability('PREDATOR_RAPTOR', .18, 4.8),
+  'P9.6 large raptor should prefer the empirically optimal medium prey class',
+);
+assert.ok(
+  predatorCalibratedPreySizeProfitability('PREDATOR_ESTUARINE_CROCODILE', 50, 180)
+    > predatorCalibratedPreySizeProfitability('PREDATOR_ESTUARINE_CROCODILE', 1.2, 180),
+  'P9.6 adult crocodilian should gain more profitability from large terrestrial prey than tiny prey',
+);
+
+const calibratedPythonDemand = calculatePredatorCalibratedEnergyDemandKJPerAdultDay('PREDATOR_PYTHON', 24);
+const calibratedPythonBout = calculatePredatorFeedingBoutPlan({
+  speciesId: 'PREDATOR_PYTHON',
+  metabolicHeads: 1,
+  fmrDemandKJ: calibratedPythonDemand,
+  bioReserveKJ: 0,
+  gutEnergyKJ: 0,
+  maxKillsPerAdultPerDay: .16,
+  calibratedMealTargetKg: predatorCalibratedMealTargetKg('PREDATOR_PYTHON', 24),
+  candidates: [{ encounterScore: 10, expectedEdibleKg: 4.2, successProbability: .25 }],
+});
+close(
+  calibratedPythonBout.mealUtilityCapacityKg,
+  6,
+  1e-9,
+  'empty calibrated python should seek one 25%-body-mass gross meal',
+);
+
 assert.equal(
   predatorConsumedPreyFraction('PREDATOR_PYTHON', 3.6, 24),
   1,
