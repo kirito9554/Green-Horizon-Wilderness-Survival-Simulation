@@ -743,6 +743,8 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     huntAttempts: 0,
     successfulHunts: 0,
     unsuccessfulHunts: 0,
+    modeledAttackSuccessProbabilitySum: 0,
+    modeledAttackAttempts: 0,
     huntOpportunityPredatorDays: 0,
     accessiblePreyHeadDays: 0,
     accessiblePreyBiomassPredatorDaysKg: 0,
@@ -1171,6 +1173,8 @@ export function tickSpatialPredatorsDay(
         const preyPopulation = cohortPopulation(candidate.cohort);
         if (preyPopulation <= 0) { huntIndex += 1; continue; }
         const success = candidateHuntSuccess(predator, cohort, candidate, world, behavior.speciesCalibration);
+        speciesEvent.modeledAttackSuccessProbabilitySum += success;
+        speciesEvent.modeledAttackAttempts += 1;
         const successRoll = spatialUnitRandom(world.worldSeed, `predator-hunt|${predator.id}|${patchId}|${day}|${huntIndex}`);
         if (successRoll <= success) {
           const removed = removeOnePrey(
