@@ -564,15 +564,21 @@ export function predatorCalibratedMealTargetKg(
 
 /**
  * Bio-reserve capacity after gut assimilation.
- * Python uses 21 days: a 28-day feeding-cycle reference minus the seven-day
- * digestion window, so a large meal is not discarded as artificial overflow
- * immediately after digestion.
+ * Python uses a conservative 60-day body-energy buffer: P. molurus feeding
+ * physiology has been measured after fasts up to 60 days, while captive
+ * P. bivittatus commonly fasted 20-127 days (and some longer) with minimal
+ * daily mass loss. Crocodilian reserve uses 30 days as a conservative
+ * "extended fast" buffer relative to the much shorter inherited P2 horizon.
+ *
+ * These capacities represent mobilizable body energy after gut assimilation,
+ * not a claim that the animal becomes physiologically stressed on day 61/31.
  */
 export function predatorCalibratedBioReserveDays(
   speciesId: string,
   fallbackDays: number,
 ): number {
-  if (speciesId === 'PREDATOR_PYTHON') return 21;
+  if (speciesId === 'PREDATOR_PYTHON') return 60;
+  if (speciesId === 'PREDATOR_ESTUARINE_CROCODILE') return 30;
   return Math.max(0, fallbackDays);
 }
 
@@ -594,8 +600,8 @@ export function predatorCalibratedPreySizeProfitability(
     // Peak at the 25%-body-mass reference, with a broad log-scale shoulder so
     // 15-35% meals remain highly profitable while tiny rodents are fallback.
     const logDistance = Math.log(Math.max(1e-6, relative) / .25);
-    const gaussian = Math.exp(-.5 * Math.pow(logDistance / .9, 2));
-    return .15 + .85 * gaussian;
+    const gaussian = Math.exp(-.5 * Math.pow(logDistance / .75, 2));
+    return .05 + .95 * gaussian;
   }
 
   if (speciesId === 'PREDATOR_RAPTOR') {
@@ -603,8 +609,9 @@ export function predatorCalibratedPreySizeProfitability(
     // forest raptor caps prey below the upper bound, so only small prey need a
     // profitability penalty here.
     if (preyKg >= .5) return 1;
-    if (preyKg <= .05) return .15;
-    return .15 + .85 * ((preyKg - .05) / .45);
+    if (preyKg <= .05) return .05;
+    const relativeToOptimalFloor = (preyKg - .05) / .45;
+    return .05 + .95 * Math.pow(relativeToOptimalFloor, 2);
   }
 
   if (speciesId === 'PREDATOR_ESTUARINE_CROCODILE') {
