@@ -55,6 +55,7 @@ import {
   predatorAlternativeFoodResources,
   predatorCalibratedBioReserveDays,
   predatorCalibratedBoutAttemptsPerHead,
+  predatorCalibratedCaptureSuccessBase,
   predatorCalibratedMealTargetKg,
   predatorCalibratedMaxPreyMassKg,
   predatorCalibratedPreySizeProfitability,
@@ -481,12 +482,26 @@ function candidateHuntSuccess(
   cohort: SpatialPredatorPatchCohortState,
   candidate: PreyCandidate,
   world: GeneratedSpatialWorld,
+  speciesCalibration = false,
 ): number {
   const preyPopulation = cohortPopulation(candidate.cohort);
   if (preyPopulation <= 0) return 0;
-  const encounterDensity = clamp01(Math.log1p(preyPopulation) / Math.log(80));
   const predatorOpportunity = world.localSiteInfluenceByPatchId[candidate.patchId]?.predatorOpportunity ?? .25;
   const refuge = world.localSiteInfluenceByPatchId[candidate.patchId]?.preyRefuge ?? .25;
+
+  if (speciesCalibration) {
+    // Candidate score already models local encounter density. Once an attack is
+    // underway, capture success depends on predator condition and habitat, not
+    // on how many additional prey happen to exist in the patch.
+    return clamp01(
+      predatorCalibratedCaptureSuccessBase(predator.id, predator.huntSuccessBase)
+        * (.7 + cohort[CONDITION] * .3)
+        * (1 + predatorOpportunity * .22)
+        * (1 - refuge * .28),
+    );
+  }
+
+  const encounterDensity = clamp01(Math.log1p(preyPopulation) / Math.log(80));
   return clamp01(
     predator.huntSuccessBase
       * (.55 + encounterDensity * .75)
@@ -994,7 +1009,7 @@ export function tickSpatialPredatorsDay(
           candidates: candidates.map(candidate => ({
             encounterScore: candidate.score,
             expectedEdibleKg: candidate.expectedEdibleKg,
-            successProbability: candidateHuntSuccess(predator, cohort, candidate, world),
+            successProbability: candidateHuntSuccess(predator, cohort, candidate, world, behavior.speciesCalibration),
           })),
         });
 
@@ -1068,7 +1083,7 @@ export function tickSpatialPredatorsDay(
         candidates: candidates.map(candidate => ({
           encounterScore: candidate.score,
           expectedEdibleKg: candidate.expectedEdibleKg,
-          successProbability: candidateHuntSuccess(predator, cohort, candidate, world),
+          successProbability: candidateHuntSuccess(predator, cohort, candidate, world, behavior.speciesCalibration),
         })),
       });
       const p9FeedingPlan = behavior.bioenergeticFeeding ? calculatePredatorFeedingBoutPlan({
@@ -1085,7 +1100,7 @@ export function tickSpatialPredatorsDay(
         candidates: candidates.map(candidate => ({
           encounterScore: candidate.score,
           expectedEdibleKg: candidate.expectedEdibleKg,
-          successProbability: candidateHuntSuccess(predator, cohort, candidate, world),
+          successProbability: candidateHuntSuccess(predator, cohort, candidate, world, behavior.speciesCalibration),
         })),
       }) : undefined;
 
@@ -1108,7 +1123,7 @@ export function tickSpatialPredatorsDay(
         if (behavior.bioenergeticFeeding && behavior.densitySwitching) {
           return getPredatorP95TargetScore({
             encounterScore: entry.score,
-            successProbability: candidateHuntSuccess(predator, cohort, entry, world),
+            successProbability: candidateHuntSuccess(predator, cohort, entry, world, behavior.speciesCalibration),
             expectedEdibleKg: entry.expectedEdibleKg,
             mealUtilityCapacityKg: targetUtilityCapacityKg,
             localPopulation: entry.localPopulation,
@@ -1155,7 +1170,7 @@ export function tickSpatialPredatorsDay(
         }
         const preyPopulation = cohortPopulation(candidate.cohort);
         if (preyPopulation <= 0) { huntIndex += 1; continue; }
-        const success = candidateHuntSuccess(predator, cohort, candidate, world);
+        const success = candidateHuntSuccess(predator, cohort, candidate, world, behavior.speciesCalibration);
         const successRoll = spatialUnitRandom(world.worldSeed, `predator-hunt|${predator.id}|${patchId}|${day}|${huntIndex}`);
         if (successRoll <= success) {
           const removed = removeOnePrey(
