@@ -221,6 +221,8 @@ function accumulatePredators(aggregates: Record<string, PredatorAggregate>, dail
     total.huntAttempts += daily.huntAttempts;
     total.successfulHunts += daily.successfulHunts;
     total.unsuccessfulHunts += daily.unsuccessfulHunts;
+    total.modeledAttackSuccessProbabilitySum += daily.modeledAttackSuccessProbabilitySum;
+    total.modeledAttackAttempts += daily.modeledAttackAttempts;
     total.huntOpportunityPredatorDays += daily.huntOpportunityPredatorDays;
     total.accessiblePreyHeadDays += daily.accessiblePreyHeadDays;
     total.accessiblePreyBiomassPredatorDaysKg += daily.accessiblePreyBiomassPredatorDaysKg;
