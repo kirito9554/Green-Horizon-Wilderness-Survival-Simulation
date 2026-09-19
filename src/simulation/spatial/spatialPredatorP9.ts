@@ -645,6 +645,24 @@ export function predatorCalibratedPreyStageWeight(
     * predatorCalibratedPreySizeProfitability(speciesId, stageMassKg, predatorMassKg);
 }
 
+
+/**
+ * Conditional capture success once an attack has already been initiated.
+ *
+ * Encounter density belongs in the candidate/functional-response score, not in
+ * post-encounter capture probability. For the raptor analogue, field studies
+ * report ~17% Ferruginous Hawk and ~20% Golden Eagle success per attack, so
+ * P9.6 uses their midpoint as the species calibration. Other predators retain
+ * their authored base until comparable field estimates are added.
+ */
+export function predatorCalibratedCaptureSuccessBase(
+  speciesId: string,
+  authoredBase: number,
+): number {
+  if (speciesId === 'PREDATOR_RAPTOR') return .185;
+  return clamp(authoredBase, 0, 1);
+}
+
 /**
  * Fraction of killed prey mass actually ingested.
  *
