@@ -49,11 +49,14 @@ import {
   advancePredatorShadowDigestion,
   calculatePredatorBioenergeticLedger,
   calculatePredatorBioenergeticShadow,
-  calculatePredatorCalibratedFmrKJPerAdultDay,
+  calculatePredatorCalibratedEnergyDemandKJPerAdultDay,
   calculatePredatorFeedingBoutPlan,
   getPredatorP95TargetScore,
   predatorAlternativeFoodResources,
+  predatorCalibratedBioReserveDays,
   predatorCalibratedBoutAttemptsPerHead,
+  predatorCalibratedMealTargetKg,
+  predatorCalibratedPreySizeProfitability,
   predatorConsumedPreyFraction,
   predatorShadowSdaFraction,
 } from './spatialPredatorP9';
@@ -830,9 +833,16 @@ export function tickSpatialPredatorsDay(
         edibleBiomassFromKillsKg: 0,
       });
       const fmrDemandKJ = behavior.speciesCalibration
-        ? metabolicHeads * calculatePredatorCalibratedFmrKJPerAdultDay(predator.id, predator.adultWeightKg)
+        ? metabolicHeads * calculatePredatorCalibratedEnergyDemandKJPerAdultDay(predator.id, predator.adultWeightKg)
         : preHuntBio.fmrDemandKJ;
-      const bioReserveCapacityKJ = fmrDemandKJ * getSpatialPredatorEnergyReserveDays(predator);
+      const baseBioReserveDays = getSpatialPredatorEnergyReserveDays(predator);
+      const bioReserveDays = behavior.speciesCalibration
+        ? predatorCalibratedBioReserveDays(predator.id, baseBioReserveDays)
+        : baseBioReserveDays;
+      const bioReserveCapacityKJ = fmrDemandKJ * bioReserveDays;
+      const calibratedMealTargetKg = behavior.speciesCalibration
+        ? predatorCalibratedMealTargetKg(predator.id, predator.adultWeightKg) * metabolicHeads
+        : 0;
       const legacyReserveFraction = reserveCapacity > 0 ? clamp01(reserveBefore / reserveCapacity) : 0;
       const bioReserveBeforeKJ = Math.min(
         bioReserveCapacityKJ,
@@ -856,6 +866,7 @@ export function tickSpatialPredatorsDay(
           calibratedBoutAttemptsPerHead: behavior.speciesCalibration
             ? predatorCalibratedBoutAttemptsPerHead(predator.id)
             : 0,
+          calibratedMealTargetKg,
           candidates: candidates.map(candidate => ({
             encounterScore: candidate.score,
             expectedEdibleKg: candidate.expectedEdibleKg,
@@ -946,6 +957,7 @@ export function tickSpatialPredatorsDay(
         calibratedBoutAttemptsPerHead: behavior.speciesCalibration
           ? predatorCalibratedBoutAttemptsPerHead(predator.id)
           : 0,
+        calibratedMealTargetKg,
         candidates: candidates.map(candidate => ({
           encounterScore: candidate.score,
           expectedEdibleKg: candidate.expectedEdibleKg,
@@ -977,6 +989,13 @@ export function tickSpatialPredatorsDay(
             mealUtilityCapacityKg: targetUtilityCapacityKg,
             localPopulation: entry.localPopulation,
             localCarryingCapacity: entry.localCarryingCapacity,
+            preySizeProfitability: behavior.speciesCalibration
+              ? predatorCalibratedPreySizeProfitability(
+                  predator.id,
+                  entry.adultWeightKg,
+                  predator.adultWeightKg,
+                )
+              : 1,
           });
         }
         return getPredatorEnergyWeightedTargetScore(
