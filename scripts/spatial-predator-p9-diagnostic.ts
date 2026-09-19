@@ -27,6 +27,8 @@ interface Aggregate {
   huntAttempts: number;
   successfulHunts: number;
   unsuccessfulHunts: number;
+  modeledAttackSuccessProbabilitySum: number;
+  modeledAttackAttempts: number;
   predatorDays: number;
   hungerRiskPredatorDays: number;
   huntingPredatorDays: number;
@@ -70,6 +72,8 @@ for (const telemetry of Object.values(runtime.predatorSystem?.telemetry.bySpecie
     huntAttempts: 0,
     successfulHunts: 0,
     unsuccessfulHunts: 0,
+    modeledAttackSuccessProbabilitySum: 0,
+    modeledAttackAttempts: 0,
     predatorDays: 0,
     hungerRiskPredatorDays: 0,
     huntingPredatorDays: 0,
@@ -116,6 +120,8 @@ function accumulate(daily: SpatialPredatorSpeciesTelemetry): void {
   total.huntAttempts += daily.huntAttempts;
   total.successfulHunts += daily.successfulHunts;
   total.unsuccessfulHunts += daily.unsuccessfulHunts;
+  total.modeledAttackSuccessProbabilitySum += daily.modeledAttackSuccessProbabilitySum;
+  total.modeledAttackAttempts += daily.modeledAttackAttempts;
   total.predatorDays += daily.predatorDays;
   total.hungerRiskPredatorDays += daily.hungerRiskPredatorDays;
   total.huntingPredatorDays += daily.huntingPredatorDays;
@@ -184,6 +190,9 @@ const species = Object.fromEntries(Object.entries(aggregates).map(([speciesId, a
     attemptsPerPredatorDay: a.huntAttempts / predatorDays,
     killsPerPredatorDay: a.preyKilled / predatorDays,
     huntSuccessRate: a.huntAttempts > 0 ? a.successfulHunts / a.huntAttempts : 0,
+    modeledAttackSuccessRate: a.modeledAttackAttempts > 0
+      ? a.modeledAttackSuccessProbabilitySum / a.modeledAttackAttempts
+      : 0,
     bioCoverage: a.bioCoveredDemandKJ / demand,
     bioShortfall: a.bioShortfallKJ / demand,
     hungerRiskShare: a.hungerRiskPredatorDays / predatorDays,
@@ -233,7 +242,8 @@ for (const [speciesId, value] of Object.entries(species)) {
   console.log(
     `[${phase}|${seed}] ${speciesId} pop=${value.startPopulation}->${value.endPopulation} `
       + `attempts/predDay=${value.attemptsPerPredatorDay.toFixed(3)} kills/predDay=${value.killsPerPredatorDay.toFixed(3)} `
-      + `success=${value.huntSuccessRate.toFixed(3)} coverage=${value.bioCoverage.toFixed(3)} shortfall=${value.bioShortfall.toFixed(3)} `
+      + `success=${value.huntSuccessRate.toFixed(3)} modeledSuccess=${value.modeledAttackSuccessRate.toFixed(3)} `
+      + `coverage=${value.bioCoverage.toFixed(3)} shortfall=${value.bioShortfall.toFixed(3)} `
       + `hungerRisk=${value.hungerRiskShare.toFixed(3)} huntDays=${value.huntingDayShare.toFixed(3)} `
       + `digestDays=${value.digestingDayShare.toFixed(3)} totalGross/demand=${value.totalGrossIntakeVsDemand.toFixed(3)} avgKillKg=${value.averageKillBiomassKg.toFixed(2)} altKg=${value.alternativeFoodConsumedKg.toFixed(1)} `
       + `fruit=${value.alternativeFruitKg.toFixed(1)} insects=${value.alternativeInsectKg.toFixed(1)} carrion=${value.alternativeCarrionKg.toFixed(1)} `
