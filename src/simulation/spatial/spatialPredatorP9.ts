@@ -272,9 +272,18 @@ export function calculatePredatorFeedingBoutPlan(
   const netGutKJ = predatorNetGutEnergyKJ(input.speciesId, input.gutEnergyKJ);
   const storedUsableEnergyKJ = reserveKJ + netGutKJ;
   const feedingTriggerKJ = fmrDemandKJ;
-  const mealTargetKJ = fmrDemandKJ * predatorFeedingTargetHorizonDays(input.speciesId);
+  const baselineMealTargetKJ = fmrDemandKJ * predatorFeedingTargetHorizonDays(input.speciesId);
+  const calibratedMealTargetKg = nonNegative(input.calibratedMealTargetKg ?? 0);
+  const netMealEnergyPerKg = REFERENCE_WET_PREY_ENERGY_KJ_PER_KG
+    * (1 - predatorShadowSdaFraction(input.speciesId));
+  const calibratedMealTargetKJ = calibratedMealTargetKg > 0
+    ? calibratedMealTargetKg * netMealEnergyPerKg
+    : 0;
+  const mealTargetKJ = Math.max(baselineMealTargetKJ, calibratedMealTargetKJ);
   const feedingGapKJ = Math.max(0, mealTargetKJ - storedUsableEnergyKJ);
-  const mealUtilityCapacityKg = feedingGapKJ / REFERENCE_WET_PREY_ENERGY_KJ_PER_KG;
+  const mealUtilityCapacityKg = calibratedMealTargetKg > 0
+    ? feedingGapKJ / Math.max(1, netMealEnergyPerKg)
+    : feedingGapKJ / REFERENCE_WET_PREY_ENERGY_KJ_PER_KG;
 
   if (
     fmrDemandKJ <= 1e-9
@@ -450,6 +459,7 @@ export interface PredatorP95TargetScoreInput {
   mealUtilityCapacityKg: number;
   localPopulation: number;
   localCarryingCapacity: number;
+  preySizeProfitability?: number;
 }
 
 /**
@@ -465,7 +475,8 @@ export function getPredatorP95TargetScore(input: PredatorP95TargetScoreInput): n
     input.localPopulation,
     input.localCarryingCapacity,
   );
-  return encounter * densitySwitch * success * Math.min(edible, capacity);
+  const sizeProfitability = Math.max(0, input.preySizeProfitability ?? 1);
+  return encounter * densitySwitch * success * Math.min(edible, capacity) * sizeProfitability;
 }
 
 
@@ -489,15 +500,122 @@ export function predatorCalibratedBoutAttemptsPerHead(speciesId: string): number
 
 export const PREDATOR_RAPTOR_ANALOGUE_FMR_KJ_PER_DAY = 1323;
 
-export function calculatePredatorCalibratedFmrKJPerAdultDay(
+/**
+ * P9.6 daily energy demand calibration.
+ *
+ * Raptor:
+ *   measured adult Ferruginous Hawk daily energy expenditure analogue.
+ *
+ * Python:
+ *   a 25%-body-mass whole-prey feeding cycle divided across a 28-day
+ *   fast/feeding reference interval, net of the measured ~24.5% P. molurus
+ *   specific dynamic action. This is an analogue-derived maintenance
+ *   benchmark, not a claim that every wild python feeds exactly every 28 days.
+ *
+ * Estuarine crocodile:
+ *   field literature reports ~4% body mass of food per week to maintain body
+ *   mass; convert that whole-prey intake to net usable energy after the 32%
+ *   crocodilian SDA used by the P9 digestion model.
+ */
+export function calculatePredatorCalibratedEnergyDemandKJPerAdultDay(
   speciesId: string,
   adultWeightKg: number,
 ): number {
+  const massKg = nonNegative(adultWeightKg);
   if (speciesId === 'PREDATOR_RAPTOR') return PREDATOR_RAPTOR_ANALOGUE_FMR_KJ_PER_DAY;
+  if (speciesId === 'PREDATOR_PYTHON') {
+    return massKg * .25 * REFERENCE_WET_PREY_ENERGY_KJ_PER_KG * (1 - .245) / 28;
+  }
+  if (speciesId === 'PREDATOR_ESTUARINE_CROCODILE') {
+    return massKg * .04 * REFERENCE_WET_PREY_ENERGY_KJ_PER_KG * (1 - .32) / 7;
+  }
   return calculateFieldMetabolicRateKJPerDay(
-    adultWeightKg,
+    massKg,
     getPredatorBioenergeticClass(speciesId),
   );
+}
+
+/** Backward-compatible alias retained for existing P9.6 regression imports. */
+export const calculatePredatorCalibratedFmrKJPerAdultDay =
+  calculatePredatorCalibratedEnergyDemandKJPerAdultDay;
+
+/**
+ * Species-calibrated gross meal target.
+ *
+ * Python 25% body mass is directly anchored to the common experimental/wild
+ * meal-size reference used in the python physiology literature.
+ * Crocodilian 7.5% body mass is the large-meal benchmark already used by P9.2
+ * for its multi-day postprandial response.
+ * Large raptor minimum 0.5 kg follows the lower bound of the 0.5-5 kg
+ * optimal-prey range reported across Golden Eagle studies.
+ */
+export function predatorCalibratedMealTargetKg(
+  speciesId: string,
+  adultWeightKg: number,
+): number {
+  const massKg = nonNegative(adultWeightKg);
+  if (speciesId === 'PREDATOR_PYTHON') return massKg * .25;
+  if (speciesId === 'PREDATOR_ESTUARINE_CROCODILE') return massKg * .075;
+  if (speciesId === 'PREDATOR_RAPTOR') return .5;
+  return 0;
+}
+
+/**
+ * Bio-reserve capacity after gut assimilation.
+ * Python uses 21 days: a 28-day feeding-cycle reference minus the seven-day
+ * digestion window, so a large meal is not discarded as artificial overflow
+ * immediately after digestion.
+ */
+export function predatorCalibratedBioReserveDays(
+  speciesId: string,
+  fallbackDays: number,
+): number {
+  if (speciesId === 'PREDATOR_PYTHON') return 21;
+  return Math.max(0, fallbackDays);
+}
+
+/**
+ * Additional prey-size profitability used only by calibrated P9.6 target
+ * selection. This changes WHICH prey is attacked, not the hunt-attempt budget.
+ */
+export function predatorCalibratedPreySizeProfitability(
+  speciesId: string,
+  preyMassKg: number,
+  predatorMassKg: number,
+): number {
+  const preyKg = nonNegative(preyMassKg);
+  const predatorKg = Math.max(.001, nonNegative(predatorMassKg));
+  if (preyKg <= 0) return 0;
+
+  if (speciesId === 'PREDATOR_PYTHON') {
+    const relative = preyKg / predatorKg;
+    // Peak at the 25%-body-mass reference, with a broad log-scale shoulder so
+    // 15-35% meals remain highly profitable while tiny rodents are fallback.
+    const logDistance = Math.log(Math.max(1e-6, relative) / .25);
+    const gaussian = Math.exp(-.5 * Math.pow(logDistance / .9, 2));
+    return .15 + .85 * gaussian;
+  }
+
+  if (speciesId === 'PREDATOR_RAPTOR') {
+    // 0.5-5 kg is the reported optimal Golden Eagle prey class. The authored
+    // forest raptor caps prey below the upper bound, so only small prey need a
+    // profitability penalty here.
+    if (preyKg >= .5) return 1;
+    if (preyKg <= .05) return .15;
+    return .15 + .85 * ((preyKg - .05) / .45);
+  }
+
+  if (speciesId === 'PREDATOR_ESTUARINE_CROCODILE') {
+    const relative = preyKg / predatorKg;
+    // Adult C. porosus derive much of their nutrition from large terrestrial
+    // prey. Preserve small-prey opportunism, but make >=5%-body-mass prey far
+    // more profitable per successful encounter.
+    if (relative >= .05) return 1;
+    if (relative <= .005) return .25;
+    return .25 + .75 * ((relative - .005) / .045);
+  }
+
+  return 1;
 }
 
 /**
