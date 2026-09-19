@@ -203,6 +203,10 @@ export interface SpatialPredatorSpeciesTelemetry {
   huntAttempts: number;
   successfulHunts: number;
   unsuccessfulHunts: number;
+  /** Sum of modeled conditional capture probabilities for actual attack attempts. */
+  modeledAttackSuccessProbabilitySum: number;
+  /** Attack attempts included in modeledAttackSuccessProbabilitySum. */
+  modeledAttackAttempts: number;
   huntOpportunityPredatorDays: number;
   accessiblePreyHeadDays: number;
   accessiblePreyBiomassPredatorDaysKg: number;
