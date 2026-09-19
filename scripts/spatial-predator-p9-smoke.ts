@@ -16,6 +16,7 @@ import {
   predatorCalibratedMealTargetKg,
   predatorCalibratedMaxPreyMassKg,
   predatorCalibratedPreySizeProfitability,
+  predatorCalibratedPreyStageWeight,
   predatorConsumedPreyFraction,
   predatorLocalDensitySwitchFactor,
   PREDATOR_ALTERNATIVE_FOOD_ENERGY_KJ_PER_KG,
@@ -161,6 +162,16 @@ assert.ok(
   predatorCalibratedPreySizeProfitability('PREDATOR_ESTUARINE_CROCODILE', 50, 180)
     > predatorCalibratedPreySizeProfitability('PREDATOR_ESTUARINE_CROCODILE', 1.2, 180),
   'P9.6 adult crocodilian should gain more profitability from large terrestrial prey than tiny prey',
+);
+assert.ok(
+  predatorCalibratedPreyStageWeight('PREDATOR_PYTHON', 3.2, 24, 1)
+    > predatorCalibratedPreyStageWeight('PREDATOR_PYTHON', .53, 24, 1.62) * 4,
+  'P9.6 python energetic profitability should outweigh inherited juvenile vulnerability for undersized prey stages',
+);
+assert.ok(
+  predatorCalibratedPreyStageWeight('PREDATOR_RAPTOR', 1.4, 4.8, 1)
+    > predatorCalibratedPreyStageWeight('PREDATOR_RAPTOR', .18, 4.8, 1.52) * 4,
+  'P9.6 raptor should prefer an optimal-sized adult prey stage over an undersized juvenile despite vulnerability',
 );
 
 const calibratedPythonDemand = calculatePredatorCalibratedEnergyDemandKJPerAdultDay('PREDATOR_PYTHON', 24);
