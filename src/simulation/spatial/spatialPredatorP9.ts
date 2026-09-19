@@ -203,6 +203,8 @@ export interface PredatorFeedingBoutPlanInput {
   maxKillsPerAdultPerDay: number;
   /** Optional empirical feeding-bout intensity; never derived from calorie deficit. */
   calibratedBoutAttemptsPerHead?: number;
+  /** Optional gross edible meal target from a species/analogue feeding cycle. */
+  calibratedMealTargetKg?: number;
   candidates: readonly PredatorFeedingCandidateInput[];
 }
 
