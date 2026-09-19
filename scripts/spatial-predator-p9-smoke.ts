@@ -14,6 +14,7 @@ import {
   predatorCalibratedBioReserveDays,
   predatorCalibratedBoutAttemptsPerHead,
   predatorCalibratedMealTargetKg,
+  predatorCalibratedMaxPreyMassKg,
   predatorCalibratedPreySizeProfitability,
   predatorConsumedPreyFraction,
   predatorLocalDensitySwitchFactor,
@@ -117,6 +118,18 @@ close(
   6,
   1e-9,
   'P9.6 python gross meal target should be 25% body mass',
+);
+close(
+  predatorCalibratedMaxPreyMassKg('PREDATOR_PYTHON', 24, 16),
+  24,
+  1e-9,
+  'P9.6 python calibrated gape should conservatively allow a single prey item up to its own body mass',
+);
+close(
+  predatorCalibratedMaxPreyMassKg('PREDATOR_RAPTOR', 4.8, 4.2),
+  4.2,
+  1e-9,
+  'P9.6 raptor should retain the authored maximum until a stronger carrying/gape analogue exists',
 );
 close(
   predatorCalibratedMealTargetKg('PREDATOR_ESTUARINE_CROCODILE', 180),
