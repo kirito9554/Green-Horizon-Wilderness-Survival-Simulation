@@ -54,6 +54,7 @@ interface Aggregate {
   immigrants: number;
   deaths: number;
   hungerDeaths: number;
+  naturalDeaths: number;
 }
 
 const aggregates: Record<string, Aggregate> = {};
@@ -96,6 +97,7 @@ for (const telemetry of Object.values(runtime.predatorSystem?.telemetry.bySpecie
     immigrants: 0,
     deaths: 0,
     hungerDeaths: 0,
+    naturalDeaths: 0,
   };
 }
 
@@ -141,6 +143,7 @@ function accumulate(daily: SpatialPredatorSpeciesTelemetry): void {
   total.immigrants += daily.immigrants;
   total.deaths += daily.deaths;
   total.hungerDeaths += daily.hungerDeaths;
+  total.naturalDeaths += daily.naturalDeaths;
 }
 
 let minPrey = initialPrey;
@@ -234,7 +237,8 @@ for (const [speciesId, value] of Object.entries(species)) {
       + `hungerRisk=${value.hungerRiskShare.toFixed(3)} huntDays=${value.huntingDayShare.toFixed(3)} `
       + `digestDays=${value.digestingDayShare.toFixed(3)} totalGross/demand=${value.totalGrossIntakeVsDemand.toFixed(3)} avgKillKg=${value.averageKillBiomassKg.toFixed(2)} altKg=${value.alternativeFoodConsumedKg.toFixed(1)} `
       + `fruit=${value.alternativeFruitKg.toFixed(1)} insects=${value.alternativeInsectKg.toFixed(1)} carrion=${value.alternativeCarrionKg.toFixed(1)} `
-      + `births=${value.births} immigrants=${value.immigrants} deaths=${value.deaths}`,
+      + `births=${value.births} immigrants=${value.immigrants} deaths=${value.deaths} `
+      + `hungerDeaths=${value.hungerDeaths} naturalDeaths=${value.naturalDeaths}`,
   );
   if (value.topPrey.length > 0) {
     console.log(
