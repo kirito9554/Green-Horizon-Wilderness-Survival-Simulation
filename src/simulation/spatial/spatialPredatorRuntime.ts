@@ -56,6 +56,7 @@ import {
   predatorCalibratedBioReserveDays,
   predatorCalibratedBoutAttemptsPerHead,
   predatorCalibratedMealTargetKg,
+  predatorCalibratedMaxPreyMassKg,
   predatorCalibratedPreySizeProfitability,
   predatorConsumedPreyFraction,
   predatorShadowSdaFraction,
@@ -295,7 +296,14 @@ interface PreyCandidate {
   cohort: SpatialFaunaPatchCohortState;
   score: number;
   adultWeightKg: number;
+  /** Expected mass of the actually eligible life stages, not necessarily adult mass. */
+  expectedPreyMassKg: number;
   expectedEdibleKg: number;
+  /** Heads / biomass that this predator can physically take under the active calibration. */
+  eligiblePopulation: number;
+  eligibleBiomassKg: number;
+  /** Undefined on legacy behavior; calibrated candidates cannot kill a disallowed stage. */
+  eligibleStages?: readonly [juvenile: boolean, adult: boolean, old: boolean];
   localPopulation: number;
   localCarryingCapacity: number;
 }
@@ -311,41 +319,103 @@ function preyCandidates(
   const distanceByPatch = new Map(accessible.map(entry => [entry.patchId, entry.distanceKm]));
   const planBySpecies = new Map(world.faunaCommunity.species.map(plan => [plan.speciesId, plan] as const));
   const result: PreyCandidate[] = [];
+
   for (const preyState of fauna.species) {
     const preyDef = SPATIAL_FAUNA_SPECIES_BY_ID[preyState.speciesId];
     const preference = predator.preyWeights[preyState.speciesId] ?? 0;
     if (!preyDef || preference <= 0) continue;
+
     for (const [patchId, cohort] of Object.entries(preyState.cohortsByPatch)) {
       const distanceKm = distanceByPatch.get(patchId);
       if (distanceKm === undefined) continue;
       const population = cohortPopulation(cohort);
       if (population <= 0) continue;
-      const juvenileShare = population > 0 ? cohort[0] / population : 0;
-      const preyMass = preyDef.adultWeightKg * (1 - juvenileShare * .35);
-      if (preyMass > predator.maxAdultPreyKg * 1.3) continue;
-      const sizeFit = preyMass <= predator.maxAdultPreyKg ? 1 : .22;
+
+      let expectedPreyMassKg: number;
+      let eligiblePopulation: number;
+      let eligibleBiomassKg: number;
+      let eligibleStages: PreyCandidate['eligibleStages'];
+      let sizeFit = 1;
+
+      if (speciesCalibration) {
+        const stageMassKg: readonly [number, number, number] = [
+          preyDef.adultWeightKg * .48,
+          preyDef.adultWeightKg,
+          preyDef.adultWeightKg * .88,
+        ];
+        const maxPreyMassKg = predatorCalibratedMaxPreyMassKg(
+          predator.id,
+          predator.adultWeightKg,
+          predator.maxAdultPreyKg,
+        );
+        eligibleStages = [
+          cohort[JUVENILES] > 0 && stageMassKg[JUVENILES] <= maxPreyMassKg,
+          cohort[ADULTS] > 0 && stageMassKg[ADULTS] <= maxPreyMassKg,
+          cohort[OLD] > 0 && stageMassKg[OLD] <= maxPreyMassKg,
+        ];
+
+        const eligibleCounts: readonly [number, number, number] = [
+          eligibleStages[JUVENILES] ? cohort[JUVENILES] : 0,
+          eligibleStages[ADULTS] ? cohort[ADULTS] : 0,
+          eligibleStages[OLD] ? cohort[OLD] : 0,
+        ];
+        eligiblePopulation = eligibleCounts[JUVENILES] + eligibleCounts[ADULTS] + eligibleCounts[OLD];
+        if (eligiblePopulation <= 0) continue;
+
+        eligibleBiomassKg =
+          eligibleCounts[JUVENILES] * stageMassKg[JUVENILES]
+          + eligibleCounts[ADULTS] * stageMassKg[ADULTS]
+          + eligibleCounts[OLD] * stageMassKg[OLD];
+
+        // Match the stage-selection weights used by removeOnePrey so target
+        // profitability reflects the meal actually likely to be captured.
+        const juvenileSelectionWeight = eligibleCounts[JUVENILES] * (1 + predator.juvenilePreference);
+        const adultSelectionWeight = eligibleCounts[ADULTS];
+        const oldSelectionWeight = eligibleCounts[OLD] * .9;
+        const selectionWeight = juvenileSelectionWeight + adultSelectionWeight + oldSelectionWeight;
+        expectedPreyMassKg = selectionWeight > 0
+          ? (
+              juvenileSelectionWeight * stageMassKg[JUVENILES]
+              + adultSelectionWeight * stageMassKg[ADULTS]
+              + oldSelectionWeight * stageMassKg[OLD]
+            ) / selectionWeight
+          : eligibleBiomassKg / eligiblePopulation;
+      } else {
+        const juvenileShare = population > 0 ? cohort[JUVENILES] / population : 0;
+        expectedPreyMassKg = preyDef.adultWeightKg * (1 - juvenileShare * .35);
+        if (expectedPreyMassKg > predator.maxAdultPreyKg * 1.3) continue;
+        sizeFit = expectedPreyMassKg <= predator.maxAdultPreyKg ? 1 : .22;
+        eligiblePopulation = population;
+        eligibleBiomassKg = preyCohortBiomassKg(cohort, preyDef.adultWeightKg);
+      }
+
       const distanceFit = 1 / (1 + distanceKm * .75);
       const refuge = world.localSiteInfluenceByPatchId[patchId]?.preyRefuge ?? .25;
       const encounter = world.localSiteInfluenceByPatchId[patchId]?.predatorOpportunity ?? .25;
-      const score = population * preference * sizeFit * distanceFit * (.78 + encounter * .38) * (1 - refuge * .32);
-      if (score > 0) {
-        const localCarryingCapacity = planBySpecies.get(preyDef.id)?.patchAllocations
-          .find(allocation => allocation.patchId === patchId)?.carryingCapacity ?? Math.max(1, population);
-        result.push({
-          speciesId: preyDef.id,
-          patchId,
-          cohort,
-          score,
-          adultWeightKg: preyDef.adultWeightKg,
-          expectedEdibleKg: preyMass * (
-            speciesCalibration
-              ? predatorConsumedPreyFraction(predator.id, preyMass, predator.adultWeightKg)
-              : .62
-          ),
-          localPopulation: population,
-          localCarryingCapacity,
-        });
-      }
+      const score = eligiblePopulation * preference * sizeFit * distanceFit
+        * (.78 + encounter * .38) * (1 - refuge * .32);
+      if (score <= 0) continue;
+
+      const localCarryingCapacity = planBySpecies.get(preyDef.id)?.patchAllocations
+        .find(allocation => allocation.patchId === patchId)?.carryingCapacity ?? Math.max(1, population);
+      result.push({
+        speciesId: preyDef.id,
+        patchId,
+        cohort,
+        score,
+        adultWeightKg: preyDef.adultWeightKg,
+        expectedPreyMassKg,
+        expectedEdibleKg: expectedPreyMassKg * (
+          speciesCalibration
+            ? predatorConsumedPreyFraction(predator.id, expectedPreyMassKg, predator.adultWeightKg)
+            : .62
+        ),
+        eligiblePopulation,
+        eligibleBiomassKg,
+        eligibleStages,
+        localPopulation: eligiblePopulation,
+        localCarryingCapacity,
+      });
     }
   }
   return result.sort((a, b) => b.score - a.score);
@@ -363,8 +433,8 @@ function accessiblePreyMetrics(candidates: readonly PreyCandidate[]): { heads: n
   let heads = 0;
   let biomassKg = 0;
   for (const candidate of candidates) {
-    heads += cohortPopulation(candidate.cohort);
-    biomassKg += preyCohortBiomassKg(candidate.cohort, candidate.adultWeightKg);
+    heads += candidate.eligiblePopulation;
+    biomassKg += candidate.eligibleBiomassKg;
   }
   return { heads, biomassKg };
 }
@@ -407,24 +477,32 @@ function candidateHuntSuccess(
   );
 }
 
-function removeOnePrey(candidate: PreyCandidate, predator: SpatialPredatorSpeciesDefinition, random: number): { biomassKg: number; killed: boolean } {
+function removeOnePrey(
+  candidate: PreyCandidate,
+  predator: SpatialPredatorSpeciesDefinition,
+  random: number,
+): { biomassKg: number; killed: boolean } {
   const cohort = candidate.cohort;
   const population = cohortPopulation(cohort);
   if (population <= 0) return { biomassKg: 0, killed: false };
-  const juvenileWeight = cohort[0] * (1 + predator.juvenilePreference);
-  const adultWeight = cohort[1];
-  const oldWeight = cohort[2] * .9;
+
+  const stageAllowed = candidate.eligibleStages ?? ([true, true, true] as const);
+  const juvenileWeight = stageAllowed[JUVENILES] ? cohort[JUVENILES] * (1 + predator.juvenilePreference) : 0;
+  const adultWeight = stageAllowed[ADULTS] ? cohort[ADULTS] : 0;
+  const oldWeight = stageAllowed[OLD] ? cohort[OLD] * .9 : 0;
   const total = juvenileWeight + adultWeight + oldWeight;
-  let stage = ADULTS;
-  if (total > 0) {
-    const roll = random * total;
-    if (roll < juvenileWeight && cohort[JUVENILES] > 0) stage = JUVENILES;
-    else if (roll < juvenileWeight + adultWeight && cohort[ADULTS] > 0) stage = ADULTS;
-    else if (cohort[OLD] > 0) stage = OLD;
-    else if (cohort[ADULTS] > 0) stage = ADULTS;
-    else stage = JUVENILES;
-  }
-  if (cohort[stage] <= 0) return { biomassKg: 0, killed: false };
+  if (total <= 0) return { biomassKg: 0, killed: false };
+
+  const roll = random * total;
+  let stage = JUVENILES;
+  if (roll < juvenileWeight && juvenileWeight > 0) stage = JUVENILES;
+  else if (roll < juvenileWeight + adultWeight && adultWeight > 0) stage = ADULTS;
+  else if (oldWeight > 0) stage = OLD;
+  else if (adultWeight > 0) stage = ADULTS;
+  else if (juvenileWeight > 0) stage = JUVENILES;
+  else return { biomassKg: 0, killed: false };
+
+  if (cohort[stage] <= 0 || !stageAllowed[stage]) return { biomassKg: 0, killed: false };
   cohort[stage] -= 1;
   const massFactor = stage === JUVENILES ? .48 : stage === OLD ? .88 : 1;
   return { biomassKg: candidate.adultWeightKg * massFactor, killed: true };
@@ -992,7 +1070,7 @@ export function tickSpatialPredatorsDay(
             preySizeProfitability: behavior.speciesCalibration
               ? predatorCalibratedPreySizeProfitability(
                   predator.id,
-                  entry.adultWeightKg,
+                  entry.expectedPreyMassKg,
                   predator.adultWeightKg,
                 )
               : 1,
