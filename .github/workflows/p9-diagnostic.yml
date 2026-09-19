@@ -1,0 +1,68 @@
+name: P9 Bioenergetic Feeding Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/data/spatial*.ts'
+      - 'src/simulation/spatial/**'
+      - 'src/types/spatial*.ts'
+      - 'scripts/spatial-predator-p9-*.ts'
+      - 'package.json'
+      - '.github/workflows/p9-diagnostic.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  p9-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - seed: spatial-trophic-soak-alpha
+            days: 30
+          - seed: spatial-trophic-soak-beta
+            days: 30
+          - seed: spatial-trophic-soak-alpha
+            days: 365
+          - seed: spatial-trophic-soak-beta
+            days: 365
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: P9 regression
+        run: npm run test:spatial-predator-p9
+
+      - name: P9 bioenergetic diagnostic
+        env:
+          SPATIAL_TROPHIC_SEED: ${{ matrix.seed }}
+          P9_DAYS: ${{ matrix.days }}
+          P9_ALT_DIET: '1'
+          P9_SWITCHING: '1'
+          P9_CALIBRATE: '1'
+        run: npm run test:spatial-predator-p9-diagnostic
+
+      - name: Upload P9 diagnostic report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predator-p9-6-diagnostic-${{ matrix.seed }}-${{ matrix.days }}d
+          path: artifacts/predator-p9.6-diagnostic-*.json
+          if-no-files-found: warn

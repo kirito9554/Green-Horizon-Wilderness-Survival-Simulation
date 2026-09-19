@@ -1,0 +1,77 @@
+name: Five-year Terrestrial Trophic Soak
+
+on:
+  push:
+    paths:
+      - 'src/data/spatial*.ts'
+      - 'src/simulation/spatial/**'
+      - 'src/types/spatial*.ts'
+      - 'scripts/spatial-trophic-multiyear-soak.ts'
+      - 'scripts/spatial-predator-p6-smoke.ts'
+      - 'scripts/spatial-predator-p7-smoke.ts'
+      - 'scripts/spatial-predator-p8-smoke.ts'
+      - 'scripts/spatial-predator-p9-smoke.ts'
+      - 'package.json'
+      - '.github/workflows/trophic-soak.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trophic-soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: combined
+            seed: spatial-trophic-soak-alpha
+            gate: '1'
+          - mode: combined
+            seed: spatial-trophic-soak-beta
+            gate: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Predator P6 regression
+        run: npm run test:spatial-predator-p6
+
+      - name: Predator P7 energy accounting regression
+        run: npm run test:spatial-predator-p7
+
+      - name: Predator P8 intermittent-feeding/hunt-plan regression
+        run: npm run test:spatial-predator-p8
+
+      - name: Predator P9 bioenergetic-shadow regression
+        run: npm run test:spatial-predator-p9
+
+      - name: Five-year terrestrial trophic soak
+        env:
+          PREDATOR_P6_MODE: ${{ matrix.mode }}
+          SPATIAL_TROPHIC_SEED: ${{ matrix.seed }}
+          PREDATOR_P6_ASSERT: ${{ matrix.gate }}
+        run: npm run test:spatial-trophic-soak
+
+      - name: Upload P9 shadow trophic report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predator-p9-shadow-${{ matrix.mode }}-${{ matrix.seed }}
+          path: artifacts/predator-p9-shadow-*.json
+          if-no-files-found: warn
