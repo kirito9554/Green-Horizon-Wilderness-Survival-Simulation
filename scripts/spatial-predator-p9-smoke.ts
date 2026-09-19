@@ -13,6 +13,7 @@ import {
   predatorAlternativeFoodResources,
   predatorCalibratedBioReserveDays,
   predatorCalibratedBoutAttemptsPerHead,
+  predatorCalibratedCaptureSuccessBase,
   predatorCalibratedMealTargetKg,
   predatorCalibratedMaxPreyMassKg,
   predatorCalibratedPreySizeProfitability,
@@ -77,6 +78,18 @@ assert.equal(
   predatorCalibratedBoutAttemptsPerHead('PREDATOR_RAPTOR'),
   3,
   'P9.6 raptor should use the observed median three attacks per feeding bout',
+);
+close(
+  predatorCalibratedCaptureSuccessBase('PREDATOR_RAPTOR', .31),
+  .185,
+  1e-12,
+  'P9.6 raptor conditional capture success should use the 17-20% field-study midpoint',
+);
+close(
+  predatorCalibratedCaptureSuccessBase('PREDATOR_PYTHON', .28),
+  .28,
+  1e-12,
+  'P9.6 encounter/capture separation must preserve authored python capture base until calibrated',
 );
 assert.equal(
   predatorCalibratedBoutAttemptsPerHead('PREDATOR_PYTHON'),
