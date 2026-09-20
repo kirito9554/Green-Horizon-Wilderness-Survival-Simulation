@@ -459,6 +459,21 @@ function accessiblePreyMetrics(candidates: readonly PreyCandidate[]): { heads: n
   return { heads, biomassKg };
 }
 
+/**
+ * Revalidate the prey stages that are still physically eligible at attack time.
+ * PreyCandidate is a bout-start snapshot; repeated attacks can deplete one of
+ * its allowed stages before the bout ends.
+ */
+function liveEligiblePreyPopulation(candidate: PreyCandidate): number {
+  const allowed = candidate.eligibleStages ?? ([true, true, true] as const);
+  return Math.max(
+    0,
+    (allowed[JUVENILES] ? candidate.cohort[JUVENILES] : 0)
+      + (allowed[ADULTS] ? candidate.cohort[ADULTS] : 0)
+      + (allowed[OLD] ? candidate.cohort[OLD] : 0),
+  );
+}
+
 function islandPreferredPreyMetrics(
   predator: SpatialPredatorSpeciesDefinition,
   fauna: SpatialFaunaRuntimeState,
@@ -484,7 +499,7 @@ function candidateHuntSuccess(
   world: GeneratedSpatialWorld,
   speciesCalibration = false,
 ): number {
-  const preyPopulation = cohortPopulation(candidate.cohort);
+  const preyPopulation = liveEligiblePreyPopulation(candidate);
   if (preyPopulation <= 0) return 0;
   const predatorOpportunity = world.localSiteInfluenceByPatchId[candidate.patchId]?.predatorOpportunity ?? .25;
   const refuge = world.localSiteInfluenceByPatchId[candidate.patchId]?.preyRefuge ?? .25;
@@ -518,7 +533,7 @@ function removeOnePrey(
   speciesCalibration = false,
 ): { biomassKg: number; killed: boolean } {
   const cohort = candidate.cohort;
-  const population = cohortPopulation(cohort);
+  const population = liveEligiblePreyPopulation(candidate);
   if (population <= 0) return { biomassKg: 0, killed: false };
 
   const stageAllowed = candidate.eligibleStages ?? ([true, true, true] as const);
@@ -745,6 +760,8 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     unsuccessfulHunts: 0,
     modeledAttackSuccessProbabilitySum: 0,
     modeledAttackAttempts: 0,
+    captureRollPassed: 0,
+    postCaptureRemovalFailed: 0,
     huntOpportunityPredatorDays: 0,
     accessiblePreyHeadDays: 0,
     accessiblePreyBiomassPredatorDaysKg: 0,
@@ -1122,13 +1139,20 @@ export function tickSpatialPredatorsDay(
         : Math.max(.001, p8HuntPlan?.usableEnergyCapacityKg ?? 0);
 
       const targetScore = (entry: PreyCandidate): number => {
+        const livePopulation = liveEligiblePreyPopulation(entry);
+        if (livePopulation <= 0) return 0;
+        const availabilityFactor = Math.min(
+          1,
+          livePopulation / Math.max(1e-9, entry.eligiblePopulation),
+        );
+        const liveEncounterScore = entry.score * availabilityFactor;
         if (behavior.bioenergeticFeeding && behavior.densitySwitching) {
           return getPredatorP95TargetScore({
-            encounterScore: entry.score,
+            encounterScore: liveEncounterScore,
             successProbability: candidateHuntSuccess(predator, cohort, entry, world, behavior.speciesCalibration),
             expectedEdibleKg: entry.expectedEdibleKg,
             mealUtilityCapacityKg: targetUtilityCapacityKg,
-            localPopulation: entry.localPopulation,
+            localPopulation: livePopulation,
             localCarryingCapacity: entry.localCarryingCapacity,
             preySizeProfitability: behavior.speciesCalibration
               ? predatorCalibratedPreySizeProfitability(
@@ -1140,7 +1164,7 @@ export function tickSpatialPredatorsDay(
           });
         }
         return getPredatorEnergyWeightedTargetScore(
-          entry.score,
+          liveEncounterScore,
           entry.expectedEdibleKg,
           targetUtilityCapacityKg,
         );
@@ -1159,24 +1183,24 @@ export function tickSpatialPredatorsDay(
       };
 
       while (shouldContinueFeeding()) {
-        const totalScore = candidates.reduce(
+        const liveCandidates = candidates.filter(entry => liveEligiblePreyPopulation(entry) > 0);
+        const totalScore = liveCandidates.reduce(
           (sum, entry) => sum + targetScore(entry),
           0,
         );
-        if (totalScore <= 0) break;
+        if (totalScore <= 0 || liveCandidates.length === 0) break;
         let roll = spatialUnitRandom(world.worldSeed, `predator-target|${predator.id}|${patchId}|${day}|${huntIndex}`) * totalScore;
-        let candidate = candidates[0];
-        for (const entry of candidates) {
+        let candidate = liveCandidates[0];
+        for (const entry of liveCandidates) {
           roll -= targetScore(entry);
           if (roll <= 0) { candidate = entry; break; }
         }
-        const preyPopulation = cohortPopulation(candidate.cohort);
-        if (preyPopulation <= 0) { huntIndex += 1; continue; }
         const success = candidateHuntSuccess(predator, cohort, candidate, world, behavior.speciesCalibration);
         speciesEvent.modeledAttackSuccessProbabilitySum += success;
         speciesEvent.modeledAttackAttempts += 1;
         const successRoll = spatialUnitRandom(world.worldSeed, `predator-hunt|${predator.id}|${patchId}|${day}|${huntIndex}`);
         if (successRoll <= success) {
+          speciesEvent.captureRollPassed += 1;
           const removed = removeOnePrey(
             candidate,
             predator,
@@ -1203,6 +1227,9 @@ export function tickSpatialPredatorsDay(
             speciesEvent.preyBiomassKilledKg += removed.biomassKg;
             speciesEvent.edibleBiomassFromKillsKg += edible;
             preyBiomassKilledKg += removed.biomassKg;
+          } else {
+            speciesEvent.postCaptureRemovalFailed += 1;
+            unsuccessfulHunts += 1;
           }
         } else unsuccessfulHunts += 1;
         huntIndex += 1;

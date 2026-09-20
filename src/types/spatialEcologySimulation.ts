@@ -207,6 +207,10 @@ export interface SpatialPredatorSpeciesTelemetry {
   modeledAttackSuccessProbabilitySum: number;
   /** Attack attempts included in modeledAttackSuccessProbabilitySum. */
   modeledAttackAttempts: number;
+  /** Attacks whose RNG capture roll passed the modeled probability threshold. */
+  captureRollPassed: number;
+  /** Capture rolls that passed but could not remove a currently eligible prey stage. Must normally remain zero. */
+  postCaptureRemovalFailed: number;
   huntOpportunityPredatorDays: number;
   accessiblePreyHeadDays: number;
   accessiblePreyBiomassPredatorDaysKg: number;

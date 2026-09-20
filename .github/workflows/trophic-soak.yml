@@ -11,6 +11,7 @@ on:
       - 'scripts/spatial-predator-p7-smoke.ts'
       - 'scripts/spatial-predator-p8-smoke.ts'
       - 'scripts/spatial-predator-p9-smoke.ts'
+      - 'scripts/spatial-predator-p9-diagnostic.ts'
       - 'package.json'
       - '.github/workflows/trophic-soak.yml'
   workflow_dispatch:
@@ -61,6 +62,15 @@ jobs:
       - name: Predator P9 bioenergetic-shadow regression
         run: npm run test:spatial-predator-p9
 
+      - name: P9.6 30-day predator diagnostic
+        env:
+          SPATIAL_TROPHIC_SEED: ${{ matrix.seed }}
+          P9_DAYS: '30'
+          P9_ALT_DIET: '1'
+          P9_SWITCHING: '1'
+          P9_CALIBRATE: '1'
+        run: npm run test:spatial-predator-p9-diagnostic
+
       - name: Five-year terrestrial trophic soak
         env:
           PREDATOR_P6_MODE: ${{ matrix.mode }}
@@ -75,3 +85,11 @@ jobs:
           name: predator-p9-shadow-${{ matrix.mode }}-${{ matrix.seed }}
           path: artifacts/predator-p9-shadow-*.json
           if-no-files-found: warn
+
+      - name: Upload P9.6 30-day diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: predator-p9.6-diagnostic-${{ matrix.seed }}
+          path: artifacts/predator-p9.6-diagnostic-${{ matrix.seed }}-30d.json
+          if-no-files-found: error
