@@ -10,7 +10,7 @@ import type { SpatialFaunaRuntimeState, SpatialFaunaSeason, SpatialFaunaPatchCoh
 import type { EcologyTargetProfile } from '../../data/ecologyProfiles';
 import type { HabitatPatch } from './habitatPatches';
 import type { GeneratedSpatialWorld } from './worldGeneration';
-import { spatialUnitRandom } from './spatialRandom';
+import { randomFromSpatialKey, spatialUnitRandom } from './spatialRandom';
 import {
   conditionFertilityFactor,
   densityFertilityFactor,
@@ -762,6 +762,10 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     modeledAttackAttempts: 0,
     captureRollPassed: 0,
     postCaptureRemovalFailed: 0,
+    modeledAttackBernoulliVarianceSum: 0,
+    captureRollSum: 0,
+    mixedCaptureRollSum: 0,
+    mixedCaptureRollPassedShadow: 0,
     huntOpportunityPredatorDays: 0,
     accessiblePreyHeadDays: 0,
     accessiblePreyBiomassPredatorDaysKg: 0,
@@ -1197,8 +1201,14 @@ export function tickSpatialPredatorsDay(
         }
         const success = candidateHuntSuccess(predator, cohort, candidate, world, behavior.speciesCalibration);
         speciesEvent.modeledAttackSuccessProbabilitySum += success;
+        speciesEvent.modeledAttackBernoulliVarianceSum += success * (1 - success);
         speciesEvent.modeledAttackAttempts += 1;
-        const successRoll = spatialUnitRandom(world.worldSeed, `predator-hunt|${predator.id}|${patchId}|${day}|${huntIndex}`);
+        const attackKey = `predator-hunt|${predator.id}|${patchId}|${day}|${huntIndex}`;
+        const successRoll = spatialUnitRandom(world.worldSeed, attackKey);
+        const mixedSuccessRoll = randomFromSpatialKey(world.worldSeed, attackKey)();
+        speciesEvent.captureRollSum += successRoll;
+        speciesEvent.mixedCaptureRollSum += mixedSuccessRoll;
+        if (mixedSuccessRoll <= success) speciesEvent.mixedCaptureRollPassedShadow += 1;
         if (successRoll <= success) {
           speciesEvent.captureRollPassed += 1;
           const removed = removeOnePrey(

@@ -225,6 +225,10 @@ function accumulatePredators(aggregates: Record<string, PredatorAggregate>, dail
     total.modeledAttackAttempts += daily.modeledAttackAttempts;
     total.captureRollPassed += daily.captureRollPassed;
     total.postCaptureRemovalFailed += daily.postCaptureRemovalFailed;
+    total.modeledAttackBernoulliVarianceSum += daily.modeledAttackBernoulliVarianceSum;
+    total.captureRollSum += daily.captureRollSum;
+    total.mixedCaptureRollSum += daily.mixedCaptureRollSum;
+    total.mixedCaptureRollPassedShadow += daily.mixedCaptureRollPassedShadow;
     total.huntOpportunityPredatorDays += daily.huntOpportunityPredatorDays;
     total.accessiblePreyHeadDays += daily.accessiblePreyHeadDays;
     total.accessiblePreyBiomassPredatorDaysKg += daily.accessiblePreyBiomassPredatorDaysKg;
@@ -583,6 +587,23 @@ function runFiveYearSoak(): void {
     const postCaptureRemovalFailureRate = species.captureRollPassed > 0
       ? species.postCaptureRemovalFailed / species.captureRollPassed
       : 0;
+    const meanCaptureRoll = species.modeledAttackAttempts > 0
+      ? species.captureRollSum / species.modeledAttackAttempts
+      : 0;
+    const meanMixedCaptureRoll = species.modeledAttackAttempts > 0
+      ? species.mixedCaptureRollSum / species.modeledAttackAttempts
+      : 0;
+    const mixedCaptureRollPassRate = species.modeledAttackAttempts > 0
+      ? species.mixedCaptureRollPassedShadow / species.modeledAttackAttempts
+      : 0;
+    const captureCalibrationZ = species.modeledAttackBernoulliVarianceSum > 0
+      ? (species.captureRollPassed - species.modeledAttackSuccessProbabilitySum)
+        / Math.sqrt(species.modeledAttackBernoulliVarianceSum)
+      : 0;
+    const mixedCaptureCalibrationZ = species.modeledAttackBernoulliVarianceSum > 0
+      ? (species.mixedCaptureRollPassedShadow - species.modeledAttackSuccessProbabilitySum)
+        / Math.sqrt(species.modeledAttackBernoulliVarianceSum)
+      : 0;
     const accessiblePreyHeadsPerPredatorDay = species.predatorDays > 0 ? species.accessiblePreyHeadDays / species.predatorDays : 0;
     const islandPreferredPreyHeadsPerPredatorDay = species.predatorDays > 0 ? species.islandPreferredPreyHeadDays / species.predatorDays : 0;
     const accessiblePreyBiomassKgPerPredatorDay = species.predatorDays > 0 ? species.accessiblePreyBiomassPredatorDaysKg / species.predatorDays : 0;
@@ -619,6 +640,7 @@ function runFiveYearSoak(): void {
     console.log(
       `[${label}] ${speciesId} energy opportunity=${huntOpportunityRate.toFixed(3)} attempts/predDay=${attemptsPerPredatorDay.toFixed(4)} success=${huntSuccessRate.toFixed(3)} `
         + `modeled=${modeledAttackSuccessRate.toFixed(3)} capturePass=${captureRollPassRate.toFixed(3)} removalFail=${species.postCaptureRemovalFailed}/${species.captureRollPassed} `
+        + `rawMean=${meanCaptureRoll.toFixed(3)} rawZ=${captureCalibrationZ.toFixed(2)} mixedPass=${mixedCaptureRollPassRate.toFixed(3)} mixedMean=${meanMixedCaptureRoll.toFixed(3)} mixedZ=${mixedCaptureCalibrationZ.toFixed(2)} `
         + `preyHeads local/island=${accessiblePreyHeadsPerPredatorDay.toFixed(1)}/${islandPreferredPreyHeadsPerPredatorDay.toFixed(1)} accessShare=${preyHeadAccessShare.toFixed(3)} `
         + `preyBiomass local/island=${accessiblePreyBiomassKgPerPredatorDay.toFixed(1)}/${islandPreferredPreyBiomassKgPerPredatorDay.toFixed(1)}kg accessShare=${preyBiomassAccessShare.toFixed(3)} `
         + `killKg=${preyBiomassPerKillKg.toFixed(2)} edible/kill=${edibleKgPerKill.toFixed(2)} edible/demand=${edibleYieldVsDemand.toFixed(3)} `
@@ -657,6 +679,11 @@ function runFiveYearSoak(): void {
       modeledAttackSuccessRate,
       captureRollPassRate,
       postCaptureRemovalFailureRate,
+      meanCaptureRoll,
+      meanMixedCaptureRoll,
+      mixedCaptureRollPassRate,
+      captureCalibrationZ,
+      mixedCaptureCalibrationZ,
       accessiblePreyHeadsPerPredatorDay,
       islandPreferredPreyHeadsPerPredatorDay,
       accessiblePreyBiomassKgPerPredatorDay,
