@@ -761,6 +761,7 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     modeledAttackSuccessProbabilitySum: 0,
     modeledAttackAttempts: 0,
     captureRollPassed: 0,
+    rawCaptureRollPassed: 0,
     postCaptureRemovalFailed: 0,
     modeledAttackBernoulliVarianceSum: 0,
     captureRollSum: 0,
@@ -1204,12 +1205,13 @@ export function tickSpatialPredatorsDay(
         speciesEvent.modeledAttackBernoulliVarianceSum += success * (1 - success);
         speciesEvent.modeledAttackAttempts += 1;
         const attackKey = `predator-hunt|${predator.id}|${patchId}|${day}|${huntIndex}`;
-        const successRoll = spatialUnitRandom(world.worldSeed, attackKey);
+        const rawSuccessRoll = spatialUnitRandom(world.worldSeed, attackKey);
         const mixedSuccessRoll = randomFromSpatialKey(world.worldSeed, attackKey)();
-        speciesEvent.captureRollSum += successRoll;
+        speciesEvent.captureRollSum += rawSuccessRoll;
         speciesEvent.mixedCaptureRollSum += mixedSuccessRoll;
+        if (rawSuccessRoll <= success) speciesEvent.rawCaptureRollPassed += 1;
         if (mixedSuccessRoll <= success) speciesEvent.mixedCaptureRollPassedShadow += 1;
-        if (successRoll <= success) {
+        if (mixedSuccessRoll <= success) {
           speciesEvent.captureRollPassed += 1;
           const removed = removeOnePrey(
             candidate,
