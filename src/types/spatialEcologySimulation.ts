@@ -215,11 +215,11 @@ export interface SpatialPredatorSpeciesTelemetry {
   postCaptureRemovalFailed: number;
   /** Sum p(1-p) for modeled attack Bernoulli trials; used to audit calibration significance. */
   modeledAttackBernoulliVarianceSum: number;
-  /** Sum of authoritative raw capture RNG rolls. A uniform stream should average near 0.5. */
+  /** Sum of raw capture RNG rolls retained for correlation diagnostics. A uniform stream should average near 0.5. */
   captureRollSum: number;
-  /** Shadow-only Mulberry32-mixed roll sum using the same deterministic attack key. */
+  /** Sum of authoritative Mulberry32-mixed rolls using the same deterministic attack key. */
   mixedCaptureRollSum: number;
-  /** Shadow-only captures that would pass if the same attack key were mixed through Mulberry32 first. */
+  /** Shadow count of mixed captures; should match captureRollPassed while mixed RNG is authoritative. */
   mixedCaptureRollPassedShadow: number;
   huntOpportunityPredatorDays: number;
   accessiblePreyHeadDays: number;
