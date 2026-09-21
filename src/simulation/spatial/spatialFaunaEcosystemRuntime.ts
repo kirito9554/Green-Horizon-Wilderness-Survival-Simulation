@@ -160,6 +160,6 @@ export function tickSpatialFaunaRuntime(state: GameState, _deltaGameMinutes: num
   ensureSpatialFaunaResourcePools(state.spatialFaunaSystem, world, getSpatialFaunaSeason(state.spatialFaunaSystem.lastProcessedDay));
   if (state.spatialFaunaSystem.lastProcessedDay >= day) return;
   for (let processDay = state.spatialFaunaSystem.lastProcessedDay + 1; processDay <= day; processDay += 1) {
-    tickSpatialFaunaEcosystemDay(state.spatialFaunaSystem, world, processDay);
+    tickSpatialFaunaEcosystemDay(state.spatialFaunaSystem, world, processDay, { accumulatedCaptureOpportunity: true });
   }
 }
