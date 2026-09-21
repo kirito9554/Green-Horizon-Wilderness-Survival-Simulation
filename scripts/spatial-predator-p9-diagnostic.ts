@@ -30,6 +30,7 @@ interface Aggregate {
   modeledAttackSuccessProbabilitySum: number;
   modeledAttackAttempts: number;
   captureRollPassed: number;
+  rawCaptureRollPassed: number;
   postCaptureRemovalFailed: number;
   modeledAttackBernoulliVarianceSum: number;
   captureRollSum: number;
@@ -81,6 +82,7 @@ for (const telemetry of Object.values(runtime.predatorSystem?.telemetry.bySpecie
     modeledAttackSuccessProbabilitySum: 0,
     modeledAttackAttempts: 0,
     captureRollPassed: 0,
+    rawCaptureRollPassed: 0,
     postCaptureRemovalFailed: 0,
     modeledAttackBernoulliVarianceSum: 0,
     captureRollSum: 0,
@@ -135,6 +137,7 @@ function accumulate(daily: SpatialPredatorSpeciesTelemetry): void {
   total.modeledAttackSuccessProbabilitySum += daily.modeledAttackSuccessProbabilitySum;
   total.modeledAttackAttempts += daily.modeledAttackAttempts;
   total.captureRollPassed += daily.captureRollPassed;
+  total.rawCaptureRollPassed += daily.rawCaptureRollPassed;
   total.postCaptureRemovalFailed += daily.postCaptureRemovalFailed;
   total.modeledAttackBernoulliVarianceSum += daily.modeledAttackBernoulliVarianceSum;
   total.captureRollSum += daily.captureRollSum;
@@ -214,6 +217,9 @@ const species = Object.fromEntries(Object.entries(aggregates).map(([speciesId, a
     captureRollPassRate: a.modeledAttackAttempts > 0
       ? a.captureRollPassed / a.modeledAttackAttempts
       : 0,
+    rawCaptureRollPassRate: a.modeledAttackAttempts > 0
+      ? a.rawCaptureRollPassed / a.modeledAttackAttempts
+      : 0,
     postCaptureRemovalFailureRate: a.captureRollPassed > 0
       ? a.postCaptureRemovalFailed / a.captureRollPassed
       : 0,
@@ -223,7 +229,7 @@ const species = Object.fromEntries(Object.entries(aggregates).map(([speciesId, a
       ? a.mixedCaptureRollPassedShadow / a.modeledAttackAttempts
       : 0,
     captureCalibrationZ: a.modeledAttackBernoulliVarianceSum > 0
-      ? (a.captureRollPassed - a.modeledAttackSuccessProbabilitySum)
+      ? (a.rawCaptureRollPassed - a.modeledAttackSuccessProbabilitySum)
         / Math.sqrt(a.modeledAttackBernoulliVarianceSum)
       : 0,
     mixedCaptureCalibrationZ: a.modeledAttackBernoulliVarianceSum > 0
@@ -281,7 +287,7 @@ for (const [speciesId, value] of Object.entries(species)) {
       + `attempts/predDay=${value.attemptsPerPredatorDay.toFixed(3)} kills/predDay=${value.killsPerPredatorDay.toFixed(3)} `
       + `success=${value.huntSuccessRate.toFixed(3)} modeledSuccess=${value.modeledAttackSuccessRate.toFixed(3)} `
       + `capturePass=${value.captureRollPassRate.toFixed(3)} removalFail=${value.postCaptureRemovalFailed}/${value.captureRollPassed} `
-      + `rawMean=${value.meanCaptureRoll.toFixed(3)} rawZ=${value.captureCalibrationZ.toFixed(2)} `
+      + `rawMean=${value.meanCaptureRoll.toFixed(3)} rawPass=${value.rawCaptureRollPassRate.toFixed(3)} rawZ=${value.captureCalibrationZ.toFixed(2)} `
       + `mixedPass=${value.mixedCaptureRollPassRate.toFixed(3)} mixedMean=${value.meanMixedCaptureRoll.toFixed(3)} mixedZ=${value.mixedCaptureCalibrationZ.toFixed(2)} `
       + `coverage=${value.bioCoverage.toFixed(3)} shortfall=${value.bioShortfall.toFixed(3)} `
       + `hungerRisk=${value.hungerRiskShare.toFixed(3)} huntDays=${value.huntingDayShare.toFixed(3)} `
