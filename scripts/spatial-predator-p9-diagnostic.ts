@@ -41,6 +41,8 @@ interface Aggregate {
   captureHabitatOpportunitySum: number;
   capturePreyRefugeSum: number;
   captureBaseSuccessSum: number;
+  shadowCreditCapturePassed: number;
+  shadowCreditMaxFailureStreak: number;
   predatorDays: number;
   hungerRiskPredatorDays: number;
   huntingPredatorDays: number;
@@ -98,6 +100,8 @@ for (const telemetry of Object.values(runtime.predatorSystem?.telemetry.bySpecie
     captureHabitatOpportunitySum: 0,
     capturePreyRefugeSum: 0,
     captureBaseSuccessSum: 0,
+    shadowCreditCapturePassed: 0,
+    shadowCreditMaxFailureStreak: 0,
     predatorDays: 0,
     hungerRiskPredatorDays: 0,
     huntingPredatorDays: 0,
@@ -158,6 +162,8 @@ function accumulate(daily: SpatialPredatorSpeciesTelemetry): void {
   total.captureHabitatOpportunitySum += daily.captureHabitatOpportunitySum;
   total.capturePreyRefugeSum += daily.capturePreyRefugeSum;
   total.captureBaseSuccessSum += daily.captureBaseSuccessSum;
+  total.shadowCreditCapturePassed += daily.shadowCreditCapturePassed;
+  total.shadowCreditMaxFailureStreak = Math.max(total.shadowCreditMaxFailureStreak, daily.shadowCreditMaxFailureStreak);
   total.predatorDays += daily.predatorDays;
   total.hungerRiskPredatorDays += daily.hungerRiskPredatorDays;
   total.huntingPredatorDays += daily.huntingPredatorDays;
@@ -248,6 +254,8 @@ const species = Object.fromEntries(Object.entries(aggregates).map(([speciesId, a
     captureHabitatOpportunityMean: a.modeledAttackAttempts > 0 ? a.captureHabitatOpportunitySum / a.modeledAttackAttempts : 0,
     capturePreyRefugeMean: a.modeledAttackAttempts > 0 ? a.capturePreyRefugeSum / a.modeledAttackAttempts : 0,
     captureBaseSuccessMean: a.modeledAttackAttempts > 0 ? a.captureBaseSuccessSum / a.modeledAttackAttempts : 0,
+    shadowCreditPassRate: a.modeledAttackAttempts > 0 ? a.shadowCreditCapturePassed / a.modeledAttackAttempts : 0,
+    shadowCreditMaxFailureStreak: a.shadowCreditMaxFailureStreak,
     captureCalibrationZ: a.modeledAttackBernoulliVarianceSum > 0
       ? (a.rawCaptureRollPassed - a.modeledAttackSuccessProbabilitySum)
         / Math.sqrt(a.modeledAttackBernoulliVarianceSum)
@@ -310,6 +318,7 @@ for (const [speciesId, value] of Object.entries(species)) {
       + `rawMean=${value.meanCaptureRoll.toFixed(3)} rawPass=${value.rawCaptureRollPassRate.toFixed(3)} rawZ=${value.captureCalibrationZ.toFixed(2)} `
       + `mixedPass=${value.mixedCaptureRollPassRate.toFixed(3)} mixedMean=${value.meanMixedCaptureRoll.toFixed(3)} mixedZ=${value.mixedCaptureCalibrationZ.toFixed(2)} `
       + `factors=prey:${value.capturePreyAvailabilityMean.toFixed(3)} condition:${value.capturePredatorConditionMean.toFixed(3)} habitat:${value.captureHabitatOpportunityMean.toFixed(3)} refuge:${value.capturePreyRefugeMean.toFixed(3)} base:${value.captureBaseSuccessMean.toFixed(3)} `
+      + `creditPass=${value.shadowCreditPassRate.toFixed(3)} creditMaxFail=${value.shadowCreditMaxFailureStreak} `
       + `coverage=${value.bioCoverage.toFixed(3)} shortfall=${value.bioShortfall.toFixed(3)} `
       + `hungerRisk=${value.hungerRiskShare.toFixed(3)} huntDays=${value.huntingDayShare.toFixed(3)} `
       + `digestDays=${value.digestingDayShare.toFixed(3)} totalGross/demand=${value.totalGrossIntakeVsDemand.toFixed(3)} avgKillKg=${value.averageKillBiomassKg.toFixed(2)} altKg=${value.alternativeFoodConsumedKg.toFixed(1)} `
