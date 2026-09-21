@@ -79,8 +79,6 @@ const SHADOW_GUT_MASS = 6;
 const SHADOW_DIGESTION_DAYS = 7;
 const SHADOW_DAYS_SINCE_MEAL = 8;
 const BIO_RESERVE_ENERGY = 9;
-const SHADOW_CAPTURE_CREDIT = 10;
-const SHADOW_CAPTURE_FAILURE_STREAK = 11;
 const CARRION_STOCK_INDEX = 7;
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 const round3 = (v: number): number => Math.round(v * 1000) / 1000;
@@ -273,6 +271,8 @@ export function createSpatialPredatorRuntimeState(world: GeneratedSpatialWorld, 
       belowMvpDays: 0,
       recoveryPressure: 0,
       recoveredDays: 0,
+      shadowCaptureCredit: 0,
+      shadowCaptureFailureStreak: 0,
       nextEligibleImmigrationDay: day,
     };
   });
@@ -1244,13 +1244,13 @@ export function tickSpatialPredatorsDay(
         speciesEvent.captureHabitatOpportunitySum += factors.habitatOpportunity;
         speciesEvent.capturePreyRefugeSum += factors.preyRefuge;
         speciesEvent.captureBaseSuccessSum += factors.baseSuccess;
-        const accumulatedCredit = Math.max(0, cohort[SHADOW_CAPTURE_CREDIT] ?? 0) + success;
+        const accumulatedCredit = Math.max(0, speciesState.shadowCaptureCredit ?? 0) + success;
         const shadowCreditPassed = accumulatedCredit >= 1;
-        cohort[SHADOW_CAPTURE_CREDIT] = shadowCreditPassed ? accumulatedCredit - 1 : accumulatedCredit;
+        speciesState.shadowCaptureCredit = shadowCreditPassed ? accumulatedCredit - 1 : accumulatedCredit;
         const shadowFailureStreak = shadowCreditPassed
           ? 0
-          : Math.max(0, cohort[SHADOW_CAPTURE_FAILURE_STREAK] ?? 0) + 1;
-        cohort[SHADOW_CAPTURE_FAILURE_STREAK] = shadowFailureStreak;
+          : Math.max(0, speciesState.shadowCaptureFailureStreak ?? 0) + 1;
+        speciesState.shadowCaptureFailureStreak = shadowFailureStreak;
         if (shadowCreditPassed) {
           speciesEvent.shadowCreditCapturePassed += 1;
         } else {
