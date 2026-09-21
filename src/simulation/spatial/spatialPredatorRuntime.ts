@@ -492,6 +492,58 @@ function islandPreferredPreyMetrics(
   return { heads, biomassKg };
 }
 
+interface CaptureSuccessFactors {
+  preyAvailability: number;
+  predatorCondition: number;
+  habitatOpportunity: number;
+  preyRefuge: number;
+  baseSuccess: number;
+  successProbability: number;
+}
+
+function candidateHuntFactors(
+  predator: SpatialPredatorSpeciesDefinition,
+  cohort: SpatialPredatorPatchCohortState,
+  candidate: PreyCandidate,
+  world: GeneratedSpatialWorld,
+  speciesCalibration = false,
+): CaptureSuccessFactors {
+  const preyPopulation = liveEligiblePreyPopulation(candidate);
+  if (preyPopulation <= 0) {
+    return {
+      preyAvailability: 0,
+      predatorCondition: clamp01(cohort[CONDITION]),
+      habitatOpportunity: 0,
+      preyRefuge: 0,
+      baseSuccess: 0,
+      successProbability: 0,
+    };
+  }
+  const predatorOpportunity = world.localSiteInfluenceByPatchId[candidate.patchId]?.predatorOpportunity ?? .25;
+  const refuge = world.localSiteInfluenceByPatchId[candidate.patchId]?.preyRefuge ?? .25;
+  const preyAvailability = clamp01(Math.log1p(preyPopulation) / Math.log(80));
+  const predatorCondition = clamp01(cohort[CONDITION]);
+  const baseSuccess = speciesCalibration
+    ? predatorCalibratedCaptureSuccessBase(predator.id, predator.huntSuccessBase)
+    : predator.huntSuccessBase;
+  const availabilityFactor = speciesCalibration ? 1 : .55 + preyAvailability * .75;
+  const successProbability = clamp01(
+    baseSuccess
+      * availabilityFactor
+      * (.7 + predatorCondition * .3)
+      * (1 + predatorOpportunity * .22)
+      * (1 - refuge * .28),
+  );
+  return {
+    preyAvailability,
+    predatorCondition,
+    habitatOpportunity: clamp01(predatorOpportunity),
+    preyRefuge: clamp01(refuge),
+    baseSuccess,
+    successProbability,
+  };
+}
+
 function candidateHuntSuccess(
   predator: SpatialPredatorSpeciesDefinition,
   cohort: SpatialPredatorPatchCohortState,
@@ -499,31 +551,7 @@ function candidateHuntSuccess(
   world: GeneratedSpatialWorld,
   speciesCalibration = false,
 ): number {
-  const preyPopulation = liveEligiblePreyPopulation(candidate);
-  if (preyPopulation <= 0) return 0;
-  const predatorOpportunity = world.localSiteInfluenceByPatchId[candidate.patchId]?.predatorOpportunity ?? .25;
-  const refuge = world.localSiteInfluenceByPatchId[candidate.patchId]?.preyRefuge ?? .25;
-
-  if (speciesCalibration) {
-    // Candidate score already models local encounter density. Once an attack is
-    // underway, capture success depends on predator condition and habitat, not
-    // on how many additional prey happen to exist in the patch.
-    return clamp01(
-      predatorCalibratedCaptureSuccessBase(predator.id, predator.huntSuccessBase)
-        * (.7 + cohort[CONDITION] * .3)
-        * (1 + predatorOpportunity * .22)
-        * (1 - refuge * .28),
-    );
-  }
-
-  const encounterDensity = clamp01(Math.log1p(preyPopulation) / Math.log(80));
-  return clamp01(
-    predator.huntSuccessBase
-      * (.55 + encounterDensity * .75)
-      * (.7 + cohort[CONDITION] * .3)
-      * (1 + predatorOpportunity * .22)
-      * (1 - refuge * .28),
-  );
+  return candidateHuntFactors(predator, cohort, candidate, world, speciesCalibration).successProbability;
 }
 
 function removeOnePrey(
@@ -767,6 +795,11 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     captureRollSum: 0,
     mixedCaptureRollSum: 0,
     mixedCaptureRollPassedShadow: 0,
+    capturePreyAvailabilitySum: 0,
+    capturePredatorConditionSum: 0,
+    captureHabitatOpportunitySum: 0,
+    capturePreyRefugeSum: 0,
+    captureBaseSuccessSum: 0,
     huntOpportunityPredatorDays: 0,
     accessiblePreyHeadDays: 0,
     accessiblePreyBiomassPredatorDaysKg: 0,
@@ -1200,7 +1233,13 @@ export function tickSpatialPredatorsDay(
           roll -= targetScore(entry);
           if (roll <= 0) { candidate = entry; break; }
         }
-        const success = candidateHuntSuccess(predator, cohort, candidate, world, behavior.speciesCalibration);
+        const factors = candidateHuntFactors(predator, cohort, candidate, world, behavior.speciesCalibration);
+        const success = factors.successProbability;
+        speciesEvent.capturePreyAvailabilitySum += factors.preyAvailability;
+        speciesEvent.capturePredatorConditionSum += factors.predatorCondition;
+        speciesEvent.captureHabitatOpportunitySum += factors.habitatOpportunity;
+        speciesEvent.capturePreyRefugeSum += factors.preyRefuge;
+        speciesEvent.captureBaseSuccessSum += factors.baseSuccess;
         speciesEvent.modeledAttackSuccessProbabilitySum += success;
         speciesEvent.modeledAttackBernoulliVarianceSum += success * (1 - success);
         speciesEvent.modeledAttackAttempts += 1;
