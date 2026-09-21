@@ -221,6 +221,12 @@ export interface SpatialPredatorSpeciesTelemetry {
   mixedCaptureRollSum: number;
   /** Shadow count of mixed captures; should match captureRollPassed while mixed RNG is authoritative. */
   mixedCaptureRollPassedShadow: number;
+  /** Shadow capture-model factors recorded for the next environment-driven success model. */
+  capturePreyAvailabilitySum: number;
+  capturePredatorConditionSum: number;
+  captureHabitatOpportunitySum: number;
+  capturePreyRefugeSum: number;
+  captureBaseSuccessSum: number;
   huntOpportunityPredatorDays: number;
   accessiblePreyHeadDays: number;
   accessiblePreyBiomassPredatorDaysKg: number;
