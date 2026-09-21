@@ -162,6 +162,9 @@ export type SpatialPredatorPatchCohortState = [
   shadowDigestionDaysRemaining?: number,
   shadowDaysSinceMeal?: number,
   bioReserveEnergyKJ?: number,
+  /** Shadow-only expected-capture credit and consecutive-failure state. */
+  shadowCaptureCredit?: number,
+  shadowCaptureFailureStreak?: number,
 ];
 
 export interface SpatialPredatorSpeciesRuntimeState {
@@ -227,6 +230,9 @@ export interface SpatialPredatorSpeciesTelemetry {
   captureHabitatOpportunitySum: number;
   capturePreyRefugeSum: number;
   captureBaseSuccessSum: number;
+  /** Shadow-only capture outcomes from accumulated expected opportunity, without changing behavior. */
+  shadowCreditCapturePassed: number;
+  shadowCreditMaxFailureStreak: number;
   huntOpportunityPredatorDays: number;
   accessiblePreyHeadDays: number;
   accessiblePreyBiomassPredatorDaysKg: number;
