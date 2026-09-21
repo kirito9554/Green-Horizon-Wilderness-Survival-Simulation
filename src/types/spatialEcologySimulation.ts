@@ -207,8 +207,10 @@ export interface SpatialPredatorSpeciesTelemetry {
   modeledAttackSuccessProbabilitySum: number;
   /** Attack attempts included in modeledAttackSuccessProbabilitySum. */
   modeledAttackAttempts: number;
-  /** Attacks whose RNG capture roll passed the modeled probability threshold. */
+  /** Attacks whose authoritative mixed capture roll passed the modeled probability threshold. */
   captureRollPassed: number;
+  /** Raw capture-roll passes retained as a shadow calibration stream after mixed RNG becomes authoritative. */
+  rawCaptureRollPassed: number;
   /** Capture rolls that passed but could not remove a currently eligible prey stage. Must normally remain zero. */
   postCaptureRemovalFailed: number;
   /** Sum p(1-p) for modeled attack Bernoulli trials; used to audit calibration significance. */
