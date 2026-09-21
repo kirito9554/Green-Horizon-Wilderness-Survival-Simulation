@@ -205,6 +205,7 @@ for (let day = 2; day <= days; day += 1) {
     maintainMateConnectivity: true,
     controlledRecovery: true,
     bioenergeticFeeding: true,
+    accumulatedCaptureOpportunity: true,
     alternativeDiet,
     densitySwitching,
     speciesCalibration,
