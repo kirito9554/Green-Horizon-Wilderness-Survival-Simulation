@@ -108,7 +108,7 @@ function normalizedOptions(options?: SpatialPredatorRuntimeOptions): Required<Sp
     alternativeDiet: options?.alternativeDiet ?? false,
     densitySwitching: options?.densitySwitching ?? false,
     speciesCalibration: options?.speciesCalibration ?? false,
-    accumulatedCaptureOpportunity: options?.accumulatedCaptureOpportunity ?? true,
+    accumulatedCaptureOpportunity: options?.accumulatedCaptureOpportunity ?? false,
   };
 }
 
