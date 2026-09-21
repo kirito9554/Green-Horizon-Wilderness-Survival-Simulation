@@ -1,3 +1,4 @@
+// Shadow capture credit is species-level so movement between patches does not strand opportunity.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createSpatialFaunaEcosystemState, tickSpatialFaunaEcosystemDay } from '../src/simulation/spatial/spatialFaunaEcosystemRuntime';
 import { getSpatialFaunaRuntimePopulation } from '../src/simulation/spatial/spatialFaunaRuntime';
