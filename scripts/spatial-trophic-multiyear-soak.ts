@@ -235,6 +235,8 @@ function accumulatePredators(aggregates: Record<string, PredatorAggregate>, dail
     total.captureHabitatOpportunitySum += daily.captureHabitatOpportunitySum;
     total.capturePreyRefugeSum += daily.capturePreyRefugeSum;
     total.captureBaseSuccessSum += daily.captureBaseSuccessSum;
+    total.shadowCreditCapturePassed += daily.shadowCreditCapturePassed;
+    total.shadowCreditMaxFailureStreak = Math.max(total.shadowCreditMaxFailureStreak, daily.shadowCreditMaxFailureStreak);
     total.huntOpportunityPredatorDays += daily.huntOpportunityPredatorDays;
     total.accessiblePreyHeadDays += daily.accessiblePreyHeadDays;
     total.accessiblePreyBiomassPredatorDaysKg += daily.accessiblePreyBiomassPredatorDaysKg;
@@ -610,6 +612,8 @@ function runFiveYearSoak(): void {
     const captureHabitatOpportunityMean = species.modeledAttackAttempts > 0 ? species.captureHabitatOpportunitySum / species.modeledAttackAttempts : 0;
     const capturePreyRefugeMean = species.modeledAttackAttempts > 0 ? species.capturePreyRefugeSum / species.modeledAttackAttempts : 0;
     const captureBaseSuccessMean = species.modeledAttackAttempts > 0 ? species.captureBaseSuccessSum / species.modeledAttackAttempts : 0;
+    const shadowCreditPassRate = species.modeledAttackAttempts > 0 ? species.shadowCreditCapturePassed / species.modeledAttackAttempts : 0;
+    const shadowCreditMaxFailureStreak = species.shadowCreditMaxFailureStreak;
     const captureCalibrationZ = species.modeledAttackBernoulliVarianceSum > 0
       ? (species.rawCaptureRollPassed - species.modeledAttackSuccessProbabilitySum)
         / Math.sqrt(species.modeledAttackBernoulliVarianceSum)
@@ -656,6 +660,7 @@ function runFiveYearSoak(): void {
         + `modeled=${modeledAttackSuccessRate.toFixed(3)} capturePass=${captureRollPassRate.toFixed(3)} removalFail=${species.postCaptureRemovalFailed}/${species.captureRollPassed} `
         + `rawMean=${meanCaptureRoll.toFixed(3)} rawPass=${rawCaptureRollPassRate.toFixed(3)} rawZ=${captureCalibrationZ.toFixed(2)} mixedPass=${mixedCaptureRollPassRate.toFixed(3)} mixedMean=${meanMixedCaptureRoll.toFixed(3)} mixedZ=${mixedCaptureCalibrationZ.toFixed(2)} `
         + `factors=prey:${capturePreyAvailabilityMean.toFixed(3)} condition:${capturePredatorConditionMean.toFixed(3)} habitat:${captureHabitatOpportunityMean.toFixed(3)} refuge:${capturePreyRefugeMean.toFixed(3)} base:${captureBaseSuccessMean.toFixed(3)} `
+        + `creditPass=${shadowCreditPassRate.toFixed(3)} creditMaxFail=${shadowCreditMaxFailureStreak} `
         + `preyHeads local/island=${accessiblePreyHeadsPerPredatorDay.toFixed(1)}/${islandPreferredPreyHeadsPerPredatorDay.toFixed(1)} accessShare=${preyHeadAccessShare.toFixed(3)} `
         + `preyBiomass local/island=${accessiblePreyBiomassKgPerPredatorDay.toFixed(1)}/${islandPreferredPreyBiomassKgPerPredatorDay.toFixed(1)}kg accessShare=${preyBiomassAccessShare.toFixed(3)} `
         + `killKg=${preyBiomassPerKillKg.toFixed(2)} edible/kill=${edibleKgPerKill.toFixed(2)} edible/demand=${edibleYieldVsDemand.toFixed(3)} `
@@ -703,6 +708,8 @@ function runFiveYearSoak(): void {
       captureHabitatOpportunityMean,
       capturePreyRefugeMean,
       captureBaseSuccessMean,
+      shadowCreditPassRate,
+      shadowCreditMaxFailureStreak,
       captureCalibrationZ,
       mixedCaptureCalibrationZ,
       accessiblePreyHeadsPerPredatorDay,
