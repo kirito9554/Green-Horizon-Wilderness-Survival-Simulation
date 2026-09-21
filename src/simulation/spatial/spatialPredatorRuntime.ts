@@ -79,6 +79,8 @@ const SHADOW_GUT_MASS = 6;
 const SHADOW_DIGESTION_DAYS = 7;
 const SHADOW_DAYS_SINCE_MEAL = 8;
 const BIO_RESERVE_ENERGY = 9;
+const SHADOW_CAPTURE_CREDIT = 10;
+const SHADOW_CAPTURE_FAILURE_STREAK = 11;
 const CARRION_STOCK_INDEX = 7;
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 const round3 = (v: number): number => Math.round(v * 1000) / 1000;
@@ -800,6 +802,8 @@ function blankSpeciesTelemetry(speciesId: string, startPopulation: number): Spat
     captureHabitatOpportunitySum: 0,
     capturePreyRefugeSum: 0,
     captureBaseSuccessSum: 0,
+    shadowCreditCapturePassed: 0,
+    shadowCreditMaxFailureStreak: 0,
     huntOpportunityPredatorDays: 0,
     accessiblePreyHeadDays: 0,
     accessiblePreyBiomassPredatorDaysKg: 0,
@@ -1240,6 +1244,21 @@ export function tickSpatialPredatorsDay(
         speciesEvent.captureHabitatOpportunitySum += factors.habitatOpportunity;
         speciesEvent.capturePreyRefugeSum += factors.preyRefuge;
         speciesEvent.captureBaseSuccessSum += factors.baseSuccess;
+        const accumulatedCredit = Math.max(0, cohort[SHADOW_CAPTURE_CREDIT] ?? 0) + success;
+        const shadowCreditPassed = accumulatedCredit >= 1;
+        cohort[SHADOW_CAPTURE_CREDIT] = shadowCreditPassed ? accumulatedCredit - 1 : accumulatedCredit;
+        const shadowFailureStreak = shadowCreditPassed
+          ? 0
+          : Math.max(0, cohort[SHADOW_CAPTURE_FAILURE_STREAK] ?? 0) + 1;
+        cohort[SHADOW_CAPTURE_FAILURE_STREAK] = shadowFailureStreak;
+        if (shadowCreditPassed) {
+          speciesEvent.shadowCreditCapturePassed += 1;
+        } else {
+          speciesEvent.shadowCreditMaxFailureStreak = Math.max(
+            speciesEvent.shadowCreditMaxFailureStreak,
+            shadowFailureStreak,
+          );
+        }
         speciesEvent.modeledAttackSuccessProbabilitySum += success;
         speciesEvent.modeledAttackBernoulliVarianceSum += success * (1 - success);
         speciesEvent.modeledAttackAttempts += 1;
