@@ -15,10 +15,10 @@ const mode = (process.env.PREDATOR_P6_MODE ?? 'combined') as P6Mode;
 const seed = process.env.SPATIAL_TROPHIC_SEED ?? 'spatial-trophic-soak-alpha';
 const enforceGate = process.env.PREDATOR_P6_ASSERT !== '0';
 const optionsByMode: Record<P6Mode, SpatialPredatorRuntimeOptions> = {
-  baseline: { maintainMateConnectivity: false, controlledRecovery: false },
-  'mate-only': { maintainMateConnectivity: true, controlledRecovery: false },
-  'recovery-only': { maintainMateConnectivity: false, controlledRecovery: true },
-  combined: { maintainMateConnectivity: true, controlledRecovery: true },
+  baseline: { maintainMateConnectivity: false, controlledRecovery: false, accumulatedCaptureOpportunity: true },
+  'mate-only': { maintainMateConnectivity: true, controlledRecovery: false, accumulatedCaptureOpportunity: true },
+  'recovery-only': { maintainMateConnectivity: false, controlledRecovery: true, accumulatedCaptureOpportunity: true },
+  combined: { maintainMateConnectivity: true, controlledRecovery: true, accumulatedCaptureOpportunity: true },
 };
 const predatorOptions = optionsByMode[mode] ?? optionsByMode.combined;
 
