@@ -96,6 +96,8 @@ export interface SpatialPredatorRuntimeOptions {
   densitySwitching?: boolean;
   /** P9.6 diagnostic flag: species/analogue FMR and prey-consumption profiles become authoritative. */
   speciesCalibration?: boolean;
+  /** P9.7: use accumulated environment-driven capture opportunity as the authoritative outcome. */
+  accumulatedCaptureOpportunity?: boolean;
 }
 
 function normalizedOptions(options?: SpatialPredatorRuntimeOptions): Required<SpatialPredatorRuntimeOptions> {
@@ -106,6 +108,7 @@ function normalizedOptions(options?: SpatialPredatorRuntimeOptions): Required<Sp
     alternativeDiet: options?.alternativeDiet ?? false,
     densitySwitching: options?.densitySwitching ?? false,
     speciesCalibration: options?.speciesCalibration ?? false,
+    accumulatedCaptureOpportunity: options?.accumulatedCaptureOpportunity ?? true,
   };
 }
 
@@ -1269,7 +1272,10 @@ export function tickSpatialPredatorsDay(
         speciesEvent.mixedCaptureRollSum += mixedSuccessRoll;
         if (rawSuccessRoll <= success) speciesEvent.rawCaptureRollPassed += 1;
         if (mixedSuccessRoll <= success) speciesEvent.mixedCaptureRollPassedShadow += 1;
-        if (mixedSuccessRoll <= success) {
+        const authoritativeCapturePassed = behavior.accumulatedCaptureOpportunity
+          ? shadowCreditPassed
+          : mixedSuccessRoll <= success;
+        if (authoritativeCapturePassed) {
           speciesEvent.captureRollPassed += 1;
           const removed = removeOnePrey(
             candidate,
