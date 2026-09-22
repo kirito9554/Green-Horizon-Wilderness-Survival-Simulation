@@ -36,7 +36,7 @@ interface ScenarioResult extends ActionMetrics {
   finalPredators: number;
 }
 
-const days = Math.max(30, Math.floor(Number(process.env.PLAYER_IMPACT_DAYS ?? 365)));
+const days = Math.max(7, Math.floor(Number(process.env.PLAYER_IMPACT_DAYS ?? 365)));
 const seed = process.env.SPATIAL_TROPHIC_SEED ?? "spatial-player-impact";
 const scenarios: Scenario[] = [
   "control",
