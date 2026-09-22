@@ -178,6 +178,8 @@ export interface SpatialPredatorSpeciesRuntimeState {
   /** Shadow-only accumulated capture opportunity, shared across the species' hunting groups. */
   shadowCaptureCredit?: number;
   shadowCaptureFailureStreak?: number;
+  /** Fractional kill allowance carried into the next day so long-term kills stay within the authored cadence. */
+  killCadenceCredit?: number;
   lastExtinctionDay?: number;
   lastRecolonizationDay?: number;
 }
