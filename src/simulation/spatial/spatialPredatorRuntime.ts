@@ -276,6 +276,7 @@ export function createSpatialPredatorRuntimeState(world: GeneratedSpatialWorld, 
       recoveredDays: 0,
       shadowCaptureCredit: 0,
       shadowCaptureFailureStreak: 0,
+      killCadenceCredit: 0,
       nextEligibleImmigrationDay: day,
     };
   });
@@ -985,6 +986,17 @@ export function tickSpatialPredatorsDay(
     bySpecies[predator.id] = speciesEvent;
     const profile = getPredatorBehaviorProfile(predator);
     const islandPreferredPrey = islandPreferredPreyMetrics(predator, fauna);
+    const carriedKillCadenceCredit = startPopulation > 0
+      ? Math.max(0, speciesState.killCadenceCredit ?? 0)
+      : 0;
+    const metabolicHeadsAtDayStart = Object.values(speciesState.cohortsByPatch)
+      .reduce((sum, cohort) => sum + metabolicPredatorHeads(cohort), 0);
+    const dailyKillAllowance = carriedKillCadenceCredit
+      + metabolicHeadsAtDayStart * predator.maxKillsPerAdultPerDay;
+    let killCadenceBudget = Math.floor(dailyKillAllowance);
+    speciesState.killCadenceCredit = startPopulation > 0
+      ? Math.max(0, dailyKillAllowance - killCadenceBudget)
+      : 0;
     const breederSnapshotByPatch = new Map(
       Object.entries(speciesState.cohortsByPatch).map(([patchId, cohort]) => [patchId, effectivePredatorBreeders(cohort)] as const),
     );
@@ -1216,7 +1228,7 @@ export function tickSpatialPredatorsDay(
       };
 
       const shouldContinueFeeding = (): boolean => {
-        if (huntIndex >= huntLimit || candidates.length === 0) return false;
+        if (huntIndex >= huntLimit || candidates.length === 0 || killCadenceBudget <= 0) return false;
         if (behavior.bioenergeticFeeding) {
           const netNewMealKJ = huntedEdibleKg
             * REFERENCE_WET_PREY_ENERGY_KJ_PER_KG
@@ -1284,6 +1296,7 @@ export function tickSpatialPredatorsDay(
             behavior.speciesCalibration,
           );
           if (removed.killed) {
+            killCadenceBudget = Math.max(0, killCadenceBudget - 1);
             const edible = removed.biomassKg * (
               behavior.speciesCalibration
                 ? predatorConsumedPreyFraction(predator.id, removed.biomassKg, predator.adultWeightKg)
