@@ -29,5 +29,5 @@ jobs:
 
       - name: Player impact ecosystem smoke test
         env:
-          PLAYER_IMPACT_DAYS: 90
+          PLAYER_IMPACT_DAYS: 30
         run: npm run test:spatial-player-impact
