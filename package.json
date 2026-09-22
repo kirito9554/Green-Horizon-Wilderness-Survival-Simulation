@@ -43,7 +43,8 @@
     "test:spatial-predator-p7": "tsx scripts/spatial-predator-p7-smoke.ts",
     "test:spatial-predator-p8": "tsx scripts/spatial-predator-p8-smoke.ts",
     "test:spatial-predator-p9": "tsx scripts/spatial-predator-p9-smoke.ts",
-    "test:spatial-predator-p9-diagnostic": "tsx scripts/spatial-predator-p9-diagnostic.ts"
+    "test:spatial-predator-p9-diagnostic": "tsx scripts/spatial-predator-p9-diagnostic.ts",
+    "test:spatial-player-impact": "tsx scripts/spatial-player-impact-smoke.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
