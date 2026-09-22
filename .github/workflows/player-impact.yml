@@ -1,0 +1,33 @@
+name: Player Impact Ecosystem Scenarios
+
+on:
+  push:
+    branches: [feature/spatial-world-foundation]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: player-impact-\${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  player-impact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Player impact ecosystem smoke test
+        env:
+          PLAYER_IMPACT_DAYS: 90
+        run: npm run test:spatial-player-impact
