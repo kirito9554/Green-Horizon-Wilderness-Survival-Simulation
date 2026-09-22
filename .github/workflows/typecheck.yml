@@ -66,11 +66,11 @@ jobs:
       - name: Predator P9 bioenergetic-shadow smoke test
         run: npm run test:spatial-predator-p9
 
-      - name: Full spatial trophic ecosystem smoke test
-        run: npm run test:spatial-trophic
-
       - name: Player impact ecosystem smoke test
         run: npm run test:spatial-player-impact
+
+      - name: Full spatial trophic ecosystem smoke test
+        run: npm run test:spatial-trophic
 
       - name: World ecology foundation smoke test
         run: npm run test:ecology
