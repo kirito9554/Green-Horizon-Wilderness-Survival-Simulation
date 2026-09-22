@@ -14,8 +14,8 @@ export interface SpatialPredatorSpeciesDefinition {
   dailyFoodKgPerAdult: number;
   dailyWaterNeed: number;
   /**
-   * Existing kill cadence from the pre-spatial ecology model. It is a feeding-activity cadence,
-   * not a hard global cap across all prey species; reserve horizon is derived from it.
+   * Existing kill cadence from the pre-spatial ecology model. It is the hard long-term
+   * kill budget per adult-equivalent per day; fractional allowance carries across days.
    */
   maxKillsPerAdultPerDay: number;
   densityPerKm2: number;
