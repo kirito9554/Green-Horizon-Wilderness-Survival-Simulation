@@ -1,0 +1,91 @@
+import type { GameState } from '../../types';
+import '../../types/buildingSimulation';
+import {
+  DEFAULT_SPATIAL_WORLD_SEED,
+  SPATIAL_TERRAIN_GENERATION_VERSION,
+  generateHabitatPatches,
+  type HabitatPatch,
+} from './habitatPatches';
+import {
+  buildSpatialRouteGraph,
+  type SpatialRouteGraph,
+} from './spatialTravel';
+import {
+  generateTerrainHydrology,
+  type GeneratedTerrainHydrology,
+} from './terrainHydrology';
+import {
+  generateLocalSitePool,
+  generateLocalSites,
+  type GeneratedLocalSite,
+  type GeneratedLocalSitePool,
+} from './localSiteGeneration';
+import {
+  aggregateLocalSiteInfluenceByPatch,
+  type LocalSitePatchInfluence,
+} from './localSiteProfiles';
+import {
+  generateSpatialFaunaCommunity,
+  type GeneratedSpatialFaunaCommunity,
+} from './spatialFaunaCommunity';
+
+export const SPATIAL_WORLD_GENERATION_VERSION = 5;
+
+export interface GeneratedSpatialWorld {
+  generationVersion: number;
+  terrainGenerationVersion: number;
+  worldSeed: string;
+  habitatPatches: readonly HabitatPatch[];
+  routeGraph: SpatialRouteGraph;
+  hydrology: GeneratedTerrainHydrology;
+  /** Seed + generated terrain choose a subset of the full site vocabulary for this campaign. */
+  localSitePool: GeneratedLocalSitePool;
+  localSites: readonly GeneratedLocalSite[];
+  /**
+   * Read-only semantic layer derived from spawned local sites. Live fauna/resource
+   * balance does not consume this yet; future systems can use it without hardcoding site names.
+   */
+  localSiteInfluenceByPatchId: Readonly<Record<string, LocalSitePatchInfluence>>;
+  /**
+   * Metric whole-island fauna census. Population counts are aggregate cohorts,
+   * not individual runtime entities. The legacy fauna tick remains untouched until
+   * its food/movement model migrates onto habitat patches.
+   */
+  faunaCommunity: GeneratedSpatialFaunaCommunity;
+}
+
+/**
+ * The building simulation already owns a persistent per-run seed. Spatial world
+ * generation deliberately reuses that root seed so a save has one world DNA
+ * rather than unrelated random streams for construction, terrain and ecology.
+ */
+export function getSpatialWorldSeed(state: GameState): string {
+  return state.buildingSimulation?.worldSeed || DEFAULT_SPATIAL_WORLD_SEED;
+}
+
+export function generateSpatialWorld(worldSeed: string): GeneratedSpatialWorld {
+  const habitatPatches = Object.freeze(generateHabitatPatches(worldSeed));
+  const routeGraph = buildSpatialRouteGraph(habitatPatches);
+  const hydrology = generateTerrainHydrology(habitatPatches, routeGraph);
+  const localSitePool = generateLocalSitePool(worldSeed, habitatPatches, hydrology);
+  const localSites = Object.freeze(generateLocalSites(worldSeed, habitatPatches, hydrology, localSitePool));
+  const localSiteInfluenceByPatchId = aggregateLocalSiteInfluenceByPatch(localSites);
+  const faunaCommunity = generateSpatialFaunaCommunity(worldSeed, habitatPatches, localSiteInfluenceByPatchId);
+
+  return Object.freeze({
+    generationVersion: SPATIAL_WORLD_GENERATION_VERSION,
+    terrainGenerationVersion: SPATIAL_TERRAIN_GENERATION_VERSION,
+    worldSeed,
+    habitatPatches,
+    routeGraph,
+    hydrology,
+    localSitePool,
+    localSites,
+    localSiteInfluenceByPatchId,
+    faunaCommunity,
+  });
+}
+
+export function generateSpatialWorldForState(state: GameState): GeneratedSpatialWorld {
+  return generateSpatialWorld(getSpatialWorldSeed(state));
+}
