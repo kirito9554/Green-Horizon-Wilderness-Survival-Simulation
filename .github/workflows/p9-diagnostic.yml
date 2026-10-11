@@ -25,12 +25,22 @@ jobs:
         include:
           - seed: spatial-trophic-soak-alpha
             days: 30
+            rescue: '1'
           - seed: spatial-trophic-soak-beta
             days: 30
+            rescue: '1'
           - seed: spatial-trophic-soak-alpha
             days: 365
+            rescue: '1'
           - seed: spatial-trophic-soak-beta
             days: 365
+            rescue: '1'
+          - seed: spatial-trophic-soak-alpha
+            days: 365
+            rescue: '0'
+          - seed: spatial-trophic-soak-beta
+            days: 365
+            rescue: '0'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,12 +67,13 @@ jobs:
           P9_ALT_DIET: '1'
           P9_SWITCHING: '1'
           P9_CALIBRATE: '1'
+          P9_ALLOW_IMMIGRATION: ${{ matrix.rescue }}
         run: npm run test:spatial-predator-p9-diagnostic
 
       - name: Upload P9 diagnostic report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: predator-p9-6-diagnostic-${{ matrix.seed }}-${{ matrix.days }}d
+          name: predator-p9-6-diagnostic-${{ matrix.seed }}-${{ matrix.days }}d-rescue${{ matrix.rescue }}
           path: artifacts/predator-p9.6-diagnostic-*.json
           if-no-files-found: warn

@@ -31,9 +31,25 @@ jobs:
           - mode: combined
             seed: spatial-trophic-soak-alpha
             gate: '1'
+            p9: '0'
+            rescue: '1'
           - mode: combined
             seed: spatial-trophic-soak-beta
             gate: '1'
+            p9: '0'
+            rescue: '1'
+          # Research probes: retain the real births/deaths, disable external rescue,
+          # and report ecological outcomes without claiming a survival PASS.
+          - mode: combined
+            seed: spatial-trophic-soak-alpha
+            gate: '0'
+            p9: '1'
+            rescue: '0'
+          - mode: combined
+            seed: spatial-trophic-soak-beta
+            gate: '0'
+            p9: '1'
+            rescue: '0'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -76,13 +92,15 @@ jobs:
           PREDATOR_P6_MODE: ${{ matrix.mode }}
           SPATIAL_TROPHIC_SEED: ${{ matrix.seed }}
           PREDATOR_P6_ASSERT: ${{ matrix.gate }}
+          PREDATOR_P9_ACTIVE: ${{ matrix.p9 }}
+          PREDATOR_NO_RESCUE: ${{ matrix.rescue == '0' && '1' || '0' }}
         run: npm run test:spatial-trophic-soak
 
       - name: Upload P9 shadow trophic report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: predator-p9-shadow-${{ matrix.mode }}-${{ matrix.seed }}
+          name: predator-p9-shadow-${{ matrix.mode }}-${{ matrix.seed }}-p9${{ matrix.p9 }}-rescue${{ matrix.rescue }}
           path: artifacts/predator-p9-shadow-*.json
           if-no-files-found: warn
 

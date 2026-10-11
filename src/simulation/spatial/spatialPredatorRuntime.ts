@@ -98,6 +98,8 @@ export interface SpatialPredatorRuntimeOptions {
   speciesCalibration?: boolean;
   /** P9.7: use accumulated environment-driven capture opportunity as the authoritative outcome. */
   accumulatedCaptureOpportunity?: boolean;
+  /** Diagnostic only: suppress external founder immigration while preserving all native births/deaths. */
+  allowExternalImmigration?: boolean;
 }
 
 function normalizedOptions(options?: SpatialPredatorRuntimeOptions): Required<SpatialPredatorRuntimeOptions> {
@@ -109,6 +111,7 @@ function normalizedOptions(options?: SpatialPredatorRuntimeOptions): Required<Sp
     densitySwitching: options?.densitySwitching ?? false,
     speciesCalibration: options?.speciesCalibration ?? false,
     accumulatedCaptureOpportunity: options?.accumulatedCaptureOpportunity ?? false,
+    allowExternalImmigration: options?.allowExternalImmigration ?? true,
   };
 }
 
@@ -876,6 +879,7 @@ function maybeRecolonizePredator(
   world: GeneratedSpatialWorld,
   day: number,
   controlledRecovery: boolean,
+  allowExternalImmigration: boolean,
 ): { count: number; pulse: boolean } {
   const total = speciesPopulation(speciesState.cohortsByPatch);
   const minimumViable = getSpatialPredatorMinimumViablePopulation(predator);
@@ -896,6 +900,9 @@ function maybeRecolonizePredator(
     speciesState.recoveryPressure = readiness;
     if (readiness <= 0) return { count: 0, pulse: false };
   }
+  // Recovery pressure is still tracked in an isolated-island diagnostic; only
+  // the external arrival is disabled. No artificial founders enter the system.
+  if (!allowExternalImmigration) return { count: 0, pulse: false };
   const opportunity = readiness >= 1
     || spatialUnitRandom(world.worldSeed, `predator-immigration-opportunity|${predator.id}|${day}`) < readiness * .018;
   if (!opportunity) return { count: 0, pulse: false };
@@ -1620,7 +1627,10 @@ export function tickSpatialPredatorsDay(
       speciesState.globalAbsenceDays = (speciesState.globalAbsenceDays ?? 0) + 1;
     } else speciesState.globalAbsenceDays = 0;
 
-    const immigration = maybeRecolonizePredator(speciesState, predator, fauna, world, day, behavior.controlledRecovery);
+    const immigration = maybeRecolonizePredator(
+      speciesState, predator, fauna, world, day,
+      behavior.controlledRecovery, behavior.allowExternalImmigration,
+    );
     immigrants += immigration.count;
     speciesEvent.immigrants += immigration.count;
     if (immigration.pulse) {

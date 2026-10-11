@@ -1,4 +1,5 @@
 // Shadow capture credit is species-level so movement between patches does not strand opportunity.
+import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createSpatialFaunaEcosystemState, tickSpatialFaunaEcosystemDay } from '../src/simulation/spatial/spatialFaunaEcosystemRuntime';
 import { getSpatialFaunaRuntimePopulation } from '../src/simulation/spatial/spatialFaunaRuntime';
@@ -10,6 +11,7 @@ const days = Math.max(2, Math.floor(Number(process.env.P9_DAYS ?? 30)));
 const alternativeDiet = process.env.P9_ALT_DIET === '1';
 const densitySwitching = process.env.P9_SWITCHING === '1';
 const speciesCalibration = process.env.P9_CALIBRATE === '1';
+const allowExternalImmigration = process.env.P9_ALLOW_IMMIGRATION !== '0';
 const phase = speciesCalibration ? 'p9.6' : densitySwitching ? 'p9.5' : alternativeDiet ? 'p9.4' : 'p9.3';
 const world = generateSpatialWorld(seed);
 const runtime = createSpatialFaunaEcosystemState(seed, 1, world);
@@ -204,6 +206,7 @@ for (let day = 2; day <= days; day += 1) {
   const telemetry = tickSpatialFaunaEcosystemDay(runtime, world, day, {
     maintainMateConnectivity: true,
     controlledRecovery: true,
+    allowExternalImmigration,
     bioenergeticFeeding: true,
     accumulatedCaptureOpportunity: true,
     alternativeDiet,
@@ -283,10 +286,33 @@ const species = Object.fromEntries(Object.entries(aggregates).map(([speciesId, a
   }];
 }));
 
+const unassistedRecruitment = Object.fromEntries(
+  Object.entries(species).map(([speciesId, value]) => [speciesId, {
+    initialPopulation: value.startPopulation,
+    endPopulation: value.endPopulation,
+    births: value.births,
+    naturalAndHungerDeaths: value.deaths,
+    immigrants: value.immigrants,
+    unassistedNetChange: value.births - value.deaths,
+    foundedAtStart: value.startPopulation > 0,
+    populationMaintainedWithoutImmigration: value.startPopulation > 0
+      && value.immigrants === 0
+      && value.endPopulation >= value.startPopulation,
+  }]),
+);
+if (!allowExternalImmigration) {
+  assert.equal(
+    Object.values(species).reduce((sum, value) => sum + value.immigrants, 0),
+    0,
+    'A no-rescue diagnostic must not create any immigrants',
+  );
+}
 const report = {
   seed,
   days,
   phase,
+  allowExternalImmigration,
+  unassistedRecruitment,
   alternativeDiet,
   densitySwitching,
   speciesCalibration,
@@ -305,7 +331,7 @@ const report = {
 };
 
 console.log(
-  `[${phase}|${seed}|${days}d] prey=${initialPrey}->${endPrey} min=${minPrey}/${carryingCapacity} `
+  `[${phase}|${seed}|${days}d|${allowExternalImmigration ? 'rescue' : 'no-rescue'}] prey=${initialPrey}->${endPrey} min=${minPrey}/${carryingCapacity} `
     + `predators=${initialPredators}->${endPredators} kills=${totalKills}`,
 );
 for (const point of checkpoints) {
@@ -337,6 +363,6 @@ for (const [speciesId, value] of Object.entries(species)) {
 }
 
 mkdirSync('artifacts', { recursive: true });
-const path = `artifacts/predator-${phase}-diagnostic-${seed}-${days}d.json`;
+const path = `artifacts/predator-${phase}-diagnostic-${seed}-${days}d${allowExternalImmigration ? '' : '-no-rescue'}.json`;
 writeFileSync(path, JSON.stringify(report, null, 2));
 console.log(`[${phase}|${seed}] report=${path}`);

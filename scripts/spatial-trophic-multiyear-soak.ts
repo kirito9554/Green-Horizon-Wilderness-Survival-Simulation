@@ -20,7 +20,19 @@ const optionsByMode: Record<P6Mode, SpatialPredatorRuntimeOptions> = {
   'recovery-only': { maintainMateConnectivity: false, controlledRecovery: true, accumulatedCaptureOpportunity: true },
   combined: { maintainMateConnectivity: true, controlledRecovery: true, accumulatedCaptureOpportunity: true },
 };
-const predatorOptions = optionsByMode[mode] ?? optionsByMode.combined;
+// Keep legacy 5y gates unchanged. Opt-in P9.6 + no-rescue runs are separate
+// observational probes, not evidence of persistence simply because a soak completed.
+const p9Active = process.env.PREDATOR_P9_ACTIVE === '1';
+const allowExternalImmigration = process.env.PREDATOR_NO_RESCUE !== '1';
+const runVariant = `${mode}${p9Active ? '-p9.6' : ''}${allowExternalImmigration ? '' : '-no-rescue'}`;
+const predatorOptions: SpatialPredatorRuntimeOptions = {
+  ...(optionsByMode[mode] ?? optionsByMode.combined),
+  allowExternalImmigration,
+  bioenergeticFeeding: p9Active,
+  alternativeDiet: p9Active,
+  densitySwitching: p9Active,
+  speciesCalibration: p9Active,
+};
 
 interface PredatorCheckpoint {
   population: number;
@@ -303,7 +315,8 @@ function accumulatePredators(aggregates: Record<string, PredatorAggregate>, dail
 }
 
 function runFiveYearSoak(): void {
-  const label = `${mode}|${seed}`;
+  const label = `${runVariant}|${seed}`;
+  console.log(`[${label}] P9 authority=${p9Active} externalImmigration=${allowExternalImmigration} collapseGates=${enforceGate}`);
   const world = generateSpatialWorld(seed);
   const runtime = createSpatialFaunaEcosystemState(seed, 1, world);
   const k = world.faunaCommunity.totalCarryingCapacity;
@@ -432,6 +445,11 @@ function runFiveYearSoak(): void {
   const check = (name: string, pass: boolean, detail: string): void => { checks.push({ name, pass, detail }); };
   for (const species of Object.values(predatorAggregates)) {
     const expectedEnd = species.startPopulation + species.births + species.immigrants - species.deaths;
+    if (!allowExternalImmigration) check(
+      `predator-no-external-immigration:${species.speciesId}`,
+      species.immigrants === 0,
+      `immigrants=${species.immigrants}`,
+    );
     check(`predator-accounting:${species.speciesId}`, expectedEnd === species.endPopulation, `${expectedEnd} vs ${species.endPopulation}`);
     check(
       `predator-death-stage-accounting:${species.speciesId}`,
@@ -457,7 +475,10 @@ function runFiveYearSoak(): void {
     );
     check(
       `predator-edible-yield-accounting:${species.speciesId}`,
-      Math.abs(species.edibleBiomassFromKillsKg - species.preyBiomassKilledKg * .62) <= energyTolerance,
+      p9Active
+        ? species.edibleBiomassFromKillsKg >= 0
+          && species.edibleBiomassFromKillsKg <= species.preyBiomassKilledKg + energyTolerance
+        : Math.abs(species.edibleBiomassFromKillsKg - species.preyBiomassKilledKg * .62) <= energyTolerance,
       `edible=${species.edibleBiomassFromKillsKg.toFixed(3)} killBiomass=${species.preyBiomassKilledKg.toFixed(3)}`,
     );
     check(
@@ -750,8 +771,11 @@ function runFiveYearSoak(): void {
 
   const report = {
     mode,
+    runVariant,
     seed,
     predatorOptions,
+    p9Active,
+    allowExternalImmigration,
     enforceGate,
     initial,
     checkpoints: { year1: y1, year3: y3, year5: y5 },
@@ -766,7 +790,7 @@ function runFiveYearSoak(): void {
   };
   mkdirSync('artifacts', { recursive: true });
   const safeSeed = seed.replace(/[^a-zA-Z0-9_-]+/g, '-');
-  const reportPath = `artifacts/predator-p9-shadow-${mode}-${safeSeed}.json`;
+  const reportPath = `artifacts/predator-p9-shadow-${runVariant}-${safeSeed}.json`;
   writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(`[${label}] report=${reportPath}`);
 
